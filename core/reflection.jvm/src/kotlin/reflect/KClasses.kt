@@ -18,9 +18,12 @@
 package kotlin.reflect
 
 import org.jetbrains.kotlin.descriptors.ConstructorDescriptor
+import org.jetbrains.kotlin.types.*
+import org.jetbrains.kotlin.utils.DFS
 import kotlin.reflect.jvm.internal.KClassImpl
 import kotlin.reflect.jvm.internal.KFunctionImpl
 import kotlin.reflect.jvm.internal.KTypeImpl
+import kotlin.reflect.jvm.internal.KTypeParameterImpl
 
 /**
  * Returns the primary constructor of this class, or `null` if this class has no primary constructor.
@@ -170,3 +173,69 @@ val <T : Any> KClass<T>.declaredMemberExtensionProperties: Collection<KProperty2
             .getMembers(memberScope, declaredOnly = true, nonExtensions = false, extensions = true)
             .filterIsInstance<KProperty2<T, *, *>>()
             .toList()
+
+
+/**
+ * Immediate superclasses of this class, in the order they are listed in the source code.
+ * Includes superclasses and superinterfaces of the class, but does not include the class itself.
+ */
+val KClass<*>.superclasses: List<KClass<*>>
+    get() = supertypes.mapNotNull { it.classifier as? KClass<*> }
+
+/**
+ * All supertypes of this class, including indirect ones, in no particular order.
+ */
+val KClass<*>.allSupertypes: Collection<KType>
+    get() = DFS.dfs(
+            supertypes,
+            DFS.Neighbors { current ->
+                val klass = current.classifier as? KClass<*> ?: throw KotlinReflectionInternalError("Supertype not a class: $current")
+                val supertypes = klass.supertypes
+                val typeArguments = current.arguments
+                if (typeArguments.isEmpty()) supertypes
+                else run {
+                    val parameters = klass.typeParameters.map { (it as KTypeParameterImpl).descriptor }
+                    if (parameters.size != typeArguments.size) {
+                        throw KotlinReflectionInternalError("Wrong number of type arguments in a supertype: $current")
+                    }
+                    // TODO: be sure to test inner generics
+                    // TODO: can this be done easier?
+                    val substitution = IndexedParametersSubstitution(
+                            parameters,
+                            typeArguments.mapIndexed { index, projection ->
+                                val kotlinType = (projection.type as KTypeImpl).type
+                                when (projection) {
+                                    is KTypeProjection.Invariant -> TypeProjectionImpl(Variance.INVARIANT, kotlinType)
+                                    is KTypeProjection.In -> TypeProjectionImpl(Variance.IN_VARIANCE, kotlinType)
+                                    is KTypeProjection.Out -> TypeProjectionImpl(Variance.OUT_VARIANCE, kotlinType)
+                                    KTypeProjection.Star -> StarProjectionImpl(parameters[index])
+                                }
+                            }
+                    )
+                    supertypes.map { supertype ->
+                        supertype as KTypeImpl
+
+                        val substituted = TypeSubstitutor.create(substitution).substitute(supertype.type, Variance.INVARIANT)
+                                          ?: throw KotlinReflectionInternalError("Substitution failed: $supertype")
+                        KTypeImpl(substituted) {
+                            // TODO
+                            TODO("Java type for supertype")
+                        }
+                    }
+                }
+            },
+            DFS.VisitedWithSet(),
+            object : DFS.NodeHandlerWithSetResult<KType, KType>() {
+                override fun beforeChildren(current: KType): Boolean {
+                    result.add(current)
+                    return true
+                }
+            }
+    )
+
+/**
+ * All superclasses of this class, including indirect ones, in no particular order.
+ * Includes superclasses and superinterfaces of the class, but does not include the class itself.
+ */
+val KClass<*>.allSuperclasses: Collection<KClass<*>>
+    get() = allSupertypes.mapNotNull { it.classifier as? KClass<*> }
