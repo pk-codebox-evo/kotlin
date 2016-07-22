@@ -156,7 +156,7 @@ public class CodegenBinding {
             closure.setCaptureThis();
         }
 
-        assert PsiCodegenPredictor.checkPredictedNameFromPsi(classDescriptor, asmType, fileClassesManager);
+        assert PsiCodegenPredictor.INSTANCE.checkPredictedNameFromPsi(classDescriptor, asmType, fileClassesManager);
         trace.record(ASM_TYPE, classDescriptor, asmType);
         trace.record(CLOSURE, classDescriptor, closure);
 

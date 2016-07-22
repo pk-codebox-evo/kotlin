@@ -384,7 +384,7 @@ public class SourceNavigationHelper {
     @Nullable
     public static PsiClass getOriginalClass(@NotNull KtClassOrObject classOrObject) {
         // Copied from JavaPsiImplementationHelperImpl:getOriginalClass()
-        String internalName = PsiCodegenPredictor.getPredefinedJvmInternalName(classOrObject, NoResolveFileClassesProvider.INSTANCE);
+        String internalName = PsiCodegenPredictor.INSTANCE.getPredefinedJvmInternalName(classOrObject, NoResolveFileClassesProvider.INSTANCE);
         if (internalName == null) {
             return null;
         }

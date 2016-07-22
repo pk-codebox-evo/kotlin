@@ -33,8 +33,11 @@ object PsiCodegenPredictor {
             fileClassesManager: JvmFileClassesProvider): Boolean {
         val element = descriptorToDeclaration(descriptor)
         if (element is KtDeclaration) {
-            val classNameFromPsi = getPredefinedJvmInternalName((element as KtDeclaration?)!!, fileClassesManager)
-            assert(classNameFromPsi == null || Type.getObjectType(classNameFromPsi) == nameFromDescriptors) { String.format("Invalid algorithm for getting qualified name from psi! Predicted: %s, actual %s\n" + "Element: %s", classNameFromPsi, nameFromDescriptors, element.text) }
+            val classNameFromPsi = getPredefinedJvmInternalName(element, fileClassesManager)
+            assert(classNameFromPsi == null || Type.getObjectType(classNameFromPsi) == nameFromDescriptors) {
+                String.format("Invalid algorithm for getting qualified name from psi! Predicted: %s, actual %s\n" +
+                              "Element: %s", classNameFromPsi, nameFromDescriptors, element.text)
+            }
         }
 
         return true
@@ -72,7 +75,8 @@ object PsiCodegenPredictor {
             parentInternalName = AsmUtil.internalNameByFqNameWithoutInnerClasses(containingFile.packageFqName)
         }
 
-        if (!PsiTreeUtil.instanceOf(declaration, KtClass::class.java, KtObjectDeclaration::class.java, KtNamedFunction::class.java, KtProperty::class.java) || isEnumEntryWithoutBody(declaration)) {
+        if (!PsiTreeUtil.instanceOf(declaration, KtClass::class.java, KtObjectDeclaration::class.java, KtNamedFunction::class.java, KtProperty::class.java)
+            || isEnumEntryWithoutBody(declaration)) {
             // Other subclasses are not valid for class name prediction.
             // For example JetFunctionLiteral
             return null
