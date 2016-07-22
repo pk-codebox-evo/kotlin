@@ -14,113 +14,97 @@
  * limitations under the License.
  */
 
-package org.jetbrains.kotlin.codegen.binding;
+package org.jetbrains.kotlin.codegen.binding
 
-import com.intellij.psi.PsiElement;
-import com.intellij.psi.util.PsiTreeUtil;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-import org.jetbrains.kotlin.codegen.AsmUtil;
-import org.jetbrains.kotlin.descriptors.DeclarationDescriptor;
-import org.jetbrains.kotlin.fileClasses.FileClasses;
-import org.jetbrains.kotlin.fileClasses.JvmFileClassesProvider;
-import org.jetbrains.kotlin.name.Name;
-import org.jetbrains.kotlin.psi.*;
-import org.jetbrains.org.objectweb.asm.Type;
+import com.intellij.psi.util.PsiTreeUtil
+import org.jetbrains.kotlin.codegen.AsmUtil
+import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
+import org.jetbrains.kotlin.fileClasses.JvmFileClassesProvider
+import org.jetbrains.kotlin.fileClasses.getFileClassInternalName
+import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils.descriptorToDeclaration
+import org.jetbrains.org.objectweb.asm.Type
 
-import static org.jetbrains.kotlin.resolve.DescriptorToSourceUtils.descriptorToDeclaration;
+object PsiCodegenPredictor {
 
-public final class PsiCodegenPredictor {
-    private PsiCodegenPredictor() {
-    }
-
-    public static boolean checkPredictedNameFromPsi(
-            @NotNull DeclarationDescriptor descriptor,
-            @Nullable Type nameFromDescriptors,
-            @NotNull JvmFileClassesProvider fileClassesManager
-    ) {
-        PsiElement element = descriptorToDeclaration(descriptor);
-        if (element instanceof KtDeclaration) {
-            String classNameFromPsi = getPredefinedJvmInternalName((KtDeclaration) element, fileClassesManager);
-            assert classNameFromPsi == null || Type.getObjectType(classNameFromPsi).equals(nameFromDescriptors) :
-                    String.format("Invalid algorithm for getting qualified name from psi! Predicted: %s, actual %s\n" +
-                                  "Element: %s", classNameFromPsi, nameFromDescriptors, element.getText());
+    fun checkPredictedNameFromPsi(
+            descriptor: DeclarationDescriptor,
+            nameFromDescriptors: Type?,
+            fileClassesManager: JvmFileClassesProvider): Boolean {
+        val element = descriptorToDeclaration(descriptor)
+        if (element is KtDeclaration) {
+            val classNameFromPsi = getPredefinedJvmInternalName((element as KtDeclaration?)!!, fileClassesManager)
+            assert(classNameFromPsi == null || Type.getObjectType(classNameFromPsi) == nameFromDescriptors) { String.format("Invalid algorithm for getting qualified name from psi! Predicted: %s, actual %s\n" + "Element: %s", classNameFromPsi, nameFromDescriptors, element.text) }
         }
 
-        return true;
+        return true
     }
 
     /**
      * @return null if no prediction can be done.
      */
-    @Nullable
-    public static String getPredefinedJvmInternalName(
-            @NotNull KtDeclaration declaration,
-            @NotNull JvmFileClassesProvider fileClassesProvider
-    ) {
+    fun getPredefinedJvmInternalName(
+            declaration: KtDeclaration,
+            fileClassesProvider: JvmFileClassesProvider): String? {
         // TODO: Method won't work for declarations inside companion objects
         // TODO: Method won't give correct class name for traits implementations
 
-        if (declaration instanceof KtPropertyAccessor) {
-            return getPredefinedJvmInternalName(((KtPropertyAccessor) declaration).getProperty(), fileClassesProvider);
+        if (declaration is KtPropertyAccessor) {
+            return getPredefinedJvmInternalName(declaration.property, fileClassesProvider)
         }
-        KtDeclaration parentDeclaration = KtStubbedPsiUtil.getContainingDeclaration(declaration);
+        val parentDeclaration = KtStubbedPsiUtil.getContainingDeclaration(declaration)
 
-        String parentInternalName;
+        val parentInternalName: String?
         if (parentDeclaration != null) {
-            parentInternalName = getPredefinedJvmInternalName(parentDeclaration, fileClassesProvider);
+            parentInternalName = getPredefinedJvmInternalName(parentDeclaration, fileClassesProvider)
             if (parentInternalName == null) {
-                return null;
+                return null
             }
         }
         else {
-            KtFile containingFile = declaration.getContainingKtFile();
+            val containingFile = declaration.getContainingKtFile()
 
-            if (declaration instanceof KtNamedFunction || declaration instanceof KtProperty) {
-                Name name = ((KtNamedDeclaration) declaration).getNameAsName();
-                return name == null ? null : FileClasses.getFileClassInternalName(fileClassesProvider, containingFile) + "$" + name.asString();
+            if (declaration is KtNamedFunction || declaration is KtProperty) {
+                val name = (declaration as KtNamedDeclaration).nameAsName
+                return if (name == null) null else fileClassesProvider.getFileClassInternalName(containingFile) + "$" + name.asString()
             }
 
-            parentInternalName = AsmUtil.internalNameByFqNameWithoutInnerClasses(containingFile.getPackageFqName());
+            parentInternalName = AsmUtil.internalNameByFqNameWithoutInnerClasses(containingFile.packageFqName)
         }
 
-        if (!PsiTreeUtil.instanceOf(declaration, KtClass.class, KtObjectDeclaration.class, KtNamedFunction.class, KtProperty.class) ||
-            isEnumEntryWithoutBody(declaration)) {
+        if (!PsiTreeUtil.instanceOf(declaration, KtClass::class.java, KtObjectDeclaration::class.java, KtNamedFunction::class.java, KtProperty::class.java) || isEnumEntryWithoutBody(declaration)) {
             // Other subclasses are not valid for class name prediction.
             // For example JetFunctionLiteral
-            return null;
+            return null
         }
 
-        Name name = ((KtNamedDeclaration) declaration).getNameAsName();
-        if (name == null) {
-            return null;
-        }
+        val name = (declaration as KtNamedDeclaration).nameAsName ?: return null
 
-        if (declaration instanceof KtNamedFunction) {
-            if (!(parentDeclaration instanceof KtClass || parentDeclaration instanceof KtObjectDeclaration)) {
+        if (declaration is KtNamedFunction) {
+            if (!(parentDeclaration is KtClass || parentDeclaration is KtObjectDeclaration)) {
                 // Can't generate predefined name for internal functions
-                return null;
+                return null
             }
         }
 
         // NOTE: looks like a bug - for class in getter of top level property class name will be $propertyName$ClassName but not
         // PackageClassName$propertyName$ClassName
-        if (declaration instanceof KtProperty) {
-            return parentInternalName + "$" + name.asString();
+        if (declaration is KtProperty) {
+            return parentInternalName + "$" + name.asString()
         }
 
         if (parentInternalName.isEmpty()) {
-            return name.asString();
+            return name.asString()
         }
 
-        return parentInternalName + (parentDeclaration == null ? "/" : "$") + name.asString();
+        return parentInternalName + (if (parentDeclaration == null) "/" else "$") + name.asString()
     }
 
-    private static boolean isEnumEntryWithoutBody(KtDeclaration declaration) {
-        if (!(declaration instanceof KtEnumEntry)) {
-            return false;
+    private fun isEnumEntryWithoutBody(declaration: KtDeclaration): Boolean {
+        if (declaration !is KtEnumEntry) {
+            return false
         }
-        KtClassBody body = ((KtEnumEntry) declaration).getBody();
-        return body == null || body.getDeclarations().size() == 0;
+        val body = declaration.getBody()
+        return body == null || body.declarations.size == 0
     }
 }
