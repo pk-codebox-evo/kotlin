@@ -161,7 +161,7 @@ class IncrementalPackageFragmentProvider(
                     this, packageData.packageProto, packageData.nameResolver,
                     JvmPackagePartSource(
                             JvmClassName.byInternalName(internalName),
-                            facadeFqName?.let(JvmClassName::byFqNameWithoutInnerClasses)
+                            facadeFqName?.let(JvmClassName.Factory::byFqNameWithoutInnerClasses)
                     ),
                     deserializationComponents, { listOf() }
             )

@@ -267,7 +267,7 @@ open class IncrementalCacheImpl<Target>(
     fun clearCacheForRemovedClasses(): CompilationResult {
         val dirtyClasses = dirtyOutputClassesMap
                                 .getDirtyOutputClasses()
-                                .map(JvmClassName::byInternalName)
+                                .map(JvmClassName.Factory::byInternalName)
                                 .toList()
 
         val changes =

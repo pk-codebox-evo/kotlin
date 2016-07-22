@@ -58,7 +58,7 @@ class JvmClassName private constructor(val internalName: String) {
         return internalName.hashCode()
     }
 
-    companion object {
+    companion object Factory {
         @JvmStatic fun byInternalName(internalName: String): JvmClassName {
             return JvmClassName(internalName)
         }
