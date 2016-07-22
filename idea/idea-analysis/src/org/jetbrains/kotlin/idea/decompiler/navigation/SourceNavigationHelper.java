@@ -46,7 +46,6 @@ import org.jetbrains.kotlin.context.ContextKt;
 import org.jetbrains.kotlin.context.MutableModuleContext;
 import org.jetbrains.kotlin.descriptors.CallableDescriptor;
 import org.jetbrains.kotlin.descriptors.ModuleDescriptorKt;
-import org.jetbrains.kotlin.fileClasses.NoResolveFileClassesProvider;
 import org.jetbrains.kotlin.frontend.di.InjectionKt;
 import org.jetbrains.kotlin.idea.stubindex.KotlinFullClassNameIndex;
 import org.jetbrains.kotlin.idea.stubindex.KotlinSourceFilterScope;
@@ -62,7 +61,6 @@ import org.jetbrains.kotlin.platform.PlatformToKotlinClassMap;
 import org.jetbrains.kotlin.psi.*;
 import org.jetbrains.kotlin.resolve.BindingTraceContext;
 import org.jetbrains.kotlin.resolve.TargetPlatform;
-import org.jetbrains.kotlin.resolve.jvm.JvmClassName;
 import org.jetbrains.kotlin.resolve.jvm.platform.JvmPlatform;
 import org.jetbrains.kotlin.resolve.lazy.KotlinCodeAnalyzer;
 import org.jetbrains.kotlin.resolve.lazy.ResolveSession;
@@ -384,11 +382,11 @@ public class SourceNavigationHelper {
     @Nullable
     public static PsiClass getOriginalClass(@NotNull KtClassOrObject classOrObject) {
         // Copied from JavaPsiImplementationHelperImpl:getOriginalClass()
-        String internalName = PsiCodegenPredictor.INSTANCE.getPredefinedJvmInternalName(classOrObject, NoResolveFileClassesProvider.INSTANCE);
-        if (internalName == null) {
+        FqName predictedClassFqName = PsiCodegenPredictor.INSTANCE.predictClassFqName(classOrObject);
+        if (predictedClassFqName == null) {
             return null;
         }
-        String fqName = JvmClassName.byInternalName(internalName).getFqNameForClassNameWithoutDollars().asString();
+        String fqName = predictedClassFqName.asString();
 
         KtFile file = classOrObject.getContainingKtFile();
 

@@ -17,6 +17,7 @@
 @file:JvmName("FileClasses")
 package org.jetbrains.kotlin.fileClasses
 
+import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.resolve.jvm.JvmClassName
@@ -31,6 +32,9 @@ val FqName.internalNameWithoutInnerClasses: String
 
 fun JvmFileClassesProvider.getFileClassFqName(file: KtFile): FqName =
         getFileClassInfo(file).fileClassFqName
+
+fun JvmFileClassesProvider.getFileClassClassId(file: KtFile): ClassId =
+        ClassId.topLevel(getFileClassFqName(file))
 
 fun JvmFileClassesProvider.getFileClassInternalName(file: KtFile): String =
         getFileClassFqName(file).internalNameWithoutInnerClasses

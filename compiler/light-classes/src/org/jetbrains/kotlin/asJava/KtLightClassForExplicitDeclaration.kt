@@ -445,8 +445,7 @@ open class KtLightClassForExplicitDeclaration(
                 val data = getLightClassDataExactly(classOrObject)
                 return data?.jvmQualifiedName
             }
-            val internalName = PsiCodegenPredictor.getPredefinedJvmInternalName(classOrObject, NoResolveFileClassesProvider)
-            return if (internalName == null) null else JvmClassName.byInternalName(internalName).fqNameForClassNameWithoutDollars
+            return PsiCodegenPredictor.predictClassFqName(classOrObject)
         }
 
         fun getLightClassData(classOrObject: KtClassOrObject): LightClassData {
