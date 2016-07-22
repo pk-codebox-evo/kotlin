@@ -14,89 +14,75 @@
  * limitations under the License.
  */
 
-package org.jetbrains.kotlin.resolve.jvm;
+package org.jetbrains.kotlin.resolve.jvm
 
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.kotlin.name.ClassId;
-import org.jetbrains.kotlin.name.FqName;
+import org.jetbrains.kotlin.name.ClassId
+import org.jetbrains.kotlin.name.FqName
 
-public class JvmClassName {
-    @NotNull
-    public static JvmClassName byInternalName(@NotNull String internalName) {
-        return new JvmClassName(internalName);
-    }
 
-    @NotNull
-    public static JvmClassName byClassId(@NotNull ClassId classId) {
-        FqName packageFqName = classId.getPackageFqName();
-        String relativeClassName = classId.getRelativeClassName().asString().replace('.', '$');
-        return packageFqName.isRoot()
-               ? new JvmClassName(relativeClassName)
-               : new JvmClassName(packageFqName.asString().replace('.', '/') + "/" + relativeClassName);
-    }
+// Internal name:  kotlin/Map$Entry
+// FqName:         kotlin.Map.Entry
+class JvmClassName private constructor(val internalName: String) {
 
-    /**
-     * WARNING: fq name cannot be uniquely mapped to JVM class name.
-     */
-    @NotNull
-    public static JvmClassName byFqNameWithoutInnerClasses(@NotNull FqName fqName) {
-        JvmClassName r = new JvmClassName(fqName.asString().replace('.', '/'));
-        r.fqName = fqName;
-        return r;
-    }
-
-    @NotNull
-    public static JvmClassName byFqNameWithoutInnerClasses(@NotNull String fqName) {
-        return byFqNameWithoutInnerClasses(new FqName(fqName));
-    }
-
-    // Internal name:  kotlin/Map$Entry
-    // FqName:         kotlin.Map.Entry
-
-    private final String internalName;
-    private FqName fqName;
-
-    private JvmClassName(@NotNull String internalName) {
-        this.internalName = internalName;
-    }
+    private var fqName: FqName? = null
 
     /**
      * WARNING: internal name cannot be converted to FQ name for a class which contains dollars in the name
      */
-    @NotNull
-    public FqName getFqNameForClassNameWithoutDollars() {
-        if (fqName == null) {
-            this.fqName = new FqName(internalName.replace('$', '.').replace('/', '.'));
+    val fqNameForClassNameWithoutDollars: FqName
+        get() {
+            if (fqName == null) {
+                this.fqName = FqName(internalName.replace('$', '.').replace('/', '.'))
+            }
+            return fqName!!
         }
-        return fqName;
+
+    val packageFqName: FqName
+        get() {
+            val lastSlash = internalName.lastIndexOf("/")
+            if (lastSlash == -1) return FqName.ROOT
+            return FqName(internalName.substring(0, lastSlash).replace('/', '.'))
+        }
+
+    override fun toString(): String {
+        return internalName
     }
 
-    @NotNull
-    public FqName getPackageFqName() {
-        int lastSlash = internalName.lastIndexOf("/");
-        if (lastSlash == -1) return FqName.ROOT;
-        return new FqName(internalName.substring(0, lastSlash).replace('/', '.'));
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other == null || javaClass != other.javaClass) return false
+        return internalName == (other as JvmClassName).internalName
     }
 
-    @NotNull
-    public String getInternalName() {
-        return internalName;
+    override fun hashCode(): Int {
+        return internalName.hashCode()
     }
 
-    @Override
-    public String toString() {
-        return internalName;
-    }
+    companion object {
+        @JvmStatic fun byInternalName(internalName: String): JvmClassName {
+            return JvmClassName(internalName)
+        }
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        return internalName.equals(((JvmClassName) o).internalName);
-    }
+        @JvmStatic fun byClassId(classId: ClassId): JvmClassName {
+            val packageFqName = classId.packageFqName
+            val relativeClassName = classId.relativeClassName.asString().replace('.', '$')
+            return if (packageFqName.isRoot)
+                JvmClassName(relativeClassName)
+            else
+                JvmClassName(packageFqName.asString().replace('.', '/') + "/" + relativeClassName)
+        }
 
-    @Override
-    public int hashCode() {
-        return internalName.hashCode();
+        /**
+         * WARNING: fq name cannot be uniquely mapped to JVM class name.
+         */
+        @JvmStatic fun byFqNameWithoutInnerClasses(fqName: FqName): JvmClassName {
+            val r = JvmClassName(fqName.asString().replace('.', '/'))
+            r.fqName = fqName
+            return r
+        }
+
+        @JvmStatic fun byFqNameWithoutInnerClasses(fqName: String): JvmClassName {
+            return byFqNameWithoutInnerClasses(FqName(fqName))
+        }
     }
 }
