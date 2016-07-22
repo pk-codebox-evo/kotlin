@@ -26,6 +26,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.codegen.AbstractClassBuilder;
 import org.jetbrains.kotlin.name.FqName;
+import org.jetbrains.kotlin.name.Name;
+import org.jetbrains.kotlin.psi.KtClassOrObject;
 import org.jetbrains.kotlin.psi.KtFile;
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOrigin;
 import org.jetbrains.org.objectweb.asm.ClassVisitor;
@@ -74,7 +76,14 @@ public class StubClassBuilder extends AbstractClassBuilder {
             @NotNull String[] interfaces
     ) {
         assert v == null : "defineClass() called twice?";
-        v = new StubBuildingVisitor<Object>(null, EMPTY_STRATEGY, parent, access, null);
+
+        String shortName = null;
+        if (origin instanceof KtClassOrObject) {
+            Name nameAsName = ((KtClassOrObject) origin).getNameAsName();
+            shortName = nameAsName != null ? nameAsName.asString() : null;
+        }
+
+        v = new StubBuildingVisitor<Object>(null, EMPTY_STRATEGY, parent, access, shortName);
 
         super.defineClass(origin, version, access, name, signature, superName, interfaces);
 
