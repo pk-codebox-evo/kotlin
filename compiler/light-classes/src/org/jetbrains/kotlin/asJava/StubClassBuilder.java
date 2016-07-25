@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
+ * Copyright 2010-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@ package org.jetbrains.kotlin.asJava;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.impl.compiled.InnerClassSourceStrategy;
 import com.intellij.psi.impl.compiled.StubBuildingVisitor;
+import com.intellij.psi.impl.java.stubs.PsiClassStub;
+import com.intellij.psi.impl.java.stubs.PsiJavaFileStub;
 import com.intellij.psi.stubs.StubBase;
 import com.intellij.psi.stubs.StubElement;
 import com.intellij.util.containers.Stack;
@@ -74,7 +76,19 @@ public class StubClassBuilder extends AbstractClassBuilder {
             @NotNull String[] interfaces
     ) {
         assert v == null : "defineClass() called twice?";
-        v = new StubBuildingVisitor<Object>(null, EMPTY_STRATEGY, parent, access, null);
+
+        String shortName = null;
+
+        if (parent instanceof PsiJavaFileStub) {
+            String packageInternalName = getPackageInternalName((PsiJavaFileStub) parent);
+            assert name.startsWith(packageInternalName);
+            shortName = name.substring(packageInternalName.length());
+        }
+        if (parent instanceof PsiClassStub<?>) {
+            String parentInternalName = getInternalName((PsiClassStub) parent);
+            shortName = name.substring(parentInternalName.length() + 1);
+        }
+        v = new StubBuildingVisitor<Object>(null, EMPTY_STRATEGY, parent, access, shortName);
 
         super.defineClass(origin, version, access, name, signature, superName, interfaces);
 
@@ -92,6 +106,33 @@ public class StubClassBuilder extends AbstractClassBuilder {
         }
 
         ((StubBase) v.getResult()).putUserData(ClsWrapperStubPsiFactory.ORIGIN, LightElementOriginKt.toLightClassOrigin(origin));
+    }
+
+    @NotNull
+    private String getInternalName(@NotNull PsiClassStub classStub) {
+        PsiJavaFileStub fileStub = (PsiJavaFileStub) parentStack.get(0);
+
+        String packageName = fileStub.getPackageName();
+
+        String classStubQualifiedName = classStub.getQualifiedName();
+        if (packageName.isEmpty()) {
+            return classStubQualifiedName.replace('.', '/');
+        }
+        else {
+            return packageName.replace('.', '/') + "/" + classStubQualifiedName.substring(packageName.length() + 1).replace('.', '$');
+        }
+    }
+
+
+    @NotNull
+    private static String getPackageInternalName(@NotNull PsiJavaFileStub fileStub) {
+        String packageName = fileStub.getPackageName();
+        if (packageName.isEmpty()) {
+            return "";
+        }
+        else {
+            return packageName.replace('.', '/') + "/";
+        }
     }
 
     @NotNull

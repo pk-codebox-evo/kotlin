@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
+ * Copyright 2010-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,10 +18,12 @@ package org.jetbrains.kotlin.idea.caches.resolve
 
 import com.intellij.openapi.util.Key
 import com.intellij.psi.*
+import org.jetbrains.kotlin.asJava.KtLightClass
 import org.jetbrains.kotlin.asJava.KtLightElement
 import org.jetbrains.kotlin.asJava.KtLightModifierList
 import org.jetbrains.kotlin.idea.KotlinLanguage
 import org.junit.Assert
+import org.junit.Assert.assertEquals
 
 object PsiElementChecker {
     val TEST_DATA_KEY = Key.create<Int>("Test Key")
@@ -29,6 +31,9 @@ object PsiElementChecker {
     fun checkPsiElementStructure(lightClass: PsiClass) {
         checkPsiElement(lightClass)
 
+        if (lightClass is KtLightClass) {
+            checkConsistencyWithDelegate(lightClass, lightClass.clsDelegate)
+        }
         lightClass.innerClasses.forEach { checkPsiElementStructure(it) }
 
         lightClass.methods.forEach {
@@ -37,6 +42,13 @@ object PsiElementChecker {
         }
 
         lightClass.fields.forEach { checkPsiElement(it) }
+    }
+
+    private fun checkConsistencyWithDelegate(lightClass: KtLightClass, clsDelegate: PsiClass) {
+        assertEquals(lightClass.qualifiedName, clsDelegate.qualifiedName)
+        assertEquals(lightClass.name, clsDelegate.name)
+        assertEquals(lightClass.isEnum, clsDelegate.isEnum)
+        assertEquals(lightClass.isAnnotationType, clsDelegate.isAnnotationType)
     }
 
     private fun checkPsiElement(element: PsiElement) {
@@ -59,7 +71,7 @@ object PsiElementChecker {
 
         with(element) {
             try {
-                Assert.assertEquals("Number of methods has changed. Please update test.", 54, PsiElement::class.java.methods.size)
+                assertEquals("Number of methods has changed. Please update test.", 54, PsiElement::class.java.methods.size)
 
                 project
                 Assert.assertTrue(language == KotlinLanguage.INSTANCE)

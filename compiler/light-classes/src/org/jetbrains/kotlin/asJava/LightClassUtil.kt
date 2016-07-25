@@ -46,7 +46,22 @@ object LightClassUtil {
         }
 
         return null
-    }/*package*/
+    }
+
+    fun findClass(classOrObject: KtClassOrObject, stub: StubElement<*>): PsiClass? {
+        if (stub is PsiClassStub<*> && ClsWrapperStubPsiFactory.getOriginalElement(stub) == classOrObject) {
+            return stub.psi
+        }
+
+        if (stub is PsiClassStub<*> || stub is PsiFileStub<*>) {
+            for (child in stub.childrenStubs) {
+                val answer = findClass(classOrObject, child)
+                if (answer != null) return answer
+            }
+        }
+
+        return null
+    }
 
     fun getLightClassAccessorMethod(accessor: KtPropertyAccessor): PsiMethod? =
             getLightClassAccessorMethods(accessor).firstOrNull()

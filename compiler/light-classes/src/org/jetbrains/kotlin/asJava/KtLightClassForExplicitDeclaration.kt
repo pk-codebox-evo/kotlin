@@ -160,7 +160,7 @@ open class KtLightClassForExplicitDeclaration(
     override val clsDelegate: PsiClass by lazy(LazyThreadSafetyMode.PUBLICATION) {
         val javaFileStub = getJavaFileStub()
 
-        LightClassUtil.findClass(classFqName, javaFileStub) ?: run {
+        LightClassUtil.findClass(classOrObject, javaFileStub) ?: run {
             val outermostClassOrObject = getOutermostClassOrObject(classOrObject)
             val ktFileText: String? = try {
                 outermostClassOrObject.containingFile.text
