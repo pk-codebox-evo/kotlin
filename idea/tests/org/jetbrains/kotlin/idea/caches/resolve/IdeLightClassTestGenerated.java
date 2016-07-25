@@ -47,6 +47,12 @@ public class IdeLightClassTestGenerated extends AbstractIdeLightClassTest {
         doTest(fileName);
     }
 
+    @TestMetadata("DollarsInName.kt")
+    public void testDollarsInName() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/asJava/lightClasses/DollarsInName.kt");
+        doTest(fileName);
+    }
+
     @TestMetadata("compiler/testData/asJava/lightClasses/facades")
     @TestDataPath("$PROJECT_ROOT")
     @RunWith(JUnit3RunnerWithInners.class)
