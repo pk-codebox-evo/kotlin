@@ -24,19 +24,17 @@ import com.intellij.psi.impl.light.LightMethod
 import org.jetbrains.kotlin.asJava.LightClassUtil
 import org.jetbrains.kotlin.asJava.toLightClass
 import org.jetbrains.kotlin.idea.KotlinLanguage
-import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.getStrictParentOfType
 
 open class KtLightClassForLocalDeclaration(
-        classFqNameFunction: (KtClassOrObject) -> FqName,
         classOrObject: KtClassOrObject
-) : KtLightClassForSourceDeclaration(classFqNameFunction, classOrObject) {
+) : KtLightClassForSourceDeclaration(classOrObject) {
     init {
         assert(classOrObject.isLocal())
     }
 
-    override fun copy(): PsiElement = KtLightClassForLocalDeclaration(classFqNameFunction, classOrObject.copy() as KtClassOrObject)
+    override fun copy(): PsiElement = KtLightClassForLocalDeclaration(classOrObject.copy() as KtClassOrObject)
     override fun getQualifiedName(): String? = null
 
     override fun getParent() = _parent
