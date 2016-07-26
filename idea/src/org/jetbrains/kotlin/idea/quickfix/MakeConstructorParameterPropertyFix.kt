@@ -33,12 +33,14 @@ import org.jetbrains.kotlin.psi.psiUtil.getAssignmentByLHS
 import org.jetbrains.kotlin.psi.psiUtil.nonStaticOuterClasses
 
 class MakeConstructorParameterPropertyFix(
-        element: KtParameter, private val kotlinValVar: KotlinValVar, className: String?
+        element: KtParameter, private val kotlinValVar: KotlinValVar, private val privateVisibility: Boolean, className: String?
 ) : KotlinQuickFixAction<KtParameter>(element) {
     override fun getFamilyName() = "Make primary constructor parameter a property"
 
     private val suffix = if (className != null) " in class '$className'" else ""
-    override fun getText() = "Make primary constructor parameter '${element.name}' a property" + suffix
+
+    override fun getText() =
+            "Make primary constructor parameter '${element.name}' a ${if (privateVisibility) "private " else ""}property" + suffix
 
     override fun isAvailable(project: Project, editor: Editor?, file: PsiFile): Boolean {
         return super.isAvailable(project, editor, file) && !element.hasValOrVar()
@@ -46,7 +48,7 @@ class MakeConstructorParameterPropertyFix(
 
     override fun invoke(project: Project, editor: Editor?, file: KtFile) {
         element.addBefore(kotlinValVar.createKeyword(KtPsiFactory(project))!!, element.firstChild)
-        element.addModifier(KtTokens.PRIVATE_KEYWORD)
+        if (privateVisibility) element.addModifier(KtTokens.PRIVATE_KEYWORD)
     }
 
     companion object Factory : KotlinIntentionActionsFactory() {
@@ -60,7 +62,8 @@ class MakeConstructorParameterPropertyFix(
             val containingClass = ktParameter.containingClass()!!
             val className = if (containingClass != ktReference.containingClass()) containingClass.nameAsSafeName.asString() else null
 
-            return listOf(MakeConstructorParameterPropertyFix(ktParameter, valOrVar, className))
+            return listOf(MakeConstructorParameterPropertyFix(ktParameter, valOrVar, false, className),
+                          MakeConstructorParameterPropertyFix(ktParameter, valOrVar, true, className))
         }
     }
 }

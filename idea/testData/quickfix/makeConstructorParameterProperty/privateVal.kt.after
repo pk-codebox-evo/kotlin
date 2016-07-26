@@ -1,0 +1,7 @@
+// "Make primary constructor parameter 'foo' a private property" "true"
+
+class A(private val foo: String) {
+    fun bar() {
+        val a = foo<caret>
+    }
+}
