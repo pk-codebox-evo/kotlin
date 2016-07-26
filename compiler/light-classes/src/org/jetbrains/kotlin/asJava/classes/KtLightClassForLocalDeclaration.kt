@@ -30,9 +30,6 @@ import org.jetbrains.kotlin.psi.psiUtil.getStrictParentOfType
 open class KtLightClassForLocalDeclaration(
         classOrObject: KtClassOrObject
 ) : KtLightClassForSourceDeclaration(classOrObject) {
-    init {
-        assert(classOrObject.isLocal())
-    }
 
     override fun copy(): PsiElement = KtLightClassForLocalDeclaration(classOrObject.copy() as KtClassOrObject)
     override fun getQualifiedName(): String? = null
