@@ -239,3 +239,18 @@ val KClass<*>.allSupertypes: Collection<KType>
  */
 val KClass<*>.allSuperclasses: Collection<KClass<*>>
     get() = allSupertypes.mapNotNull { it.classifier as? KClass<*> }
+
+/**
+ * Returns `true` if `this` class is the same or is a (possibly indirect) subclass of [derived], `false` otherwise.
+ */
+fun KClass<*>.isSubclassOf(base: KClass<*>): Boolean {
+    // TODO: performance
+    return this == base || base in this.allSuperclasses
+}
+
+/**
+ * Returns `true` if `this` class is the same or is a (possibly indirect) superclass of [derived], `false` otherwise.
+ */
+fun KClass<*>.isSuperclassOf(derived: KClass<*>): Boolean {
+    return derived.isSubclassOf(this)
+}
