@@ -275,8 +275,8 @@
 
     <projectService serviceImplementation="org.jetbrains.kotlin.idea.versions.SuppressNotificationState"/>
 
-    <projectService serviceInterface="org.jetbrains.kotlin.asJava.KtLightClassForFacade$FacadeStubCache"
-                    serviceImplementation="org.jetbrains.kotlin.asJava.KtLightClassForFacade$FacadeStubCache"/>
+    <projectService serviceInterface="org.jetbrains.kotlin.asJava.classes.KtLightClassForFacade$FacadeStubCache"
+                    serviceImplementation="org.jetbrains.kotlin.asJava.classes.KtLightClassForFacade$FacadeStubCache"/>
 
     <projectService serviceInterface="org.jetbrains.kotlin.idea.debugger.evaluate.KotlinDebuggerCaches"
                     serviceImplementation="org.jetbrains.kotlin.idea.debugger.evaluate.KotlinDebuggerCaches"/>
