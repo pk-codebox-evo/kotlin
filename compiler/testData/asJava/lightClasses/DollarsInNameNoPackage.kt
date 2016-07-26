@@ -1,6 +1,4 @@
-// c.b.a.A$B
-package c.b.a
-
+// A$B
 class `A$B` {
     inner class `C$D`
 
