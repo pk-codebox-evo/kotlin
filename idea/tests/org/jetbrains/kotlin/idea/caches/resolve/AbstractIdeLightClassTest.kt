@@ -24,7 +24,7 @@ import com.intellij.psi.PsiClass
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.asJava.LightClassTestCommon
-import org.jetbrains.kotlin.asJava.classes.KtLightClassForExplicitDeclaration
+import org.jetbrains.kotlin.asJava.classes.KtLightClassForSourceDeclaration
 import org.jetbrains.kotlin.idea.KotlinDaemonAnalyzerTestCase
 import org.jetbrains.kotlin.idea.test.KotlinLightCodeInsightFixtureTestCase
 import org.jetbrains.kotlin.idea.test.KotlinWithJdkAndRuntimeLightProjectDescriptor
@@ -76,7 +76,7 @@ private fun testLightClass(project: Project, ktFile: KtFile?, testDataPath: Stri
                 if (clazz == null) {
                     clazz = PsiTreeUtil.findChildrenOfType(ktFile, KtClassOrObject::class.java)
                             .find { fqName.endsWith(it.nameAsName!!.asString()) }
-                            ?.let { KtLightClassForExplicitDeclaration.create(it) }
+                            ?.let { KtLightClassForSourceDeclaration.create(it) }
                 }
                 if (clazz != null) {
                     PsiElementChecker.checkPsiElementStructure(clazz)
