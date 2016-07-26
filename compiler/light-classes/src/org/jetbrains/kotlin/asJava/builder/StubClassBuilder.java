@@ -26,7 +26,7 @@ import com.intellij.psi.stubs.StubElement;
 import com.intellij.util.containers.Stack;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.kotlin.asJava.OldPackageFacadeClassUtils;
+import org.jetbrains.kotlin.fileClasses.OldPackageFacadeClassUtils;
 import org.jetbrains.kotlin.codegen.AbstractClassBuilder;
 import org.jetbrains.kotlin.name.FqName;
 import org.jetbrains.kotlin.psi.KtFile;
