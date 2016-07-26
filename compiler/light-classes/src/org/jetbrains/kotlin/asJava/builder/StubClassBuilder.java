@@ -125,7 +125,7 @@ public class StubClassBuilder extends AbstractClassBuilder {
         if (classStubQualifiedName == null) return null;
 
         if (packageName.isEmpty()) {
-            return classStubQualifiedName.replace('.', '/');
+            return classStubQualifiedName.replace('.', '$');
         }
         else {
             return packageName.replace('.', '/') + "/" + classStubQualifiedName.substring(packageName.length() + 1).replace('.', '$');
