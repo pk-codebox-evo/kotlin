@@ -1,7 +1,7 @@
 // WITH_RUNTIME
 class Controller {
     var exception: Throwable? = null
-    val postponedActions = java.util.ArrayList<() -> Unit>()
+    val postponedActions = ArrayList<() -> Unit>()
 
     suspend fun suspendWithValue(v: String, x: Continuation<String>) {
         postponedActions.add {
@@ -26,6 +26,8 @@ class Controller {
             postponedActions.removeAt(0)
         }
     }
+
+    // INTERCEPT_RESUME_PLACEHOLDER
 }
 
 fun builder(coroutine c: Controller.() -> Continuation<Unit>) {

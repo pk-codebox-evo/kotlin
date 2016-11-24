@@ -89,7 +89,8 @@ class ParameterNameAndTypeCompletion(
     fun addFromAllClasses(parameters: CompletionParameters, indicesHelper: KotlinIndicesHelper) {
         for ((classNameMatcher, userPrefix) in classNamePrefixMatchers.zip(userPrefixes)) {
             AllClassesCompletion(
-                    parameters, indicesHelper, classNameMatcher, resolutionFacade, { !it.isSingleton }, includeJavaClassesNotToBeUsed = false
+                    parameters, indicesHelper, classNameMatcher, resolutionFacade, { !it.isSingleton },
+                    includeTypeAliases = true, includeJavaClassesNotToBeUsed = false
             ).collect(
                     { addSuggestionsForClassifier(it, userPrefix, notImported = true) },
                     { addSuggestionsForJavaClass(it, userPrefix, notImported = true) }
@@ -207,8 +208,8 @@ class ParameterNameAndTypeCompletion(
 
         override fun handleInsert(context: InsertionContext) {
             if (context.completionChar == Lookup.REPLACE_SELECT_CHAR) {
-                val replacementOffset = context.offsetMap.getOffset(REPLACEMENT_OFFSET)
-                if (replacementOffset != -1) {
+                val replacementOffset = context.offsetMap.tryGetOffset(REPLACEMENT_OFFSET)
+                if (replacementOffset != null) {
                     val tailOffset = context.tailOffset
                     context.document.deleteString(tailOffset, replacementOffset)
 

@@ -4,11 +4,12 @@
 import kotlin.reflect.KProperty
 
 class Delegate() {
-    fun getValue(thisRef: Any?, property: KProperty<*>): String = ":)"
-    fun setValue(thisRef: Any?, property: KProperty<*>, value: String) {
+    operator fun getValue(thisRef: Any?, property: KProperty<*>): String = ":)"
+
+    operator fun setValue(thisRef: Any?, property: KProperty<*>, value: String) {
     }
 
-    fun <caret>propertyDelegated(property: KProperty<*>) {
+    operator fun <caret>propertyDelegated(property: KProperty<*>) {
     }
 }
 

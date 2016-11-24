@@ -298,6 +298,18 @@ public interface Map<K, out V> {
      */
     public operator fun get(key: K): V?
 
+    /**
+     * Returns the value corresponding to the given [key], or [defaultValue] if such a key is not present in the map.
+     *
+     * @since JDK 1.8
+     */
+    @SinceKotlin("1.1")
+    @PlatformDependent
+    public fun getOrDefault(key: K, defaultValue: @UnsafeVariance V): V {
+        // See default implementation in JDK sources
+        return null as V
+    }
+
     // Views
     /**
      * Returns a [Set] of all keys in this map.
@@ -357,6 +369,7 @@ public interface MutableMap<K, V> : Map<K, V> {
      *
      * @return true if entry was removed
      */
+    @SinceKotlin("1.1")
     @PlatformDependent
     public fun remove(key: K, value: V): Boolean {
         // See default implementation in JDK sources

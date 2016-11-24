@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.idea.actions
 
+import com.intellij.codeInsight.navigation.NavigationUtil
 import com.intellij.ide.scratch.ScratchFileService
 import com.intellij.ide.scratch.ScratchRootType
 import com.intellij.openapi.actionSystem.AnAction
@@ -23,17 +24,20 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.CommandProcessor
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.ui.ex.MessagesEx
-import com.intellij.openapi.vfs.CharsetToolkit
 import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileVisitor
+import com.intellij.psi.PsiDocumentManager
+import com.intellij.psi.PsiErrorElement
 import com.intellij.psi.PsiJavaFile
 import com.intellij.psi.PsiManager
+import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.idea.KotlinFileType
 import org.jetbrains.kotlin.idea.j2k.IdeaJavaToKotlinServices
 import org.jetbrains.kotlin.idea.j2k.J2kPostProcessor
@@ -60,13 +64,21 @@ class JavaToKotlinAction : AnAction() {
             }
         }
 
+        val title = "Convert Java to Kotlin"
+
         private fun saveResults(javaFiles: List<PsiJavaFile>, convertedTexts: List<String>): List<VirtualFile> {
             val result = ArrayList<VirtualFile>()
             for ((psiFile, text) in javaFiles.zip(convertedTexts)) {
-                val virtualFile = psiFile.virtualFile
                 try {
-                    virtualFile.setBinaryContent(CharsetToolkit.getUtf8Bytes(text))
+                    val document = PsiDocumentManager.getInstance(psiFile.project).getDocument(psiFile)
+                    if (document == null) {
+                        MessagesEx.error(psiFile.project, "Failed to save conversion result: couldn't find document for " + psiFile.name).showLater()
+                        continue
+                    }
+                    document.replaceString(0, document.textLength, text)
+                    FileDocumentManager.getInstance().saveDocument(document)
 
+                    val virtualFile = psiFile.virtualFile
                     if (ScratchRootType.getInstance().containsFile(virtualFile)) {
                         val mapping = ScratchFileService.getInstance().scratchesMapping
                         mapping.setMapping(virtualFile, KotlinFileType.INSTANCE.language)
@@ -77,7 +89,7 @@ class JavaToKotlinAction : AnAction() {
                     }
                 }
                 catch (e: IOException) {
-                    MessagesEx.error(psiFile.project, e.message).showLater()
+                    MessagesEx.error(psiFile.project, e.message ?: "").showLater()
                 }
             }
             return result
@@ -92,7 +104,7 @@ class JavaToKotlinAction : AnAction() {
                 converterResult = converter.filesToKotlin(javaFiles, J2kPostProcessor(formatCode = true), ProgressManager.getInstance().progressIndicator)
             }
 
-            val title = "Convert Java to Kotlin"
+
             if (!ProgressManager.getInstance().runProcessWithProgressSynchronously(
                     {
                         runReadAction(::convert)
@@ -126,6 +138,8 @@ class JavaToKotlinAction : AnAction() {
 
                 externalCodeUpdate?.invoke()
 
+                PsiDocumentManager.getInstance(project).commitAllDocuments()
+
                 newFiles.singleOrNull()?.let {
                     FileEditorManager.getInstance(project).openFile(it, true)
                 }
@@ -138,6 +152,30 @@ class JavaToKotlinAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
         val javaFiles = selectedJavaFiles(e).toList()
         val project = CommonDataKeys.PROJECT.getData(e.dataContext)!!
+
+        val firstSyntaxError = javaFiles.asSequence().map { PsiTreeUtil.findChildOfType(it, PsiErrorElement::class.java) }.firstOrNull()
+
+        if (firstSyntaxError != null) {
+            val count = javaFiles.filter { PsiTreeUtil.hasErrorElements(it) }.count()
+            val question = firstSyntaxError.containingFile.name +
+                           (if (count > 1) " and ${count - 1} more Java files" else " file") +
+                           " contain syntax errors, the conversion result may be incorrect"
+
+            val okText = "Investigate Errors"
+            val cancelText = "Proceed with Conversion"
+            if (Messages.showOkCancelDialog(
+                    project,
+                    question,
+                    title,
+                    okText,
+                    cancelText,
+                    Messages.getWarningIcon()
+            ) == Messages.OK) {
+                NavigationUtil.activateFileWithPsiElement(firstSyntaxError.navigationElement)
+                return
+            }
+        }
+
         convertFiles(javaFiles, project)
     }
 

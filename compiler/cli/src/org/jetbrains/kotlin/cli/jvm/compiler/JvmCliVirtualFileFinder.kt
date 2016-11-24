@@ -17,17 +17,34 @@
 package org.jetbrains.kotlin.cli.jvm.compiler
 
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.psi.search.GlobalSearchScope
+import org.jetbrains.kotlin.builtins.BuiltInSerializerProtocol
+import org.jetbrains.kotlin.cli.jvm.index.JavaRoot
+import org.jetbrains.kotlin.cli.jvm.index.JvmDependenciesIndex
 import org.jetbrains.kotlin.load.kotlin.VirtualFileKotlinClassFinder
 import org.jetbrains.kotlin.name.ClassId
+import org.jetbrains.kotlin.name.FqName
+import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.utils.addToStdlib.check
+import java.io.InputStream
 
-class JvmCliVirtualFileFinder(private val index: JvmDependenciesIndex) : VirtualFileKotlinClassFinder() {
+class JvmCliVirtualFileFinder(
+        private val index: JvmDependenciesIndex,
+        private val scope: GlobalSearchScope
+) : VirtualFileKotlinClassFinder() {
+    override fun findVirtualFileWithHeader(classId: ClassId): VirtualFile? =
+            findBinaryClass(classId, classId.relativeClassName.asString().replace('.', '$') + ".class")
 
-    override fun findVirtualFileWithHeader(classId: ClassId): VirtualFile? {
-        val classFileName = classId.relativeClassName.asString().replace('.', '$')
-        return index.findClass(classId, acceptedRootTypes = JavaRoot.OnlyBinary) { dir, rootType ->
-            dir.findChild("$classFileName.class")?.let {
-                if (it.isValid) it else null
-            }
-        }
+    override fun findBuiltInsData(packageFqName: FqName): InputStream? {
+        // "<builtins-metadata>" is just a made-up name
+        // JvmDependenciesIndex requires the ClassId of the class which we're searching for, to cache the last request+result
+        val classId = ClassId(packageFqName, Name.special("<builtins-metadata>"))
+
+        return findBinaryClass(classId, BuiltInSerializerProtocol.getBuiltInsFileName(packageFqName))?.inputStream
     }
+
+    private fun findBinaryClass(classId: ClassId, fileName: String): VirtualFile? =
+            index.findClass(classId, acceptedRootTypes = JavaRoot.OnlyBinary) { dir, _ ->
+                dir.findChild(fileName)?.check(VirtualFile::isValid)
+            }?.check { it in scope }
 }

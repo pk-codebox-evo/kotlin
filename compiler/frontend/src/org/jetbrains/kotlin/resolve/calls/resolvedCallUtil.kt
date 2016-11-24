@@ -23,10 +23,12 @@ import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.calls.callUtil.isSafeCall
 import org.jetbrains.kotlin.resolve.calls.context.CallResolutionContext
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
+import org.jetbrains.kotlin.resolve.calls.model.VariableAsFunctionResolvedCall
 import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowValueFactory
 import org.jetbrains.kotlin.resolve.calls.smartcasts.getReceiverValueWithSmartCast
 import org.jetbrains.kotlin.resolve.calls.tasks.ExplicitReceiverKind
 import org.jetbrains.kotlin.resolve.descriptorUtil.getOwnerForEffectiveDispatchReceiverParameter
+import org.jetbrains.kotlin.resolve.scopes.receivers.ClassValueReceiver
 import org.jetbrains.kotlin.resolve.scopes.receivers.ExpressionReceiver
 import org.jetbrains.kotlin.resolve.scopes.receivers.ImplicitReceiver
 import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValue
@@ -49,6 +51,9 @@ fun ResolvedCall<*>.hasThisOrNoDispatchReceiver(
     if (dispatchReceiverValue is ImplicitReceiver) {
         // foo() -- implicit receiver
         dispatchReceiverDescriptor = dispatchReceiverValue.declarationDescriptor
+    }
+    else if (dispatchReceiverValue is ClassValueReceiver) {
+        dispatchReceiverDescriptor = dispatchReceiverValue.classQualifier.descriptor
     }
     else if (dispatchReceiverValue is ExpressionReceiver) {
         val expression = KtPsiUtil.deparenthesize(dispatchReceiverValue.expression)
@@ -78,11 +83,26 @@ fun ResolvedCall<*>.getImplicitReceiverValue(): ImplicitReceiver? {
     } as? ImplicitReceiver
 }
 
+fun ResolvedCall<*>.getImplicitReceivers(): Collection<ReceiverValue> {
+    if (this is VariableAsFunctionResolvedCall) {
+        val receivers = variableCall.getImplicitReceivers() + functionCall.getImplicitReceivers()
+        assert(receivers.size <= 3) { "There are ${receivers.size} for $this call" }
+        return receivers
+    }
+
+    return when (explicitReceiverKind) {
+        ExplicitReceiverKind.NO_EXPLICIT_RECEIVER -> listOfNotNull(dispatchReceiver, extensionReceiver)
+        ExplicitReceiverKind.DISPATCH_RECEIVER -> listOfNotNull(extensionReceiver)
+        ExplicitReceiverKind.EXTENSION_RECEIVER -> listOfNotNull(dispatchReceiver)
+        ExplicitReceiverKind.BOTH_RECEIVERS -> emptyList()
+    }
+}
+
 private fun ResolvedCall<*>.hasSafeNullableReceiver(context: CallResolutionContext<*>): Boolean {
     if (!call.isSafeCall()) return false
     val receiverValue = getExplicitReceiverValue()?.let { DataFlowValueFactory.createDataFlowValue(it, context) }
                         ?: return false
-    return context.dataFlowInfo.getPredictableNullability(receiverValue).canBeNull()
+    return context.dataFlowInfo.getStableNullability(receiverValue).canBeNull()
 }
 
 fun ResolvedCall<*>.makeNullableTypeIfSafeReceiver(type: KotlinType?, context: CallResolutionContext<*>) =

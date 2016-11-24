@@ -20,9 +20,9 @@ import com.google.dart.compiler.backend.js.ast.JsBinaryOperation
 import com.google.dart.compiler.backend.js.ast.JsBinaryOperator
 import com.google.dart.compiler.backend.js.ast.JsExpression
 import com.google.dart.compiler.backend.js.ast.JsLiteral
+import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.js.patterns.NamePredicate
-import org.jetbrains.kotlin.js.patterns.PatternBuilder.pattern
 import org.jetbrains.kotlin.js.translate.context.TranslationContext
 import org.jetbrains.kotlin.js.translate.intrinsic.functions.factories.TopLevelFIF
 import org.jetbrains.kotlin.js.translate.utils.JsAstUtils
@@ -35,18 +35,10 @@ import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.types.expressions.OperatorConventions
 import org.jetbrains.kotlin.types.isDynamic
-import java.util.Arrays
+import java.util.*
 
 object EqualsBOIF : BinaryOperationIntrinsicFactory {
 
-    val LONG_EQUALS_ANY = pattern("Long.equals")
-
-    private object LONG_EQUALS_ANY_INTRINSIC : AbstractBinaryOperationIntrinsic() {
-        override fun apply(expression: KtBinaryExpression, left: JsExpression, right: JsExpression, context: TranslationContext): JsExpression {
-            val invokeEquals = JsAstUtils.equalsForObject(left, right)
-            return if (expression.isNegated()) JsAstUtils.not(invokeEquals) else invokeEquals
-        }
-    }
 
     private object EqualsIntrinsic : AbstractBinaryOperationIntrinsic() {
         override fun apply(expression: KtBinaryExpression, left: JsExpression, right: JsExpression, context: TranslationContext): JsExpression {
@@ -70,7 +62,7 @@ object EqualsBOIF : BinaryOperationIntrinsicFactory {
             }
 
             val result = TopLevelFIF.KOTLIN_EQUALS.apply(left, Arrays.asList<JsExpression>(right), context)
-            return if (isNegated) JsAstUtils.negated(result) else result
+            return if (isNegated) JsAstUtils.not(result) else result
         }
 
         private fun canUseSimpleEquals(expression: KtBinaryExpression, context: TranslationContext): Boolean {
@@ -92,11 +84,9 @@ object EqualsBOIF : BinaryOperationIntrinsicFactory {
 
     override fun getIntrinsic(descriptor: FunctionDescriptor): BinaryOperationIntrinsic? =
             when {
-                (LONG_EQUALS_ANY.apply(descriptor)) -> LONG_EQUALS_ANY_INTRINSIC
-
                 DescriptorUtils.isEnumClass(descriptor.containingDeclaration) -> EnumEqualsIntrinsic
 
-                JsDescriptorUtils.isBuiltin(descriptor) ||
+                KotlinBuiltIns.isBuiltIn(descriptor) ||
                 TopLevelFIF.EQUALS_IN_ANY.apply(descriptor) -> EqualsIntrinsic
 
                 else -> null

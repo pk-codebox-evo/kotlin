@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.idea.codeInsight.generate;
 import com.intellij.testFramework.TestDataPath;
 import org.jetbrains.kotlin.test.JUnit3RunnerWithInners;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
+import org.jetbrains.kotlin.test.TargetBackend;
 import org.jetbrains.kotlin.test.TestMetadata;
 import org.junit.runner.RunWith;
 
@@ -32,7 +33,7 @@ import java.util.regex.Pattern;
 @RunWith(JUnit3RunnerWithInners.class)
 public class GenerateToStringActionTestGenerated extends AbstractGenerateToStringActionTest {
     public void testAllFilesPresentInToString() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/codeInsight/generate/toString"), Pattern.compile("^(.+)\\.kt$"), true);
+        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/codeInsight/generate/toString"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
     }
 
     @TestMetadata("idea/testData/codeInsight/generate/toString/common")
@@ -40,18 +41,12 @@ public class GenerateToStringActionTestGenerated extends AbstractGenerateToStrin
     @RunWith(JUnit3RunnerWithInners.class)
     public static class Common extends AbstractGenerateToStringActionTest {
         public void testAllFilesPresentInCommon() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/codeInsight/generate/toString/common"), Pattern.compile("^(.+)\\.kt$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/codeInsight/generate/toString/common"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
         }
 
         @TestMetadata("annotation.kt")
         public void testAnnotation() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("idea/testData/codeInsight/generate/toString/common/annotation.kt");
-            doTest(fileName);
-        }
-
-        @TestMetadata("dataClass.kt")
-        public void testDataClass() throws Exception {
-            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/codeInsight/generate/toString/common/dataClass.kt");
             doTest(fileName);
         }
 
@@ -73,7 +68,7 @@ public class GenerateToStringActionTestGenerated extends AbstractGenerateToStrin
     @RunWith(JUnit3RunnerWithInners.class)
     public static class MultipeTemplates extends AbstractGenerateToStringActionTest {
         public void testAllFilesPresentInMultipeTemplates() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/codeInsight/generate/toString/multipeTemplates"), Pattern.compile("^(.+)\\.kt$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/codeInsight/generate/toString/multipeTemplates"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
         }
 
         @TestMetadata("arrays.kt")
@@ -85,6 +80,12 @@ public class GenerateToStringActionTestGenerated extends AbstractGenerateToStrin
         @TestMetadata("customAccessors.kt")
         public void testCustomAccessors() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("idea/testData/codeInsight/generate/toString/multipeTemplates/customAccessors.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("dataClass.kt")
+        public void testDataClass() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/codeInsight/generate/toString/multipeTemplates/dataClass.kt");
             doTest(fileName);
         }
 
@@ -124,7 +125,7 @@ public class GenerateToStringActionTestGenerated extends AbstractGenerateToStrin
     @RunWith(JUnit3RunnerWithInners.class)
     public static class SingleTemplate extends AbstractGenerateToStringActionTest {
         public void testAllFilesPresentInSingleTemplate() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/codeInsight/generate/toString/singleTemplate"), Pattern.compile("^(.+)\\.kt$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/codeInsight/generate/toString/singleTemplate"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
         }
 
         @TestMetadata("arrays.kt")
@@ -136,6 +137,12 @@ public class GenerateToStringActionTestGenerated extends AbstractGenerateToStrin
         @TestMetadata("customAccessors.kt")
         public void testCustomAccessors() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("idea/testData/codeInsight/generate/toString/singleTemplate/customAccessors.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("dataClass.kt")
+        public void testDataClass() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/codeInsight/generate/toString/singleTemplate/dataClass.kt");
             doTest(fileName);
         }
 

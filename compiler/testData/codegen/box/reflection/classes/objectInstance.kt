@@ -1,3 +1,6 @@
+// TODO: muted automatically, investigate should it be ran for JS or not
+// IGNORE_BACKEND: JS
+
 // WITH_REFLECT
 
 import kotlin.test.assertEquals
@@ -26,6 +29,8 @@ fun box(): String {
     assertEquals(3, B.Factory::class.objectInstance!!.foo())
 
     assertEquals(null, C::class.objectInstance)
+    assertEquals(null, String::class.objectInstance)
+    assertEquals(Unit, Unit::class.objectInstance)
 
     return "OK"
 }

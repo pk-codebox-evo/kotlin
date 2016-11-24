@@ -68,7 +68,6 @@ import org.jetbrains.kotlin.psi.KtFile;
 import org.jetbrains.kotlin.psi.KtPsiFactoryKt;
 import org.jetbrains.kotlin.resolve.BindingContext;
 import org.jetbrains.kotlin.resolve.BindingTrace;
-import org.jetbrains.kotlin.resolve.TargetPlatform;
 import org.jetbrains.kotlin.resolve.diagnostics.Diagnostics;
 import org.jetbrains.kotlin.resolve.lazy.JvmResolveUtil;
 import org.jetbrains.kotlin.storage.LockBasedStorageManager;
@@ -92,6 +91,8 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.jetbrains.kotlin.test.InTextDirectivesUtils.isCompatibleTarget;
+
 public class KotlinTestUtils {
     public static String TEST_MODULE_NAME = "test-module";
 
@@ -109,9 +110,10 @@ public class KotlinTestUtils {
      *
      * Several files may follow one module
      */
-    public static final Pattern FILE_OR_MODULE_PATTERN = Pattern.compile("(?://\\s*MODULE:\\s*(\\w+)(\\(\\w+(?:, \\w+)*\\))?\\s*)?" +
-                                                                         "//\\s*FILE:\\s*(.*)$", Pattern.MULTILINE);
-    public static final Pattern DIRECTIVE_PATTERN = Pattern.compile("^//\\s*!(\\w+)(:\\s*(.*)$)?", Pattern.MULTILINE);
+    public static final Pattern FILE_OR_MODULE_PATTERN = Pattern.compile(
+            "(?://\\s*MODULE:\\s*([\\w\\d_\\-]+)(\\([\\w\\d_\\-]+(?:,\\s*[\\w\\d_\\-]+)*\\))?\\s*)?" +
+            "//\\s*FILE:\\s*(.*)$", Pattern.MULTILINE);
+    public static final Pattern DIRECTIVE_PATTERN = Pattern.compile("^//\\s*!([\\w_]+)(:\\s*(.*)$)?", Pattern.MULTILINE);
 
     public static final BindingTrace DUMMY_TRACE = new BindingTrace() {
         @NotNull
@@ -195,6 +197,11 @@ public class KotlinTestUtils {
                 throw new IllegalStateException("Unresolved: " + diagnostic.getPsiElement().getText());
             }
         }
+
+        @Override
+        public boolean wantsDiagnostics() {
+            return false;
+        }
     };
 
     public static BindingTrace DUMMY_EXCEPTION_ON_ERROR_TRACE = new BindingTrace() {
@@ -274,6 +281,11 @@ public class KotlinTestUtils {
             if (diagnostic.getSeverity() == Severity.ERROR) {
                 throw new IllegalStateException(DefaultErrorMessages.render(diagnostic));
             }
+        }
+
+        @Override
+        public boolean wantsDiagnostics() {
+            return true;
         }
     };
 
@@ -457,10 +469,12 @@ public class KotlinTestUtils {
 
         if (configurationKind.getWithRuntime()) {
             JvmContentRootsKt.addJvmClasspathRoot(configuration, ForTestCompileRuntime.runtimeJarForTests());
+            JvmContentRootsKt.addJvmClasspathRoot(configuration, ForTestCompileRuntime.scriptRuntimeJarForTests());
             JvmContentRootsKt.addJvmClasspathRoot(configuration, ForTestCompileRuntime.kotlinTestJarForTests());
         }
         else if (configurationKind.getWithMockRuntime()) {
             JvmContentRootsKt.addJvmClasspathRoot(configuration, ForTestCompileRuntime.mockRuntimeJarForTests());
+            JvmContentRootsKt.addJvmClasspathRoot(configuration, ForTestCompileRuntime.scriptRuntimeJarForTests());
         }
         if (configurationKind.getWithReflection()) {
             JvmContentRootsKt.addJvmClasspathRoot(configuration, ForTestCompileRuntime.reflectJarForTests());
@@ -631,7 +645,7 @@ public class KotlinTestUtils {
     private static List<String> parseDependencies(@Nullable String dependencies) {
         if (dependencies == null) return Collections.emptyList();
 
-        Matcher matcher = Pattern.compile("\\w+").matcher(dependencies);
+        Matcher matcher = Pattern.compile("[\\w\\d_\\-]+").matcher(dependencies);
         List<String> result = new ArrayList<String>();
         while (matcher.find()) {
             result.add(matcher.group());
@@ -814,10 +828,25 @@ public class KotlinTestUtils {
         return testClassMetadata.value();
     }
 
+    /**
+     * @return test data file name specified in the metadata of test method
+     */
+    @Nullable
+    public static String getTestDataFileName(@NotNull Class<?> testCaseClass, @NotNull String testName) {
+        try {
+            Method method = testCaseClass.getDeclaredMethod(testName);
+            return getMethodMetadata(method);
+        }
+        catch (NoSuchMethodException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     public static void assertAllTestsPresentByMetadata(
             @NotNull Class<?> testCaseClass,
             @NotNull File testDataDir,
             @NotNull Pattern filenamePattern,
+            @NotNull TargetBackend targetBackend,
             boolean recursive,
             @NotNull String... excludeDirs
     ) {
@@ -834,17 +863,29 @@ public class KotlinTestUtils {
                         assertTestClassPresentByMetadata(testCaseClass, file);
                     }
                 }
-                else if (filenamePattern.matcher(file.getName()).matches()) {
+                else if (filenamePattern.matcher(file.getName()).matches() && isCompatibleTarget(targetBackend, file) &&
+                         !isThereCustomReasonToSkip(file, testCaseClass)) {
                     assertFilePathPresent(file, rootFile, filePaths);
                 }
             }
         }
     }
 
+    private static boolean isThereCustomReasonToSkip(File file, Class<?> aClass) {
+        if (!aClass.getSuperclass().getSimpleName().equals("AbstractAdditionalCoroutineBlackBoxCodegenTest")) return false;
+        try {
+            return InTextDirectivesUtils.isDirectiveDefined(FileUtil.loadFile(file), "// NO_INTERCEPT_RESUME_TESTS");
+        }
+        catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     public static void assertAllTestsPresentInSingleGeneratedClass(
             @NotNull Class<?> testCaseClass,
             @NotNull File testDataDir,
-            @NotNull final Pattern filenamePattern
+            @NotNull final Pattern filenamePattern,
+            @NotNull final TargetBackend targetBackend
     ) {
         final File rootFile = new File(getTestsRoot(testCaseClass));
 
@@ -853,7 +894,7 @@ public class KotlinTestUtils {
         FileUtil.processFilesRecursively(testDataDir, new Processor<File>() {
             @Override
             public boolean process(File file) {
-                if (file.isFile() && filenamePattern.matcher(file.getName()).matches()) {
+                if (file.isFile() && filenamePattern.matcher(file.getName()).matches() && isCompatibleTarget(targetBackend, file)) {
                     assertFilePathPresent(file, rootFile, filePaths);
                 }
 
@@ -882,12 +923,18 @@ public class KotlinTestUtils {
                 }));
     }
 
+    @Nullable
+    private static String getMethodMetadata(Method method) {
+        TestMetadata testMetadata = method.getAnnotation(TestMetadata.class);
+        return (testMetadata != null) ? testMetadata.value() : null;
+    }
+
     private static Set<String> collectMethodsMetadata(Class<?> testCaseClass) {
         Set<String> filePaths = Sets.newHashSet();
         for (Method method : testCaseClass.getDeclaredMethods()) {
-            TestMetadata testMetadata = method.getAnnotation(TestMetadata.class);
-            if (testMetadata != null) {
-                filePaths.add(testMetadata.value());
+            String path = getMethodMetadata(method);
+            if (path != null) {
+                filePaths.add(path);
             }
         }
         return filePaths;
@@ -943,14 +990,12 @@ public class KotlinTestUtils {
 
     @NotNull
     public static ModuleDescriptorImpl createEmptyModule(@NotNull String name) {
-        return createEmptyModule(name, TargetPlatform.Default.INSTANCE, DefaultBuiltIns.getInstance());
+        return createEmptyModule(name, DefaultBuiltIns.getInstance());
     }
 
     @NotNull
-    public static ModuleDescriptorImpl createEmptyModule(@NotNull String name, @NotNull TargetPlatform platform, KotlinBuiltIns builtIns) {
-        return new ModuleDescriptorImpl(
-                Name.special(name), LockBasedStorageManager.NO_LOCKS, platform.getDefaultModuleParameters(), builtIns
-        );
+    public static ModuleDescriptorImpl createEmptyModule(@NotNull String name, @NotNull KotlinBuiltIns builtIns) {
+        return new ModuleDescriptorImpl(Name.special(name), LockBasedStorageManager.NO_LOCKS, builtIns);
     }
 
     @NotNull

@@ -31,6 +31,7 @@ import org.jetbrains.kotlin.codegen.context.RootContext;
 import org.jetbrains.kotlin.codegen.state.GenerationState;
 import org.jetbrains.kotlin.codegen.state.KotlinTypeMapper;
 import org.jetbrains.kotlin.descriptors.*;
+import org.jetbrains.kotlin.descriptors.impl.LocalVariableDescriptor;
 import org.jetbrains.kotlin.load.java.descriptors.JavaPropertyDescriptor;
 import org.jetbrains.kotlin.load.kotlin.*;
 import org.jetbrains.kotlin.psi.Call;
@@ -62,6 +63,10 @@ public class JvmCodegenUtil {
     }
 
     public static boolean isAnnotationOrJvm6Interface(@NotNull DeclarationDescriptor descriptor, @NotNull GenerationState state) {
+        return isAnnotationOrJvm6Interface(descriptor, state.isJvm8Target());
+    }
+
+    public static boolean isAnnotationOrJvm6Interface(@NotNull DeclarationDescriptor descriptor, boolean isJvm8Target) {
         if (!isJvmInterface(descriptor)) {
             return false;
         }
@@ -76,11 +81,15 @@ public class JvmCodegenUtil {
                 return ((FileBasedKotlinClass) binaryClass).getClassVersion() == Opcodes.V1_6;
             }
         }
-        return !state.isJvm8Target();
+        return !isJvm8Target;
     }
 
-    private static boolean isJvm8Interface(@NotNull DeclarationDescriptor descriptor, @NotNull GenerationState state) {
-        return DescriptorUtils.isInterface(descriptor) && !isAnnotationOrJvm6Interface(descriptor, state);
+    public static boolean isJvm8Interface(@NotNull DeclarationDescriptor descriptor, @NotNull GenerationState state) {
+        return isJvm8Interface(descriptor, state.isJvm8Target());
+    }
+
+    public static boolean isJvm8Interface(@NotNull DeclarationDescriptor descriptor, boolean isJvm8Target) {
+        return DescriptorUtils.isInterface(descriptor) && !isAnnotationOrJvm6Interface(descriptor, isJvm8Target);
     }
 
     public static boolean isJvm8InterfaceMember(@NotNull CallableMemberDescriptor descriptor, @NotNull GenerationState state) {
@@ -294,5 +303,9 @@ public class JvmCodegenUtil {
             }
         }
         return null;
+    }
+
+    public static boolean isDelegatedLocalVariable(@NotNull DeclarationDescriptor descriptor) {
+        return descriptor instanceof LocalVariableDescriptor && ((LocalVariableDescriptor) descriptor).isDelegated();
     }
 }

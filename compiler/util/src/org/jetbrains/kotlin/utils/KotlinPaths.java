@@ -34,6 +34,9 @@ public interface KotlinPaths {
     File getReflectPath();
 
     @NotNull
+    File getScriptRuntimePath();
+
+    @NotNull
     File getKotlinTestPath();
 
     @NotNull
@@ -47,4 +50,7 @@ public interface KotlinPaths {
 
     @NotNull
     File getCompilerPath();
+
+    @NotNull
+    File getBuildNumberFile();
 }

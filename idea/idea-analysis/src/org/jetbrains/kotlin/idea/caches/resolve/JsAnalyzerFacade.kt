@@ -20,7 +20,6 @@ import com.intellij.openapi.roots.OrderRootType
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.util.PathUtil
 import org.jetbrains.kotlin.analyzer.*
-import org.jetbrains.kotlin.config.LanguageVersion
 import org.jetbrains.kotlin.container.get
 import org.jetbrains.kotlin.context.ModuleContext
 import org.jetbrains.kotlin.descriptors.PackagePartProvider
@@ -34,6 +33,7 @@ import org.jetbrains.kotlin.resolve.TargetEnvironment
 import org.jetbrains.kotlin.resolve.TargetPlatform
 import org.jetbrains.kotlin.resolve.lazy.ResolveSession
 import org.jetbrains.kotlin.resolve.lazy.declarations.DeclarationProviderFactoryService
+import org.jetbrains.kotlin.serialization.deserialization.DeserializationConfiguration
 import org.jetbrains.kotlin.serialization.js.KotlinJavascriptSerializationUtil
 import org.jetbrains.kotlin.utils.KotlinJavascriptMetadataUtils
 
@@ -56,8 +56,12 @@ object JsAnalyzerFacade : AnalyzerFacade<PlatformAnalysisParameters>() {
         )
 
         val container = createContainerForLazyResolve(
-                moduleContext, declarationProviderFactory, BindingTraceContext(), JsPlatform, targetEnvironment,
-                LanguageVersion.LATEST // TODO: see KT-12410
+                moduleContext,
+                declarationProviderFactory,
+                BindingTraceContext(),
+                JsPlatform,
+                targetEnvironment,
+                LanguageVersionSettingsProvider.getInstance(project).getLanguageVersionSettings(moduleInfo)
         )
         var packageFragmentProvider = container.get<ResolveSession>().packageFragmentProvider
 
@@ -66,7 +70,9 @@ object JsAnalyzerFacade : AnalyzerFacade<PlatformAnalysisParameters>() {
                     .flatMap { KotlinJavascriptMetadataUtils.loadMetadata(PathUtil.getLocalPath(it)!!) }
                     .filter { it.isAbiVersionCompatible }
                     .mapNotNull {
-                        KotlinJavascriptSerializationUtil.readModule(it.body, moduleContext.storageManager, moduleDescriptor).data
+                        KotlinJavascriptSerializationUtil.readModule(
+                                it.body, moduleContext.storageManager, moduleDescriptor, container.get<DeserializationConfiguration>()
+                        ).data
                     }
 
             if (providers.isNotEmpty()) {

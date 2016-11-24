@@ -19,7 +19,7 @@ package org.jetbrains.kotlin.j2k
 import com.intellij.psi.*
 import com.intellij.psi.util.MethodSignatureUtil
 import com.intellij.psi.util.PsiUtil
-import org.jetbrains.kotlin.asJava.KtLightMethod
+import org.jetbrains.kotlin.asJava.elements.KtLightMethod
 import org.jetbrains.kotlin.j2k.ast.*
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.load.java.JvmAbi
@@ -60,7 +60,12 @@ class PropertyInfo(
     //TODO: what if annotations are not empty?
     val needExplicitGetter: Boolean
         get() {
-            if (getMethod != null && getMethod.body != null && !isGetMethodBodyFieldAccess) return true
+            if (getMethod != null) {
+                if (getMethod.hasModifierProperty(PsiModifier.NATIVE))
+                    return true
+                if (getMethod.body != null && !isGetMethodBodyFieldAccess)
+                    return true
+            }
             return modifiers.contains(Modifier.OVERRIDE) && this.field == null && !modifiers.contains(Modifier.ABSTRACT)
         }
 
@@ -69,8 +74,13 @@ class PropertyInfo(
         get() {
             if (!isVar) return false
             if (specialSetterAccess != null) return true
-            if (setMethod != null && setMethod.body != null && !isSetMethodBodyFieldAccess) return true
-            return modifiers.contains(Modifier.OVERRIDE) && this.field == null && !modifiers.contains(Modifier.ABSTRACT)
+            if (setMethod != null) {
+                if (setMethod.hasModifierProperty(PsiModifier.NATIVE))
+                    return true
+                if (setMethod.body != null && !isSetMethodBodyFieldAccess)
+                    return true
+            }
+            return modifiers.contains(Modifier.EXTERNAL) || modifiers.contains(Modifier.OVERRIDE) && this.field == null && !modifiers.contains(Modifier.ABSTRACT)
         }
 
     companion object {
@@ -219,7 +229,7 @@ private class PropertyDetector(
                 propertyAccess
             val specialSetterAccess = setterAccess?.check { it != propertyAccess }
 
-            val propertyInfo = PropertyInfo(Identifier(propertyName).assignNoPrototype(),
+            val propertyInfo = PropertyInfo(Identifier.withNoPrototype(propertyName),
                                             isVar,
                                             type,
                                             field,

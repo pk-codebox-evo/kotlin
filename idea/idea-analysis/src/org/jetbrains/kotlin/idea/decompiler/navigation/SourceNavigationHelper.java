@@ -36,34 +36,27 @@ import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.stubs.StringStubIndexExtension;
 import com.intellij.util.containers.ContainerUtil;
 import gnu.trove.THashSet;
+import kotlin.collections.CollectionsKt;
+import kotlin.jvm.functions.Function1;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
 import org.jetbrains.kotlin.builtins.DefaultBuiltIns;
-import org.jetbrains.kotlin.codegen.binding.PsiCodegenPredictor;
-import org.jetbrains.kotlin.config.LanguageVersion;
+import org.jetbrains.kotlin.config.LanguageVersionSettingsImpl;
 import org.jetbrains.kotlin.context.ContextKt;
 import org.jetbrains.kotlin.context.MutableModuleContext;
 import org.jetbrains.kotlin.descriptors.CallableDescriptor;
-import org.jetbrains.kotlin.descriptors.ModuleDescriptorKt;
-import org.jetbrains.kotlin.fileClasses.NoResolveFileClassesProvider;
 import org.jetbrains.kotlin.frontend.di.InjectionKt;
-import org.jetbrains.kotlin.idea.stubindex.KotlinFullClassNameIndex;
-import org.jetbrains.kotlin.idea.stubindex.KotlinSourceFilterScope;
-import org.jetbrains.kotlin.idea.stubindex.KotlinTopLevelFunctionFqnNameIndex;
-import org.jetbrains.kotlin.idea.stubindex.KotlinTopLevelPropertyFqnNameIndex;
+import org.jetbrains.kotlin.idea.stubindex.*;
 import org.jetbrains.kotlin.idea.util.ProjectRootsUtil;
 import org.jetbrains.kotlin.lexer.KtTokens;
 import org.jetbrains.kotlin.name.ClassId;
 import org.jetbrains.kotlin.name.FqName;
 import org.jetbrains.kotlin.name.Name;
 import org.jetbrains.kotlin.platform.JavaToKotlinClassMap;
-import org.jetbrains.kotlin.platform.PlatformToKotlinClassMap;
 import org.jetbrains.kotlin.psi.*;
 import org.jetbrains.kotlin.resolve.BindingTraceContext;
 import org.jetbrains.kotlin.resolve.TargetPlatform;
-import org.jetbrains.kotlin.resolve.jvm.JvmClassName;
-import org.jetbrains.kotlin.resolve.jvm.platform.JvmPlatform;
 import org.jetbrains.kotlin.resolve.lazy.KotlinCodeAnalyzer;
 import org.jetbrains.kotlin.resolve.lazy.ResolveSession;
 import org.jetbrains.kotlin.resolve.lazy.declarations.FileBasedDeclarationProviderFactory;
@@ -159,7 +152,7 @@ public class SourceNavigationHelper {
     ) {
         if (declaration instanceof KtPrimaryConstructor) {
             KtClassOrObject sourceClassOrObject =
-                    convertNamedClassOrObject(((KtPrimaryConstructor) declaration).getContainingClassOrObject(), navigationKind);
+                    findClassOrObject(((KtPrimaryConstructor) declaration).getContainingClassOrObject(), navigationKind);
             KtPrimaryConstructor primaryConstructor = sourceClassOrObject != null ? sourceClassOrObject.getPrimaryConstructor() : null;
             return primaryConstructor != null ? primaryConstructor : sourceClassOrObject;
         }
@@ -179,7 +172,7 @@ public class SourceNavigationHelper {
         }
         else if (decompiledContainer instanceof KtClassBody) {
             KtClassOrObject decompiledClassOrObject = (KtClassOrObject) decompiledContainer.getParent();
-            KtClassOrObject sourceClassOrObject = convertNamedClassOrObject(decompiledClassOrObject, navigationKind);
+            KtClassOrObject sourceClassOrObject = findClassOrObject(decompiledClassOrObject, navigationKind);
 
             //noinspection unchecked
             candidates = sourceClassOrObject == null
@@ -204,6 +197,8 @@ public class SourceNavigationHelper {
             return null;
         }
 
+        candidates = filterByOrderEntries(declaration, candidates);
+
         if (!forceResolve) {
             candidates = filterByReceiverPresenceAndParametersCount(declaration, candidates);
 
@@ -226,8 +221,8 @@ public class SourceNavigationHelper {
             //noinspection unchecked
             CallableDescriptor candidateDescriptor = (CallableDescriptor) analyzer.resolveToDescriptor(candidate);
             if (receiversMatch(declaration, candidateDescriptor)
-                    && valueParametersTypesMatch(declaration, candidateDescriptor)
-                    && typeParametersMatch((KtTypeParameterListOwner) declaration, candidateDescriptor.getTypeParameters())) {
+                && valueParametersTypesMatch(declaration, candidateDescriptor)
+                && typeParametersMatch((KtTypeParameterListOwner) declaration, candidateDescriptor.getTypeParameters())) {
                 return candidate;
             }
         }
@@ -240,15 +235,8 @@ public class SourceNavigationHelper {
             @NotNull Collection<KtNamedDeclaration> candidates,
             @NotNull Project project
     ) {
-
-        TargetPlatform platform = TargetPlatform.Default.INSTANCE;
         MutableModuleContext newModuleContext = ContextKt.ContextForNewModule(
-                project, Name.special("<library module>"),
-                ModuleDescriptorKt.ModuleParameters(
-                        JvmPlatform.INSTANCE.getDefaultModuleParameters().getDefaultImports(),
-                        PlatformToKotlinClassMap.EMPTY
-                ),
-                DefaultBuiltIns.getInstance()
+                ContextKt.ProjectContext(project), Name.special("<library module>"), DefaultBuiltIns.getInstance()
         );
 
         newModuleContext.setDependencies(newModuleContext.getModule(), newModuleContext.getModule().getBuiltIns().getBuiltInsModule());
@@ -262,8 +250,8 @@ public class SourceNavigationHelper {
                 newModuleContext,
                 providerFactory,
                 new BindingTraceContext(),
-                platform,
-                LanguageVersion.LATEST // TODO: see KT-12410
+                TargetPlatform.Default.INSTANCE,
+                LanguageVersionSettingsImpl.DEFAULT
         );
 
         newModuleContext.initializeModuleContents(resolveSession.getPackageFragmentProvider());
@@ -271,23 +259,31 @@ public class SourceNavigationHelper {
     }
 
     @Nullable
-    private static KtClassOrObject convertNamedClassOrObject(
-            @NotNull KtClassOrObject classOrObject,
-            @NotNull NavigationKind navigationKind
+    private static <T extends KtNamedDeclaration> T findFirstMatchingInIndex(
+            @NotNull T entity,
+            @NotNull NavigationKind navigationKind,
+            @NotNull StringStubIndexExtension<T> index
     ) {
-        FqName classFqName = classOrObject.getFqName();
+        FqName classFqName = entity.getFqName();
         assert classFqName != null;
 
-        GlobalSearchScope librarySourcesScope = createLibraryOrSourcesScope(classOrObject, navigationKind);
+        GlobalSearchScope librarySourcesScope = createLibraryOrSourcesScope(entity, navigationKind);
         if (librarySourcesScope == GlobalSearchScope.EMPTY_SCOPE) { // .getProject() == null for EMPTY_SCOPE, and this breaks code
             return null;
         }
-        Collection<KtClassOrObject> classes = KotlinFullClassNameIndex.getInstance()
-                .get(classFqName.asString(), classOrObject.getProject(), librarySourcesScope);
+        Collection<T> classes = index.get(classFqName.asString(), entity.getProject(), librarySourcesScope);
         if (classes.isEmpty()) {
             return null;
         }
-        return classes.iterator().next(); // if there are more than one class with this FQ, find first of them
+        return classes.iterator().next(); // if there are more than one with this FQ, find first of them
+    }
+
+    @Nullable
+    private static KtClassOrObject findClassOrObject(
+            @NotNull KtClassOrObject decompiledClassOrObject,
+            @NotNull NavigationKind navigationKind
+    ) {
+        return findFirstMatchingInIndex(decompiledClassOrObject, navigationKind, KotlinFullClassNameIndex.getInstance());
     }
 
     @NotNull
@@ -333,6 +329,26 @@ public class SourceNavigationHelper {
                 return name.equals(declaration.getNameAsSafeName());
             }
         });
+    }
+
+    @NotNull
+    private static List<KtNamedDeclaration> filterByOrderEntries(
+            @NotNull KtNamedDeclaration declaration,
+            @NotNull Collection<KtNamedDeclaration> candidates
+    ) {
+        final ProjectFileIndex fileIndex = ProjectRootManager.getInstance(declaration.getProject()).getFileIndex();
+        final List<OrderEntry> orderEntries = fileIndex.getOrderEntriesForFile(declaration.getContainingFile().getVirtualFile());
+
+        return CollectionsKt.filter(
+                candidates,
+                new Function1<KtNamedDeclaration, Boolean>() {
+                    @Override
+                    public Boolean invoke(KtNamedDeclaration candidate) {
+                        List<OrderEntry> candidateOrderEntries = fileIndex.getOrderEntriesForFile(candidate.getContainingFile().getVirtualFile());
+                        return ContainerUtil.intersects(orderEntries, candidateOrderEntries);
+                    }
+                }
+        );
     }
 
     @NotNull
@@ -384,11 +400,10 @@ public class SourceNavigationHelper {
     @Nullable
     public static PsiClass getOriginalClass(@NotNull KtClassOrObject classOrObject) {
         // Copied from JavaPsiImplementationHelperImpl:getOriginalClass()
-        String internalName = PsiCodegenPredictor.getPredefinedJvmInternalName(classOrObject, NoResolveFileClassesProvider.INSTANCE);
-        if (internalName == null) {
+        FqName fqName = classOrObject.getFqName();
+        if (fqName == null) {
             return null;
         }
-        String fqName = JvmClassName.byInternalName(internalName).getFqNameForClassNameWithoutDollars().asString();
 
         KtFile file = classOrObject.getContainingKtFile();
 
@@ -400,7 +415,7 @@ public class SourceNavigationHelper {
         if (vFile == null || !idx.isInLibrarySource(vFile)) return null;
         final Set<OrderEntry> orderEntries = new THashSet<OrderEntry>(idx.getOrderEntriesForFile(vFile));
 
-        return JavaPsiFacade.getInstance(project).findClass(fqName, new GlobalSearchScope(project) {
+        return JavaPsiFacade.getInstance(project).findClass(fqName.asString(), new GlobalSearchScope(project) {
             @Override
             public int compare(@NotNull VirtualFile file1, @NotNull VirtualFile file2) {
                 return 0;
@@ -440,7 +455,8 @@ public class SourceNavigationHelper {
     @NotNull
     public static KtDeclaration navigateToDeclaration(
             @NotNull KtDeclaration from,
-            @NotNull NavigationKind navigationKind) {
+            @NotNull NavigationKind navigationKind
+    ) {
         if (DumbService.isDumb(from.getProject())) return from;
 
         switch (navigationKind) {
@@ -477,12 +493,17 @@ public class SourceNavigationHelper {
 
         @Override
         public KtDeclaration visitObjectDeclaration(@NotNull KtObjectDeclaration declaration, Void data) {
-            return convertNamedClassOrObject(declaration, navigationKind);
+            return findClassOrObject(declaration, navigationKind);
         }
 
         @Override
         public KtDeclaration visitClass(@NotNull KtClass klass, Void data) {
-            return convertNamedClassOrObject(klass, navigationKind);
+            return findClassOrObject(klass, navigationKind);
+        }
+
+        @Override
+        public KtDeclaration visitTypeAlias(@NotNull KtTypeAlias typeAlias, Void data) {
+            return findFirstMatchingInIndex(typeAlias, navigationKind, KotlinTopLevelTypeAliasFqNameIndex.getInstance());
         }
 
         @Override

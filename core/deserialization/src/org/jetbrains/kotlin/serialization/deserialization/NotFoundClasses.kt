@@ -54,7 +54,7 @@ class NotFoundClasses(private val storageManager: StorageManager, private val mo
     private val typeAliases = storageManager.createMemoizedFunction<ClassRequest, TypeAliasDescriptor> { request ->
         computeClassifier(request, {
             owner, name, isInner, numberOfTypeParametersCount ->
-            MockTypeAliasDescriptor(storageManager, owner, name, numberOfTypeParametersCount)
+            MockTypeAliasDescriptor(storageManager, owner, name, isInner, numberOfTypeParametersCount)
         })
     }
 
@@ -89,9 +89,7 @@ class NotFoundClasses(private val storageManager: StorageManager, private val mo
     ) : ClassDescriptorBase(storageManager, container, name, SourceElement.NO_SOURCE) {
         private val typeParameters = createTypeParameters(this, numberOfDeclaredTypeParameters)
 
-        private val typeConstructor = ClassTypeConstructorImpl(
-                this, Annotations.EMPTY, /* isFinal = */ true, typeParameters, setOf(module.builtIns.anyType)
-        )
+        private val typeConstructor = ClassTypeConstructorImpl(this, /* isFinal = */ true, typeParameters, setOf(module.builtIns.anyType))
 
         override fun getKind() = ClassKind.CLASS
         override fun getModality() = Modality.FINAL
@@ -106,8 +104,8 @@ class NotFoundClasses(private val storageManager: StorageManager, private val mo
 
         override fun getUnsubstitutedMemberScope() = MemberScope.Empty
         override fun getStaticScope() = MemberScope.Empty
-        override fun getConstructors(): Collection<ConstructorDescriptor> = emptySet()
-        override fun getUnsubstitutedPrimaryConstructor(): ConstructorDescriptor? = null
+        override fun getConstructors(): Collection<ClassConstructorDescriptor> = emptySet()
+        override fun getUnsubstitutedPrimaryConstructor(): ClassConstructorDescriptor? = null
         override fun getCompanionObjectDescriptor(): ClassDescriptor? = null
 
         override fun toString() = "class $name (not found)"
@@ -117,6 +115,7 @@ class NotFoundClasses(private val storageManager: StorageManager, private val mo
             storageManager: StorageManager,
             containingDeclaration: DeclarationDescriptor,
             name: Name,
+            private val isInner: Boolean,
             numberOfDeclaredTypeParameters: Int
     ) : AbstractTypeAliasDescriptor(containingDeclaration, Annotations.EMPTY, name, SourceElement.NO_SOURCE, Visibilities.PUBLIC) {
         init {
@@ -133,6 +132,12 @@ class NotFoundClasses(private val storageManager: StorageManager, private val mo
             get() = builtIns.nullableAnyType
         override val expandedType: SimpleType
             get() = builtIns.nullableAnyType
+        override fun getDefaultType(): SimpleType =
+                builtIns.nullableAnyType
+        override val classDescriptor: ClassDescriptor?
+            get() = expandedType.constructor.declarationDescriptor as? ClassDescriptor
+
+        override fun isInner(): Boolean = isInner
 
         override fun substitute(substitutor: TypeSubstitutor) = this
 

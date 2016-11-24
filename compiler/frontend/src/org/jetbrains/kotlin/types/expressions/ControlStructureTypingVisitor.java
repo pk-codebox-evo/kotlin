@@ -19,7 +19,6 @@ package org.jetbrains.kotlin.types.expressions;
 import com.google.common.collect.Lists;
 import com.intellij.openapi.util.Pair;
 import com.intellij.psi.PsiElement;
-import com.intellij.psi.util.PsiTreeUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns;
@@ -33,8 +32,6 @@ import org.jetbrains.kotlin.resolve.ModifiersChecker;
 import org.jetbrains.kotlin.resolve.calls.model.MutableDataFlowInfoForArguments;
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall;
 import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowInfo;
-import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowValue;
-import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowValueFactory;
 import org.jetbrains.kotlin.resolve.descriptorUtil.DescriptorUtilsKt;
 import org.jetbrains.kotlin.resolve.inline.InlineUtil;
 import org.jetbrains.kotlin.resolve.scopes.LexicalScope;
@@ -154,13 +151,6 @@ public class ControlStructureTypingVisitor extends ExpressionTypingVisitor {
             KotlinType elseType = elseTypeInfo.getType();
             DataFlowInfo thenDataFlowInfo = thenTypeInfo.getDataFlowInfo();
             DataFlowInfo elseDataFlowInfo = elseTypeInfo.getDataFlowInfo();
-            if (resultType != null && thenType != null && elseType != null) {
-                DataFlowValue resultValue = DataFlowValueFactory.createDataFlowValue(ifExpression, resultType, context);
-                DataFlowValue thenValue = DataFlowValueFactory.createDataFlowValue(thenBranch, thenType, context);
-                thenDataFlowInfo = thenDataFlowInfo.assign(resultValue, thenValue);
-                DataFlowValue elseValue = DataFlowValueFactory.createDataFlowValue(elseBranch, elseType, context);
-                elseDataFlowInfo = elseDataFlowInfo.assign(resultValue, elseValue);
-            }
 
             loopBreakContinuePossible |= thenTypeInfo.getJumpOutPossible() || elseTypeInfo.getJumpOutPossible();
 
@@ -411,22 +401,19 @@ public class ControlStructureTypingVisitor extends ExpressionTypingVisitor {
         KtParameter loopParameter = expression.getLoopParameter();
         if (loopParameter != null) {
             VariableDescriptor variableDescriptor = createLoopParameterDescriptor(loopParameter, expectedParameterType, context);
-            components.modifiersChecker.withTrace(context.trace).checkModifiersForLocalDeclaration(loopParameter, variableDescriptor);
+            ModifiersChecker.ModifiersCheckingProcedure modifiersCheckingProcedure = components.modifiersChecker.withTrace(context.trace);
+            modifiersCheckingProcedure.checkModifiersForLocalDeclaration(loopParameter, variableDescriptor);
             components.identifierChecker.checkDeclaration(loopParameter, context.trace);
-
             loopScope.addVariableDescriptor(variableDescriptor);
-        }
-        else {
-            KtDestructuringDeclaration multiParameter = expression.getDestructuringParameter();
+            KtDestructuringDeclaration multiParameter = loopParameter.getDestructuringDeclaration();
             if (multiParameter != null) {
                 KotlinType elementType = expectedParameterType == null ? ErrorUtils.createErrorType("Loop range has no type") : expectedParameterType;
                 TransientReceiver iteratorNextAsReceiver = new TransientReceiver(elementType);
-                components.annotationResolver.resolveAnnotationsWithArguments(loopScope, multiParameter.getModifierList(), context.trace);
-                components.destructuringDeclarationResolver.defineLocalVariablesFromMultiDeclaration(
+                components.annotationResolver.resolveAnnotationsWithArguments(loopScope, loopParameter.getModifierList(), context.trace);
+                components.destructuringDeclarationResolver.defineLocalVariablesFromDestructuringDeclaration(
                         loopScope, multiParameter, iteratorNextAsReceiver, loopRange, context
                 );
-                components.modifiersChecker.withTrace(context.trace).checkModifiersForDestructuringDeclaration(multiParameter);
-                components.modifiersChecker.withTrace(context.trace).checkParameterHasNoValOrVar(multiParameter, VAL_OR_VAR_ON_LOOP_MULTI_PARAMETER);
+                modifiersCheckingProcedure.checkModifiersForDestructuringDeclaration(multiParameter);
                 components.identifierChecker.checkDeclaration(multiParameter, context.trace);
             }
         }
@@ -493,7 +480,7 @@ public class ControlStructureTypingVisitor extends ExpressionTypingVisitor {
                 components.identifierChecker.checkDeclaration(catchParameter, context.trace);
                 ModifiersChecker.ModifiersCheckingProcedure modifiersChecking = components.modifiersChecker.withTrace(context.trace);
                 modifiersChecking.checkParameterHasNoValOrVar(catchParameter, VAL_OR_VAR_ON_CATCH_PARAMETER);
-                ModifierCheckerCore.INSTANCE.check(catchParameter, context.trace, null, components.languageFeatureSettings);
+                ModifierCheckerCore.INSTANCE.check(catchParameter, context.trace, null, components.languageVersionSettings);
 
                 VariableDescriptor variableDescriptor = components.descriptorResolver.resolveLocalVariableDescriptor(
                         context.scope, catchParameter, context.trace);
@@ -562,7 +549,7 @@ public class ControlStructureTypingVisitor extends ExpressionTypingVisitor {
 
         KotlinType expectedType = NO_EXPECTED_TYPE;
         KotlinType resultType = components.builtIns.getNothingType();
-        KtDeclaration parentDeclaration = PsiTreeUtil.getParentOfType(expression, KtDeclaration.class);
+        KtDeclaration parentDeclaration = context.getContextParentOfType(expression, KtDeclaration.class);
 
         if (parentDeclaration instanceof KtParameter) {
             // In a default value for parameter
@@ -572,7 +559,7 @@ public class ControlStructureTypingVisitor extends ExpressionTypingVisitor {
         if (expression.getTargetLabel() == null) {
             while (parentDeclaration instanceof KtDestructuringDeclaration) {
                 //TODO: It's hacking fix for KT-5100: Strange "Return is not allowed here" for multi-declaration initializer with elvis expression
-                parentDeclaration = PsiTreeUtil.getParentOfType(parentDeclaration, KtDeclaration.class);
+                parentDeclaration = context.getContextParentOfType(parentDeclaration, KtDeclaration.class);
             }
 
             // Parent declaration can be null in code fragments or in some bad error expressions
@@ -583,7 +570,7 @@ public class ControlStructureTypingVisitor extends ExpressionTypingVisitor {
             FunctionDescriptor containingFunctionDescriptor = containingFunInfo.getFirst();
 
             if (containingFunctionDescriptor != null) {
-                if (!InlineUtil.checkNonLocalReturnUsage(containingFunctionDescriptor, expression, context.trace) ||
+                if (!InlineUtil.checkNonLocalReturnUsage(containingFunctionDescriptor, expression, context) ||
                     isClassInitializer(containingFunInfo)) {
                     // Unqualified, in a function literal
                     context.trace.report(RETURN_NOT_ALLOWED.on(expression));
@@ -602,7 +589,7 @@ public class ControlStructureTypingVisitor extends ExpressionTypingVisitor {
             SimpleFunctionDescriptor functionDescriptor = context.trace.get(FUNCTION, labelTargetElement);
             if (functionDescriptor != null) {
                 expectedType = getFunctionExpectedReturnType(functionDescriptor, labelTargetElement, context);
-                if (!InlineUtil.checkNonLocalReturnUsage(functionDescriptor, expression, context.trace)) {
+                if (!InlineUtil.checkNonLocalReturnUsage(functionDescriptor, expression, context)) {
                     // Qualified, non-local
                     context.trace.report(RETURN_NOT_ALLOWED.on(expression));
                     resultType = ErrorUtils.createErrorType(RETURN_NOT_ALLOWED_MESSAGE);

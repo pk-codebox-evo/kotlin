@@ -1,6 +1,5 @@
 package traffic
 
-import java.util.ArrayList
 import kotlin.browser.window
 import org.w3c.dom.*
 import jquery.*
@@ -63,6 +62,7 @@ fun main(args: Array<String>) {
 }
 
 fun v(x: Double, y: Double) = Vector(x, y)
+fun v(x: Int, y: Int) = Vector(x, y)
 
 class Image(val src: String, override var pos: Vector, var imageSize: Vector) : Shape() {
     override fun draw() {
@@ -174,7 +174,7 @@ class TrafficLight(override var pos: Vector, val direction: String, val startCol
     var timer = Timer(Vector(pos.x + 6, pos.y + 12))
     var currentColor = startColor;
     var isForceColorChange = false
-    var changeColorForward = (startColor == "red")
+    private var changeColorForward = (startColor == "red")
 
     init {
         list.add(TrafficLightItem(v(pos.x, pos.y), PATH_TO_IMAGES + "red_color.png"))
@@ -483,6 +483,8 @@ abstract class Shape() {
 }
 
 class Vector(val x: Double = 0.0, val y: Double = 0.0) {
+    constructor(x: Int, y: Int) : this(x.toDouble(), y.toDouble())
+
     operator fun plus(v: Vector) = v(x + v.x, y + v.y)
     operator fun unaryMinus() = v(-x, -y)
     operator fun minus(v: Vector) = v(x - v.x, y - v.y)

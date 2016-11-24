@@ -19,7 +19,7 @@ package org.jetbrains.kotlin.idea.caches.resolve
 import com.intellij.psi.PsiField
 import com.intellij.psi.PsiMember
 import com.intellij.psi.PsiMethod
-import org.jetbrains.kotlin.asJava.LightMemberOrigin
+import org.jetbrains.kotlin.asJava.builder.LightMemberOrigin
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
@@ -81,10 +81,10 @@ private fun PsiMember.relativeClassName(): List<Name> {
 }
 
 private fun ClassDescriptor.relativeClassName(): List<Name> {
-    return classId.relativeClassName.pathSegments().drop(1).orEmpty()
+    return classId!!.relativeClassName.pathSegments().drop(1).orEmpty()
 }
 
-private fun ClassDescriptor.desc(): String = "L" + JvmClassName.byClassId(classId).internalName + ";"
+private fun ClassDescriptor.desc(): String = "L" + JvmClassName.byClassId(classId!!).internalName + ";"
 
 private object ByJvmSignatureIndexer : DecompiledTextIndexer<ClassNameAndSignature> {
     override fun indexDescriptor(descriptor: DeclarationDescriptor): Collection<ClassNameAndSignature> {

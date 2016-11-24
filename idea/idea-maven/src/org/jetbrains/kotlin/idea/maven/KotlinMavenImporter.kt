@@ -33,6 +33,13 @@ import org.jetbrains.idea.maven.model.MavenPlugin
 import org.jetbrains.idea.maven.project.*
 import org.jetbrains.jps.model.java.JavaSourceRootType
 import org.jetbrains.jps.model.module.JpsModuleSourceRootType
+import org.jetbrains.kotlin.config.LanguageVersion
+import org.jetbrains.kotlin.config.TargetPlatformKind
+import org.jetbrains.kotlin.idea.facet.configureFacet
+import org.jetbrains.kotlin.idea.facet.getOrCreateFacet
+import org.jetbrains.kotlin.idea.facet.initializeIfNeeded
+import org.jetbrains.kotlin.idea.facet.mavenLibraryId
+import org.jetbrains.kotlin.idea.maven.configuration.KotlinMavenConfigurator
 import java.io.File
 import java.util.*
 
@@ -79,6 +86,14 @@ class KotlinMavenImporter : MavenImporter(KotlinPluginGroupId, KotlinPluginArtif
                 MavenProjectsManager.getInstance(module.project).scheduleArtifactsDownloading(listOf(mavenProject), toBeDownloaded, true, false, AsyncResult())
             }
         }
+
+        configureFacet(mavenProject, modifiableModelsProvider, module)
+    }
+
+    private fun configureFacet(mavenProject: MavenProject, modifiableModelsProvider: IdeModifiableModelsProvider, module: Module) {
+        val compilerVersion = mavenProject.findPlugin(KotlinMavenConfigurator.GROUP_ID, KotlinMavenConfigurator.MAVEN_PLUGIN_ID)?.version
+                              ?: return
+        module.getOrCreateFacet(modifiableModelsProvider).configureFacet(compilerVersion, modifiableModelsProvider)
     }
 
     // TODO in theory it should work like this but it doesn't as it couldn't unmark source roots that are not roots anymore.

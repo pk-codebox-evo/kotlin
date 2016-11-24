@@ -18,9 +18,11 @@ package org.jetbrains.kotlin.cfg.pseudocode
 
 import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.cfg.Label
 import org.jetbrains.kotlin.cfg.pseudocode.instructions.Instruction
 import org.jetbrains.kotlin.cfg.pseudocode.instructions.eval.*
 import org.jetbrains.kotlin.cfg.pseudocode.instructions.eval.MagicKind.*
+import org.jetbrains.kotlin.cfg.pseudocode.instructions.jumps.AbstractJumpInstruction
 import org.jetbrains.kotlin.cfg.pseudocode.instructions.jumps.ConditionalJumpInstruction
 import org.jetbrains.kotlin.cfg.pseudocode.instructions.jumps.ReturnValueInstruction
 import org.jetbrains.kotlin.cfg.pseudocode.instructions.jumps.ThrowExceptionInstruction
@@ -171,9 +173,9 @@ fun getExpectedTypePredicate(
                     else {
                         val expectedType = when (accessTarget) {
                             is AccessTarget.Call ->
-                                (accessTarget.resolvedCall.getResultingDescriptor() as? VariableDescriptor)?.getType()
+                                (accessTarget.resolvedCall.resultingDescriptor as? VariableDescriptor)?.type
                             is AccessTarget.Declaration ->
-                                accessTarget.descriptor.getType()
+                                accessTarget.descriptor.type
                             else ->
                                 null
                         }
@@ -239,8 +241,8 @@ fun getExpectedTypePredicate(
 
 fun Instruction.getPrimaryDeclarationDescriptorIfAny(bindingContext: BindingContext): DeclarationDescriptor? {
     return when (this) {
-        is CallInstruction -> return resolvedCall.getResultingDescriptor()
-        else -> PseudocodeUtil.extractVariableDescriptorIfAny(this, false, bindingContext)
+        is CallInstruction -> return resolvedCall.resultingDescriptor
+        else -> PseudocodeUtil.extractVariableDescriptorIfAny(this, bindingContext)
     }
 }
 
@@ -308,3 +310,6 @@ fun Pseudocode.getPseudocodeByElement(element: KtElement): Pseudocode? {
     localDeclarations.forEach { decl -> decl.body.getPseudocodeByElement(element)?.let { return it } }
     return null
 }
+
+val Label.isJumpToError: Boolean
+    get() = resolveToInstruction() == pseudocode.errorInstruction

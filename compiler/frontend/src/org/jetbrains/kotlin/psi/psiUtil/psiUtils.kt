@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
+ * Copyright 2010-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -136,12 +136,12 @@ inline fun <reified T : PsiElement> PsiElement.getChildrenOfType(): Array<T> {
     return PsiTreeUtil.getChildrenOfType(this, T::class.java) ?: arrayOf()
 }
 
-fun PsiElement.getNextSiblingIgnoringWhitespaceAndComments(): PsiElement? {
-    return siblings(withItself = false).filter { it !is PsiWhiteSpace && it !is PsiComment }.firstOrNull()
+fun PsiElement.getNextSiblingIgnoringWhitespaceAndComments(withItself: Boolean = false): PsiElement? {
+    return siblings(withItself = withItself).filter { it !is PsiWhiteSpace && it !is PsiComment }.firstOrNull()
 }
 
-fun PsiElement.getPrevSiblingIgnoringWhitespaceAndComments(): PsiElement? {
-    return siblings(withItself = false, forward = false).filter { it !is PsiWhiteSpace && it !is PsiComment }.firstOrNull()
+fun PsiElement.getPrevSiblingIgnoringWhitespaceAndComments(withItself: Boolean = false): PsiElement? {
+    return siblings(withItself = withItself, forward = false).filter { it !is PsiWhiteSpace && it !is PsiComment }.firstOrNull()
 }
 
 inline fun <reified T : PsiElement> T.nextSiblingOfSameType() = PsiTreeUtil.getNextSiblingOfType(this, T::class.java)
@@ -183,7 +183,7 @@ fun PsiChildRange.trimWhiteSpaces(): PsiChildRange {
 // -------------------- Recursive tree visiting --------------------------------------------------------------------------------------------
 
 inline fun <reified T : PsiElement> PsiElement.forEachDescendantOfType(noinline action: (T) -> Unit) {
-    forEachDescendantOfType<T>({ true }, action)
+    forEachDescendantOfType({ true }, action)
 }
 
 inline fun <reified T : PsiElement> PsiElement.forEachDescendantOfType(crossinline canGoInside: (PsiElement) -> Boolean, noinline action: (T) -> Unit) {
@@ -201,15 +201,15 @@ inline fun <reified T : PsiElement> PsiElement.forEachDescendantOfType(crossinli
 }
 
 inline fun <reified T : PsiElement> PsiElement.anyDescendantOfType(noinline predicate: (T) -> Boolean = { true }): Boolean {
-    return findDescendantOfType<T>(predicate) != null
+    return findDescendantOfType(predicate) != null
 }
 
 inline fun <reified T : PsiElement> PsiElement.anyDescendantOfType(crossinline canGoInside: (PsiElement) -> Boolean, noinline predicate: (T) -> Boolean = { true }): Boolean {
-    return findDescendantOfType<T>(canGoInside, predicate) != null
+    return findDescendantOfType(canGoInside, predicate) != null
 }
 
 inline fun <reified T : PsiElement> PsiElement.findDescendantOfType(noinline predicate: (T) -> Boolean = { true }): T? {
-    return findDescendantOfType<T>({ true }, predicate)
+    return findDescendantOfType({ true }, predicate)
 }
 
 inline fun <reified T : PsiElement> PsiElement.findDescendantOfType(crossinline canGoInside: (PsiElement) -> Boolean, noinline predicate: (T) -> Boolean = { true }): T? {
@@ -231,7 +231,7 @@ inline fun <reified T : PsiElement> PsiElement.findDescendantOfType(crossinline 
 }
 
 inline fun <reified T : PsiElement> PsiElement.collectDescendantsOfType(noinline predicate: (T) -> Boolean = { true }): List<T> {
-    return collectDescendantsOfType<T>({ true }, predicate)
+    return collectDescendantsOfType({ true }, predicate)
 }
 
 inline fun <reified T : PsiElement> PsiElement.collectDescendantsOfType(crossinline canGoInside: (PsiElement) -> Boolean, noinline predicate: (T) -> Boolean = { true }): List<T> {
@@ -364,4 +364,6 @@ fun <E : PsiElement> E.createSmartPointer(): SmartPsiElementPointer<E> =
         SmartPointerManager.getInstance(project).createSmartPsiElementPointer(this)
 
 fun PsiElement.before(element: PsiElement) = textRange.endOffset <= element.textRange.startOffset
+
+inline fun <reified T : PsiElement> PsiElement.getLastParentOfTypeInRow() = parents.takeWhile { it is T }.lastOrNull() as? T
 

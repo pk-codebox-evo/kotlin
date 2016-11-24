@@ -3,8 +3,6 @@
 
 package kotlin.collections
 
-import java.util.*
-
 /**
  * Removes a single instance of the specified element from this
  * collection, if it is present.
@@ -260,14 +258,16 @@ private fun MutableCollection<*>.retainNothing(): Boolean {
 
 /**
  * Sorts elements in the list in-place according to their natural sort order.
- * */
-public fun <T: Comparable<T>> MutableList<T>.sort(): Unit {
+ */
+@kotlin.jvm.JvmVersion
+public fun <T : Comparable<T>> MutableList<T>.sort(): Unit {
     if (size > 1) java.util.Collections.sort(this)
 }
 
 /**
- *  Sorts elements in the list in-place according to order specified with [comparator].
+ * Sorts elements in the list in-place according to the order specified with [comparator].
  */
+@kotlin.jvm.JvmVersion
 public fun <T> MutableList<T>.sortWith(comparator: Comparator<in T>): Unit {
     if (size > 1) java.util.Collections.sort(this, comparator)
 }

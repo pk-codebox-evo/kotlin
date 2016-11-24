@@ -1,3 +1,19 @@
+/*
+ * Copyright 2010-2016 JetBrains s.r.o.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.jetbrains.kotlin.gradle.plugin.android
 
 import com.android.build.gradle.BaseExtension
@@ -8,6 +24,10 @@ import com.android.build.gradle.api.BaseVariant
 import com.android.build.gradle.api.TestVariant
 import com.android.build.gradle.internal.VariantManager
 import com.android.build.gradle.internal.variant.BaseVariantData
+import com.android.builder.dependency.DependencyContainer
+import com.android.builder.dependency.LibraryDependency
+import com.android.builder.model.SourceProvider
+import org.gradle.api.file.ConfigurableFileTree
 import org.gradle.api.internal.DefaultDomainObjectSet
 import org.gradle.api.tasks.compile.AbstractCompile
 import org.gradle.api.tasks.util.PatternFilterable
@@ -28,14 +48,10 @@ class AndroidGradleWrapper {
   }
 
   static def srcDir(Object androidSourceSet, Object kotlinDirSet) {
-    /*before 0.11 gradle android plugin there was:
-      androidSourceSet.getAllJava().source(kotlinDirSet)
-      androidSourceSet.getAllSource().source(kotlinDirSet)
-      but those methods were removed so as temporary hack next code was suggested*/
     androidSourceSet.getJava().srcDir(kotlinDirSet)
   }
 
-  static def PatternFilterable getResourceFilter(Object androidSourceSet) {
+  static PatternFilterable getResourceFilter(Object androidSourceSet) {
     def resources = androidSourceSet.getResources()
     if (resources != null) {
       return resources.getFilter()
@@ -44,12 +60,12 @@ class AndroidGradleWrapper {
   }
 
   @NotNull
-  static def String getVariantName(Object variant) {
+  static String getVariantName(Object variant) {
     return variant.getBuildType().getName()
   }
 
   @Nullable
-  static def AbstractCompile getJavaCompile(Object baseVariantData) {
+  static AbstractCompile getJavaCompile(Object baseVariantData) {
     if (baseVariantData.getMetaClass().getMetaProperty("javaCompileTask")) {
       return baseVariantData.javaCompileTask
     }
@@ -60,7 +76,7 @@ class AndroidGradleWrapper {
   }
 
   @NotNull
-  static def Set<File> getJavaSrcDirs(Object androidSourceSet) {
+  static Set<File> getJavaSrcDirs(Object androidSourceSet) {
     return androidSourceSet.getJava().getSrcDirs()
   }
 
@@ -69,17 +85,17 @@ class AndroidGradleWrapper {
   }
 
   @NotNull
-  static def List<String> getProductFlavorsNames(ApkVariant variant) {
+  static List<String> getProductFlavorsNames(ApkVariant variant) {
       return variant.getProductFlavors().iterator().collect { it.getName() }
   }
 
   @NotNull
-  static def List<AndroidSourceSet> getProductFlavorsSourceSets(BaseExtension extension) {
+  static List<AndroidSourceSet> getProductFlavorsSourceSets(BaseExtension extension) {
       return extension.productFlavors.iterator().collect { extension.sourceSets.findByName(it.name) }
   }
 
   @NotNull
-  static def DefaultDomainObjectSet<TestVariant> getTestVariants(BaseExtension extension) {
+  static DefaultDomainObjectSet<TestVariant> getTestVariants(BaseExtension extension) {
     if (extension.getMetaClass().getMetaMethod("getTestVariants")) {
       return extension.getTestVariants()
     }
@@ -87,7 +103,7 @@ class AndroidGradleWrapper {
   }
 
   @NotNull
-  static def List<File> getRClassFolder(BaseVariant variant) {
+  static List<File> getRClassFolder(BaseVariant variant) {
     def list = new ArrayList<File>()
     if (variant.getMetaClass().getMetaMethod("getProcessResources")) {
       list.add(variant.getProcessResources().getSourceOutputDir())
@@ -100,37 +116,48 @@ class AndroidGradleWrapper {
     return list
   }
 
-  static def VariantManager getVariantDataManager(BasePlugin plugin) {
+  static VariantManager getVariantDataManager(BasePlugin plugin) {
     return plugin.getVariantManager()
   }
 
-  static def List<File> getGeneratedSourceDirs(BaseVariantData variantData) {
-    def result = new ArrayList<File>()
+  static List<File> getJavaSources(BaseVariantData variantData) {
+    def result = new LinkedHashSet<File>()
 
+    // user sources
+    List<SourceProvider> providers = variantData.variantConfiguration.getSortedSourceProviders()
+    for (SourceProvider provider : providers) {
+      result.addAll((provider as AndroidSourceSet).getJava().getSrcDirs())
+    }
+
+    // generated sources
     def getJavaSourcesMethod = variantData.getMetaClass().getMetaMethod("getJavaSources")
     if (getJavaSourcesMethod.returnType.metaClass == Object[].metaClass) {
       result.addAll(variantData.getJavaSources().findAll { it instanceof File })
     }
+    else if (getJavaSourcesMethod.returnType.metaClass == List.metaClass) {
+      def fileTrees = variantData.getJavaSources().findAll { it instanceof ConfigurableFileTree }
+      result.addAll(fileTrees.collect { it.getDir() })
+    }
     else {
       if (variantData.scope.getGenerateRClassTask() != null) {
-        result.add(variantData.scope.getRClassSourceOutputDir());
+        result.add(variantData.scope.getRClassSourceOutputDir())
       }
 
       if (variantData.scope.getGenerateBuildConfigTask() != null) {
-        result.add(variantData.scope.getBuildConfigSourceOutputDir());
+        result.add(variantData.scope.getBuildConfigSourceOutputDir())
       }
 
       if (variantData.scope.getAidlCompileTask() != null) {
-        result.add(variantData.scope.getAidlSourceOutputDir());
+        result.add(variantData.scope.getAidlSourceOutputDir())
       }
 
       if (variantData.scope.getGlobalScope().getExtension().getDataBinding().isEnabled()) {
-        result.add(variantData.scope.getClassOutputForDataBinding());
+        result.add(variantData.scope.getClassOutputForDataBinding())
       }
 
       if (!variantData.variantConfiguration.getRenderscriptNdkModeEnabled()
               && variantData.scope.getRenderscriptCompileTask() != null) {
-        result.add(variantData.scope.getRenderscriptSourceOutputDir());
+        result.add(variantData.scope.getRenderscriptSourceOutputDir())
       }
     }
 
@@ -142,6 +169,52 @@ class AndroidGradleWrapper {
       }
     }
 
-    return result
+    return result.toList()
+  }
+
+  @NotNull
+  static Map<File, File> getJarToAarMapping(BaseVariantData variantData) {
+    def jarToLibraryArtifactMap = new HashMap<File, File>()
+
+    def libraries = getVariantLibraryDependencies(variantData)
+    if (libraries == null) return jarToLibraryArtifactMap
+
+    for (lib in libraries) {
+      jarToLibraryArtifactMap[lib.jarFile] = lib.bundle
+
+      // local dependencies are detected as changed by gradle, because they are seem to be
+      // rewritten every time when bundle changes
+      // when local dep will actually change, record for bundle will be removed from registry
+      for (localDep in lib.localJars) {
+        if (localDep instanceof File) {
+          // android tools 2.2
+          jarToLibraryArtifactMap[localDep] = lib.bundle
+        }
+        else if (localDep.metaClass.getMetaMethod("jarFile") != null) {
+          // android tools < 2.2
+          jarToLibraryArtifactMap[localDep.jarFile] = lib.bundle
+        }
+      }
+    }
+
+    return jarToLibraryArtifactMap
+  }
+
+  @Nullable
+  private static Iterable<LibraryDependency> getVariantLibraryDependencies(BaseVariantData variantData) {
+    def variantDependency = variantData.variantDependency
+    if (variantDependency instanceof DependencyContainer) {
+      // android tools < 2.2
+      return variantDependency.getAndroidDependencies()
+    }
+
+    def variantDependencyMeta = variantData.variantDependency.getMetaClass()
+    def getCompileDependencies = variantDependencyMeta.getMetaMethod("getCompileDependencies")
+    if (getCompileDependencies != null && getCompileDependencies.returnType.metaClass == DependencyContainer.metaClass) {
+      // android tools 2.2
+      return variantDependency.getCompileDependencies().getAndroidDependencies()
+    }
+
+    return null
   }
 }

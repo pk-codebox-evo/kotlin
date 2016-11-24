@@ -22,6 +22,7 @@ import org.jetbrains.kotlin.descriptors.impl.AbstractTypeAliasDescriptor
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.BindingTrace
 import org.jetbrains.kotlin.storage.NotNullLazyValue
+import org.jetbrains.kotlin.storage.NullableLazyValue
 import org.jetbrains.kotlin.storage.StorageManager
 import org.jetbrains.kotlin.types.SimpleType
 import org.jetbrains.kotlin.types.TypeSubstitutor
@@ -41,9 +42,13 @@ class LazyTypeAliasDescriptor(
 
     private lateinit var underlyingTypeImpl: NotNullLazyValue<SimpleType>
     private lateinit var expandedTypeImpl: NotNullLazyValue<SimpleType>
+    private lateinit var defaultTypeImpl: NotNullLazyValue<SimpleType>
+    private lateinit var classDescriptorImpl: NullableLazyValue<ClassDescriptor>
 
     override val underlyingType: SimpleType get() = underlyingTypeImpl()
     override val expandedType: SimpleType get() = expandedTypeImpl()
+    override val classDescriptor: ClassDescriptor? get() = classDescriptorImpl()
+    override fun getDefaultType(): SimpleType = defaultTypeImpl()
 
     fun initialize(
             declaredTypeParameters: List<TypeParameterDescriptor>,
@@ -53,10 +58,22 @@ class LazyTypeAliasDescriptor(
         super.initialize(declaredTypeParameters)
         this.underlyingTypeImpl = lazyUnderlyingType
         this.expandedTypeImpl = lazyExpandedType
+        this.defaultTypeImpl = storageManager.createLazyValue { computeDefaultType() }
+        this.classDescriptorImpl = storageManager.createRecursionTolerantNullableLazyValue({ computeClassDescriptor() }, null)
+    }
+
+    private fun computeClassDescriptor(): ClassDescriptor? {
+        if (underlyingType.isError) return null
+        val underlyingTypeDescriptor = underlyingType.constructor.declarationDescriptor
+        return when (underlyingTypeDescriptor) {
+            is ClassDescriptor -> underlyingTypeDescriptor
+            is TypeAliasDescriptor -> underlyingTypeDescriptor.classDescriptor
+            else -> null
+        }
     }
 
     private val lazyTypeConstructorParameters =
-            storageManager.createLazyValue { this.computeConstructorTypeParameters() }
+            storageManager.createRecursionTolerantLazyValue({ this.computeConstructorTypeParameters() }, emptyList())
 
     fun initialize(
             declaredTypeParameters: List<TypeParameterDescriptor>,

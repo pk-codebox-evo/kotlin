@@ -23,15 +23,13 @@ import org.jetbrains.kotlin.builtins.DefaultBuiltIns;
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns;
 import org.jetbrains.kotlin.descriptors.*;
 import org.jetbrains.kotlin.descriptors.annotations.Annotations;
+import org.jetbrains.kotlin.descriptors.impl.ClassConstructorDescriptorImpl;
 import org.jetbrains.kotlin.descriptors.impl.ClassDescriptorImpl;
-import org.jetbrains.kotlin.descriptors.impl.ConstructorDescriptorImpl;
 import org.jetbrains.kotlin.descriptors.impl.PropertyDescriptorImpl;
 import org.jetbrains.kotlin.descriptors.impl.TypeParameterDescriptorImpl;
 import org.jetbrains.kotlin.incremental.components.LookupLocation;
 import org.jetbrains.kotlin.name.FqName;
 import org.jetbrains.kotlin.name.Name;
-import org.jetbrains.kotlin.platform.PlatformToKotlinClassMap;
-import org.jetbrains.kotlin.resolve.ImportPath;
 import org.jetbrains.kotlin.resolve.descriptorUtil.DescriptorUtilsKt;
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter;
 import org.jetbrains.kotlin.resolve.scopes.MemberScope;
@@ -59,27 +57,13 @@ public class ErrorUtils {
 
             @NotNull
             @Override
-            public PlatformToKotlinClassMap getPlatformToKotlinClassMap() {
-                throw new IllegalStateException("Should not be called!");
-            }
-
-            @NotNull
-            @Override
-            public List<ImportPath> getDefaultImports() {
-                return emptyList();
-            }
-
-            @NotNull
-            @Override
             public Annotations getAnnotations() {
                 return Annotations.Companion.getEMPTY();
             }
 
             @NotNull
             @Override
-            public Collection<FqName> getSubPackagesOf(
-                    @NotNull FqName fqName, @NotNull Function1<? super Name, Boolean> nameFilter
-            ) {
+            public Collection<FqName> getSubPackagesOf(@NotNull FqName fqName, @NotNull Function1<? super Name, Boolean> nameFilter) {
                 return emptyList();
             }
 
@@ -93,6 +77,12 @@ public class ErrorUtils {
             @Override
             public PackageViewDescriptor getPackage(@NotNull FqName fqName) {
                 throw new IllegalStateException("Should not be called!");
+            }
+
+            @NotNull
+            @Override
+            public List<ModuleDescriptor> getAllDependentModules() {
+                return emptyList();
             }
 
             @Override
@@ -112,7 +102,7 @@ public class ErrorUtils {
             }
 
             @Override
-            public boolean isFriend(@NotNull ModuleDescriptor other) {
+            public boolean shouldSeeInternalsOf(@NotNull ModuleDescriptor targetModule) {
                 return false;
             }
 
@@ -202,6 +192,18 @@ public class ErrorUtils {
 
         @NotNull
         @Override
+        public Set<Name> getFunctionNames() {
+            return Collections.emptySet();
+        }
+
+        @NotNull
+        @Override
+        public Set<Name> getVariableNames() {
+            return Collections.emptySet();
+        }
+
+        @NotNull
+        @Override
         public Collection<DeclarationDescriptor> getContributedDescriptors(
                 @NotNull DescriptorKindFilter kindFilter, @NotNull Function1<? super Name, Boolean> nameFilter
         ) {
@@ -256,6 +258,18 @@ public class ErrorUtils {
             throw new IllegalStateException();
         }
 
+        @NotNull
+        @Override
+        public Set<Name> getFunctionNames() {
+            throw new IllegalStateException();
+        }
+
+        @NotNull
+        @Override
+        public Set<Name> getVariableNames() {
+            throw new IllegalStateException();
+        }
+
         @Override
         public String toString() {
             return "ThrowingScope{" + debugMessage + '}';
@@ -274,7 +288,8 @@ public class ErrorUtils {
             super(getErrorModule(), Name.special(name == null ? "<ERROR CLASS>" : "<ERROR CLASS: " + name + ">"),
                   Modality.OPEN, ClassKind.CLASS, Collections.<KotlinType>emptyList(), SourceElement.NO_SOURCE);
 
-            ConstructorDescriptorImpl errorConstructor = ConstructorDescriptorImpl.create(this, Annotations.Companion.getEMPTY(), true, SourceElement.NO_SOURCE);
+            ClassConstructorDescriptorImpl
+                    errorConstructor = ClassConstructorDescriptorImpl.create(this, Annotations.Companion.getEMPTY(), true, SourceElement.NO_SOURCE);
             errorConstructor.initialize(Collections.<ValueParameterDescriptor>emptyList(),
                                         Visibilities.INTERNAL);
             MemberScope memberScope = createErrorScope(getName().asString());
@@ -285,7 +300,7 @@ public class ErrorUtils {
                     )
             );
 
-            initialize(memberScope, Collections.<ConstructorDescriptor>singleton(errorConstructor), errorConstructor);
+            initialize(memberScope, Collections.<ClassConstructorDescriptor>singleton(errorConstructor), errorConstructor);
         }
 
         @NotNull
@@ -330,6 +345,9 @@ public class ErrorUtils {
         return new ErrorScope(debugMessage);
     }
 
+    // Do not move it into AbstractTypeConstructor.Companion because of cycle in initialization(see KT-13264)
+    public static final SimpleType ERROR_TYPE_FOR_LOOP_IN_SUPERTYPES = createErrorType("<LOOP IN SUPERTYPES>");
+
     private static final KotlinType ERROR_PROPERTY_TYPE = createErrorType("<ERROR PROPERTY TYPE>");
     private static final PropertyDescriptor ERROR_PROPERTY = createErrorProperty();
 
@@ -341,7 +359,7 @@ public class ErrorUtils {
                 ERROR_CLASS,
                 Annotations.Companion.getEMPTY(),
                 Modality.OPEN,
-                Visibilities.INTERNAL,
+                Visibilities.PUBLIC,
                 true,
                 Name.special("<ERROR PROPERTY>"),
                 CallableMemberDescriptor.Kind.DECLARATION,
@@ -368,7 +386,7 @@ public class ErrorUtils {
                 Collections.<ValueParameterDescriptor>emptyList(), // TODO
                 createErrorType("<ERROR FUNCTION RETURN TYPE>"),
                 Modality.OPEN,
-                Visibilities.INTERNAL
+                Visibilities.PUBLIC
         );
         return function;
     }
@@ -440,12 +458,6 @@ public class ErrorUtils {
             @Override
             public KotlinBuiltIns getBuiltIns() {
                 return DefaultBuiltIns.getInstance();
-            }
-
-            @NotNull
-            @Override
-            public Annotations getAnnotations() {
-                return Annotations.Companion.getEMPTY();
             }
 
             @Override
@@ -557,9 +569,9 @@ public class ErrorUtils {
     }
 
     public static boolean containsUninferredParameter(@Nullable KotlinType type) {
-        return TypeUtils.contains(type, new Function1<KotlinType, Boolean>() {
+        return TypeUtils.contains(type, new Function1<UnwrappedType, Boolean>() {
             @Override
-            public Boolean invoke(KotlinType argumentType) {
+            public Boolean invoke(UnwrappedType argumentType) {
                 return isUninferredParameter(argumentType);
             }
         });
@@ -611,12 +623,6 @@ public class ErrorUtils {
         @Override
         public ClassifierDescriptor getDeclarationDescriptor() {
             return errorTypeConstructor.getDeclarationDescriptor();
-        }
-
-        @NotNull
-        @Override
-        public Annotations getAnnotations() {
-            return errorTypeConstructor.getAnnotations();
         }
 
         @NotNull

@@ -23,6 +23,7 @@ import com.intellij.lang.folding.FoldingDescriptor
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.util.TextRange
+import com.intellij.openapi.util.text.StringUtil
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiWhiteSpace
 import org.jetbrains.kotlin.KtNodeTypes
@@ -61,7 +62,9 @@ class KotlinFoldingBuilder : CustomFoldingBuilder(), DumbAware {
     private fun appendDescriptors(node: ASTNode, document: Document, descriptors: MutableList<FoldingDescriptor>) {
         if (needFolding(node)) {
             val textRange = getRangeToFold(node)
-            if (!isOneLine(textRange, document)) {
+            val relativeRange = textRange.shiftRight(-node.textRange.startOffset)
+            val foldRegionText = node.chars.subSequence(relativeRange.startOffset, relativeRange.endOffset)
+            if (StringUtil.countNewLines(foldRegionText) > 0) {
                 descriptors.add(FoldingDescriptor(node, textRange))
             }
         }
@@ -78,7 +81,8 @@ class KotlinFoldingBuilder : CustomFoldingBuilder(), DumbAware {
         val parentType = node.treeParent?.elementType
         return type == KtNodeTypes.FUNCTION_LITERAL ||
                (type == KtNodeTypes.BLOCK && parentType != KtNodeTypes.FUNCTION_LITERAL) ||
-               type == KtNodeTypes.CLASS_BODY || type == KtTokens.BLOCK_COMMENT || type == KDocTokens.KDOC
+               type == KtNodeTypes.CLASS_BODY || type == KtTokens.BLOCK_COMMENT || type == KDocTokens.KDOC ||
+               type == KtNodeTypes.STRING_TEMPLATE
     }
 
     private fun getRangeToFold(node: ASTNode): TextRange {
@@ -93,14 +97,35 @@ class KotlinFoldingBuilder : CustomFoldingBuilder(), DumbAware {
         return node.textRange
     }
 
-    private fun isOneLine(textRange: TextRange, document: Document) =
-        document.getLineNumber(textRange.startOffset) == document.getLineNumber(textRange.endOffset)
-
     override fun getLanguagePlaceholderText(node: ASTNode, range: TextRange): String = when {
-        node.elementType == KtTokens.BLOCK_COMMENT -> "/.../"
-        node.elementType == KDocTokens.KDOC -> "/**...*/"
+        node.elementType == KtTokens.BLOCK_COMMENT -> "/${getFirstLineOfComment(node)}.../"
+        node.elementType == KDocTokens.KDOC -> "/**${getFirstLineOfComment(node)}...*/"
+        node.elementType == KtNodeTypes.STRING_TEMPLATE -> "\"\"\"${getFirstLineOfString(node)}...\"\"\""
         node.psi is KtImportList -> "..."
         else ->  "{...}"
+    }
+
+    private fun getFirstLineOfString(node: ASTNode): String {
+        val targetStringLine = node.text.split("\n").asSequence().map {
+            it.replace("\"\"\"", "")
+        }.firstOrNull(String::isNotBlank) ?: return ""
+        return " ${targetStringLine.replace("\"\"\"", "").trim()} "
+    }
+
+    private fun getFirstLineOfComment(node: ASTNode): String {
+        val targetCommentLine = node.text.split("\n").firstOrNull {
+            getCommentContents(it).isNotEmpty()
+        } ?: return ""
+        return " ${getCommentContents(targetCommentLine)} "
+    }
+
+    private fun getCommentContents(line: String): String {
+        return line.trim()
+                .replace("/**", "")
+                .replace("/*", "")
+                .replace("*/", "")
+                .replace("*", "")
+                .trim()
     }
 
     override fun isRegionCollapsedByDefault(node: ASTNode): Boolean {

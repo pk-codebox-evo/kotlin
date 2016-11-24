@@ -16,12 +16,10 @@
 
 package kotlin
 
-import java.util.*
-
 /**
  * Returns an empty array of the specified type [T].
  */
-public inline fun <reified T> emptyArray(): Array<T> = arrayOfNulls<T>(0) as Array<T>
+public inline fun <reified T> emptyArray(): Array<T> = js("[]")
 
 @library
 public fun <T> arrayOf(vararg elements: T): Array<T> = noImpl
@@ -70,7 +68,7 @@ public fun <T> lazy(lock: Any?, initializer: () -> T): Lazy<T> = UnsafeLazyImpl(
 
 
 internal fun <T> arrayOfNulls(reference: Array<out T>, size: Int): Array<T> {
-    return arrayOfNulls<Any>(size) as Array<T>
+    return arrayOfNulls<Any>(size).unsafeCast<Array<T>>()
 }
 
 internal fun arrayCopyResize(source: dynamic, newSize: Int, defaultValue: Any?): dynamic {
@@ -92,7 +90,9 @@ internal fun <T> arrayPlusCollection(array: dynamic, collection: Collection<T>):
 }
 
 // no singleton map implementation in js, return map as is
-internal inline fun <K, V> Map<K, V>.toSingletonMap(): Map<K, V> = this
+internal inline fun <K, V> Map<K, V>.toSingletonMapOrSelf(): Map<K, V> = this
+
+internal inline fun <K, V> Map<out K, V>.toSingletonMap(): Map<K, V> = this.toMutableMap()
 
 internal inline fun <T> Array<out T>.copyToArrayOfAny(isVarargs: Boolean): Array<out Any?> =
         if (isVarargs)
@@ -100,3 +100,6 @@ internal inline fun <T> Array<out T>.copyToArrayOfAny(isVarargs: Boolean): Array
             this
         else
             this.copyOf()
+
+// temporary for shared code, until we have an annotation like JvmSerializable
+internal interface Serializable

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
+ * Copyright 2010-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,12 +36,12 @@ import org.jetbrains.kotlin.psi.psiUtil.getQualifiedExpressionForSelectorOrThis
 import org.jetbrains.kotlin.psi.psiUtil.isInsideOf
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.DescriptorUtils
-import org.jetbrains.kotlin.resolve.bindingContextUtil.getDataFlowInfo
+import org.jetbrains.kotlin.resolve.bindingContextUtil.getDataFlowInfoAfter
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.resolve.calls.resolvedCallUtil.hasBothReceivers
 import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowValueFactory
 import org.jetbrains.kotlin.resolve.calls.tasks.isSynthesizedInvoke
-import org.jetbrains.kotlin.resolve.createFunctionType
+import org.jetbrains.kotlin.resolve.calls.util.createFunctionType
 import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 import org.jetbrains.kotlin.resolve.descriptorUtil.getImportableDescriptor
@@ -53,6 +53,7 @@ import org.jetbrains.kotlin.resolve.scopes.utils.findFunction
 import org.jetbrains.kotlin.types.CommonSupertypes
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.expressions.OperatorConventions
+import java.lang.AssertionError
 import java.util.*
 
 internal class ParametersInfo {
@@ -303,12 +304,13 @@ private fun suggestParameterType(
                            Annotations.EMPTY,
                            originalDescriptor.extensionReceiverParameter?.type,
                            originalDescriptor.valueParameters.map { it.type },
+                           originalDescriptor.valueParameters.map { it.name },
                            originalDescriptor.returnType ?: builtIns.defaultReturnType
                    )
                }
 
                parameterExpression != null ->
-                   (if (useSmartCastsIfPossible) bindingContext[BindingContext.SMARTCAST, parameterExpression] else null)
+                   (if (useSmartCastsIfPossible) bindingContext[BindingContext.SMARTCAST, parameterExpression]?.defaultType else null)
                    ?: bindingContext.getType(parameterExpression)
                    ?: (parameterExpression as? KtReferenceExpression)?.let {
                        (bindingContext[BindingContext.REFERENCE_TARGET, it] as? CallableDescriptor)?.returnType
@@ -317,7 +319,7 @@ private fun suggestParameterType(
 
                receiverToExtract is ImplicitReceiver -> {
                    val typeByDataFlowInfo = if (useSmartCastsIfPossible) {
-                       val dataFlowInfo = bindingContext.getDataFlowInfo(resolvedCall!!.call.callElement)
+                       val dataFlowInfo = bindingContext.getDataFlowInfoAfter(resolvedCall!!.call.callElement)
                        val possibleTypes = dataFlowInfo.getCollectedTypes(DataFlowValueFactory.createDataFlowValueForStableReceiver(receiverToExtract))
                        if (possibleTypes.isNotEmpty()) CommonSupertypes.commonSupertype(possibleTypes) else null
                    } else null

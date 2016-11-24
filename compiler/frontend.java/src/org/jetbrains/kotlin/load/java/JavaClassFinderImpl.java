@@ -24,7 +24,7 @@ import com.intellij.psi.search.DelegatingGlobalSearchScope;
 import com.intellij.psi.search.GlobalSearchScope;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.kotlin.asJava.KtJavaMirrorMarker;
+import org.jetbrains.kotlin.asJava.KtLightClassMarker;
 import org.jetbrains.kotlin.idea.KotlinFileType;
 import org.jetbrains.kotlin.load.java.structure.JavaClass;
 import org.jetbrains.kotlin.load.java.structure.JavaPackage;
@@ -32,8 +32,10 @@ import org.jetbrains.kotlin.load.java.structure.impl.JavaClassImpl;
 import org.jetbrains.kotlin.load.java.structure.impl.JavaPackageImpl;
 import org.jetbrains.kotlin.name.ClassId;
 import org.jetbrains.kotlin.name.FqName;
-import org.jetbrains.kotlin.resolve.jvm.JavaClassFinderPostConstruct;
+import org.jetbrains.kotlin.resolve.BindingTrace;
+import org.jetbrains.kotlin.resolve.CodeAnalyzerInitializer;
 import org.jetbrains.kotlin.resolve.jvm.KotlinJavaPsiFacade;
+import org.jetbrains.kotlin.resolve.lazy.KotlinCodeAnalyzer;
 
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
@@ -42,7 +44,6 @@ import java.util.Set;
 public class JavaClassFinderImpl implements JavaClassFinder {
     private Project project;
     private GlobalSearchScope baseScope;
-
     private GlobalSearchScope javaSearchScope;
     private KotlinJavaPsiFacade javaFacade;
 
@@ -54,11 +55,6 @@ public class JavaClassFinderImpl implements JavaClassFinder {
     @Inject
     public void setScope(@NotNull GlobalSearchScope scope) {
         this.baseScope = scope;
-    }
-
-    @Inject
-    public void setComponentPostConstruct(@NotNull JavaClassFinderPostConstruct finderPostConstruct) {
-        // Only activate post create
     }
 
     public class FilterOutKotlinSourceFilesScope extends DelegatingGlobalSearchScope {
@@ -90,9 +86,10 @@ public class JavaClassFinderImpl implements JavaClassFinder {
     }
 
     @PostConstruct
-    public void initialize() {
+    public void initialize(@NotNull BindingTrace trace, @NotNull KotlinCodeAnalyzer codeAnalyzer) {
         javaSearchScope = new FilterOutKotlinSourceFilesScope(baseScope);
         javaFacade = KotlinJavaPsiFacade.getInstance(project);
+        CodeAnalyzerInitializer.Companion.getInstance(project).initialize(trace, codeAnalyzer.getModuleDescriptor(), codeAnalyzer);
     }
 
     @Nullable
@@ -107,7 +104,7 @@ public class JavaClassFinderImpl implements JavaClassFinder {
             throw new IllegalStateException("Requested " + fqName + ", got " + javaClass.getFqName());
         }
 
-        if (psiClass instanceof KtJavaMirrorMarker) {
+        if (psiClass instanceof KtLightClassMarker) {
             throw new IllegalStateException("Kotlin light classes should not be found by JavaPsiFacade, resolving: " + fqName);
         }
 

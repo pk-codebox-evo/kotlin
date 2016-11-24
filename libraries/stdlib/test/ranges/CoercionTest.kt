@@ -1,7 +1,6 @@
 package test.ranges
 
 import org.junit.Test
-import org.junit.Test as test
 import kotlin.test.*
 
 class CoercionTest {
@@ -65,7 +64,6 @@ class CoercionTest {
     }
 
     @Test
-    @Suppress("DEPRECATION_ERROR")
     fun coercionsDouble() {
         expect(5.0) { 5.0.coerceAtLeast(1.0) }
         expect(5.0) { 1.0.coerceAtLeast(5.0) }

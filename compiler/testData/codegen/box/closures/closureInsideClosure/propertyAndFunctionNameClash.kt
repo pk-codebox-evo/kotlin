@@ -1,6 +1,8 @@
-package d
+// TODO: muted automatically, investigate should it be ran for JS or not
+// IGNORE_BACKEND: JS
+// on JS item local variable clashes with ListTag.item() extension function
 
-import java.util.ArrayList
+package d
 
 fun box(): String {
     ListTag().test(listOf("a", "b"))

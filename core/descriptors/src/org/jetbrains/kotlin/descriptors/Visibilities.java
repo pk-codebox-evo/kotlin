@@ -32,6 +32,7 @@ import org.jetbrains.kotlin.utils.CollectionsKt;
 import java.util.*;
 
 public class Visibilities {
+    @NotNull
     public static final Visibility PRIVATE = new Visibility("private", false) {
         @Override
         public boolean mustCheckInImports() {
@@ -53,7 +54,7 @@ public class Visibilities {
             }
 
             if (what instanceof ConstructorDescriptor) {
-                ClassDescriptor classDescriptor = ((ConstructorDescriptor) what).getContainingDeclaration();
+                ClassifierDescriptorWithTypeParameters classDescriptor = ((ConstructorDescriptor) what).getContainingDeclaration();
                 if (DescriptorUtils.isSealedClass(classDescriptor)
                     && DescriptorUtils.isTopLevelDeclaration(classDescriptor)
                     && from instanceof ConstructorDescriptor
@@ -104,6 +105,7 @@ public class Visibilities {
      *      }
      *  }
      */
+    @NotNull
     public static final Visibility PRIVATE_TO_THIS = new Visibility("private_to_this", false) {
         @Override
         public boolean isVisible(@Nullable ReceiverValue thisObject, @NotNull DeclarationDescriptorWithVisibility what, @NotNull DeclarationDescriptor from) {
@@ -133,6 +135,7 @@ public class Visibilities {
         }
     };
 
+    @NotNull
     public static final Visibility PROTECTED = new Visibility("protected", true) {
         @Override
         public boolean mustCheckInImports() {
@@ -198,6 +201,7 @@ public class Visibilities {
         }
     };
 
+    @NotNull
     public static final Visibility INTERNAL = new Visibility("internal", false) {
         @Override
         public boolean mustCheckInImports() {
@@ -207,12 +211,13 @@ public class Visibilities {
         @Override
         public boolean isVisible(@Nullable ReceiverValue receiver, @NotNull DeclarationDescriptorWithVisibility what, @NotNull DeclarationDescriptor from) {
             DeclarationDescriptor fromOrModule = from instanceof PackageViewDescriptor ? ((PackageViewDescriptor) from).getModule() : from;
-            if (!DescriptorUtils.getContainingModule(what).isFriend(DescriptorUtils.getContainingModule(fromOrModule))) return false;
+            if (!DescriptorUtils.getContainingModule(fromOrModule).shouldSeeInternalsOf(DescriptorUtils.getContainingModule(what))) return false;
 
             return MODULE_VISIBILITY_HELPER.isInFriendModule(what, from);
         }
     };
 
+    @NotNull
     public static final Visibility PUBLIC = new Visibility("public", true) {
         @Override
         public boolean mustCheckInImports() {
@@ -225,6 +230,7 @@ public class Visibilities {
         }
     };
 
+    @NotNull
     public static final Visibility LOCAL = new Visibility("local", false) {
         @Override
         public boolean mustCheckInImports() {
@@ -237,6 +243,7 @@ public class Visibilities {
         }
     };
 
+    @NotNull
     public static final Visibility INHERITED = new Visibility("inherited", false) {
         @Override
         public boolean mustCheckInImports() {
@@ -250,6 +257,7 @@ public class Visibilities {
     };
 
     /* Visibility for fake override invisible members (they are created for better error reporting) */
+    @NotNull
     public static final Visibility INVISIBLE_FAKE = new Visibility("invisible_fake", false) {
         @Override
         public boolean mustCheckInImports() {
@@ -264,6 +272,7 @@ public class Visibilities {
 
     // Currently used as default visibility of FunctionDescriptor
     // It's needed to prevent NPE when requesting non-nullable visibility of descriptor before `initialize` has been called
+    @NotNull
     public static final Visibility UNKNOWN = new Visibility("unknown", false) {
         @Override
         public boolean mustCheckInImports() {
@@ -318,10 +327,9 @@ public class Visibilities {
         }
 
         if (what instanceof TypeAliasConstructorDescriptor) {
-            DeclarationDescriptorWithVisibility invisibleMember =
-                    findInvisibleMember(receiver, ((TypeAliasConstructorDescriptor) what).getTypeAliasDescriptor(), from);
-
-            if (invisibleMember != null) return invisibleMember;
+            DeclarationDescriptorWithVisibility invisibleUnderlying =
+                    findInvisibleMember(receiver, ((TypeAliasConstructorDescriptor) what).getUnderlyingConstructorDescriptor(), from);
+            if (invisibleUnderlying != null) return invisibleUnderlying;
         }
 
         return null;

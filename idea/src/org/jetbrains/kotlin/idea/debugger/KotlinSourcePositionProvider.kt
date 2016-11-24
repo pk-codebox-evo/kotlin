@@ -70,7 +70,7 @@ class KotlinSourcePositionProvider: SourcePositionProvider() {
         val expression = codeFragment.getContentElement()
         if (expression is KtSimpleNameExpression) {
             val bindingContext = expression.analyze(BodyResolveMode.PARTIAL)
-            val declarationDescriptor = BindingContextUtils.extractVariableDescriptorIfAny(bindingContext, expression, false)
+            val declarationDescriptor = BindingContextUtils.extractVariableDescriptorFromReference(bindingContext, expression)
             val sourceElement = declarationDescriptor?.source
             if (sourceElement is KotlinSourceElement) {
                 val element = sourceElement.getPsi() ?: return null
@@ -103,7 +103,7 @@ class KotlinSourcePositionProvider: SourcePositionProvider() {
 
     private fun findClassByType(project: Project, type: ReferenceType, context: DebuggerContextImpl): PsiElement? {
         val session = context.debuggerSession
-        val scope = if (session != null) session.searchScope else GlobalSearchScope.allScope(project)
+        val scope = session?.searchScope ?: GlobalSearchScope.allScope(project)
         val className = JvmClassName.byInternalName(type.name()).fqNameForClassNameWithoutDollars.asString()
 
         val myClass = JavaPsiFacade.getInstance(project).findClass(className, scope)

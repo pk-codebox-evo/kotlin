@@ -32,7 +32,9 @@ import org.jetbrains.kotlin.resolve.calls.context.ResolutionContext
 import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowInfo
 import org.jetbrains.kotlin.resolve.scopes.LexicalScope
 import org.jetbrains.kotlin.resolve.scopes.utils.takeSnapshot
+import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.expressions.typeInfoFactory.noTypeInfo
+import org.jetbrains.kotlin.types.typeUtil.makeNotNullable
 import org.jetbrains.kotlin.util.slicedMap.ReadOnlySlice
 
 operator fun <K, V: Any> BindingContext.get(slice: ReadOnlySlice<K, V>, key: K): V? = get(slice, key)
@@ -78,7 +80,7 @@ fun BindingTrace.recordScope(scope: LexicalScope, element: KtElement?) {
     }
 }
 
-fun BindingContext.getDataFlowInfo(position: PsiElement): DataFlowInfo {
+fun BindingContext.getDataFlowInfoAfter(position: PsiElement): DataFlowInfo {
     for (element in position.parentsWithSelf) {
         (element as? KtExpression)?.let {
             val parent = it.parent
@@ -90,9 +92,33 @@ fun BindingContext.getDataFlowInfo(position: PsiElement): DataFlowInfo {
     return DataFlowInfo.EMPTY
 }
 
+fun BindingContext.getDataFlowInfoBefore(position: PsiElement): DataFlowInfo {
+    for (element in position.parentsWithSelf) {
+        (element as? KtExpression)
+                ?.let { this[BindingContext.DATA_FLOW_INFO_BEFORE, it] }
+                ?.let { return it }
+    }
+    return DataFlowInfo.EMPTY
+}
+
 fun KtExpression.isUnreachableCode(context: BindingContext): Boolean = context[BindingContext.UNREACHABLE_CODE, this]!!
 
 fun KtExpression.getReferenceTargets(context: BindingContext): Collection<DeclarationDescriptor> {
     val targetDescriptor = if (this is KtReferenceExpression) context[BindingContext.REFERENCE_TARGET, this] else null
     return targetDescriptor?.let { listOf(it) } ?: context[BindingContext.AMBIGUOUS_REFERENCE_TARGET, this].orEmpty()
+}
+
+fun KtTypeReference.getAbbreviatedTypeOrType(context: BindingContext) =
+        context[BindingContext.ABBREVIATED_TYPE, this] ?: context[BindingContext.TYPE, this]
+
+fun KtTypeElement.getAbbreviatedTypeOrType(context: BindingContext): KotlinType? {
+    val parent = parent
+    return when (parent) {
+        is KtTypeReference -> parent.getAbbreviatedTypeOrType(context)
+        is KtNullableType -> {
+            val outerType = parent.getAbbreviatedTypeOrType(context)
+            if (this is KtNullableType) outerType else outerType?.makeNotNullable()
+        }
+        else -> null
+    }
 }

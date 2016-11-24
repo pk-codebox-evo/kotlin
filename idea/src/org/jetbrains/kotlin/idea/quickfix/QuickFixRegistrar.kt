@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
+ * Copyright 2010-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,8 @@ import org.jetbrains.kotlin.idea.quickfix.createFromUsage.createClass.CreateClas
 import org.jetbrains.kotlin.idea.quickfix.createFromUsage.createClass.CreateClassFromConstructorCallActionFactory
 import org.jetbrains.kotlin.idea.quickfix.createFromUsage.createClass.CreateClassFromReferenceExpressionActionFactory
 import org.jetbrains.kotlin.idea.quickfix.createFromUsage.createClass.CreateClassFromTypeReferenceActionFactory
+import org.jetbrains.kotlin.idea.quickfix.createFromUsage.createTypeAlias.CreateTypeAliasFromTypeReferenceActionFactory
+import org.jetbrains.kotlin.idea.quickfix.createFromUsage.createTypeParameter.CreateTypeParameterByRefActionFactory
 import org.jetbrains.kotlin.idea.quickfix.createFromUsage.createVariable.CreateLocalVariableActionFactory
 import org.jetbrains.kotlin.idea.quickfix.createFromUsage.createVariable.CreateParameterByNamedArgumentActionFactory
 import org.jetbrains.kotlin.idea.quickfix.createFromUsage.createVariable.CreateParameterByRefActionFactory
@@ -40,8 +42,7 @@ import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.ErrorsJvm
-import org.jetbrains.kotlin.resolve.jvm.diagnostics.ErrorsJvm.NO_REFLECTION_IN_CLASS_PATH
-import org.jetbrains.kotlin.resolve.jvm.diagnostics.ErrorsJvm.POSITIONED_VALUE_ARGUMENT_FOR_JAVA_ANNOTATION
+import org.jetbrains.kotlin.resolve.jvm.diagnostics.ErrorsJvm.*
 
 class QuickFixRegistrar : QuickFixContributor {
     override fun registerQuickFixes(quickFixes: QuickFixes) {
@@ -87,9 +88,9 @@ class QuickFixRegistrar : QuickFixContributor {
 
         NON_MEMBER_FUNCTION_NO_BODY.registerFactory(AddFunctionBodyFix)
 
-        NOTHING_TO_OVERRIDE.registerFactory( RemoveModifierFix.createRemoveModifierFromListOwnerFactory(OVERRIDE_KEYWORD),
-                                        ChangeMemberFunctionSignatureFix,
-                                        AddFunctionToSupertypeFix)
+        NOTHING_TO_OVERRIDE.registerFactory(RemoveModifierFix.createRemoveModifierFromListOwnerFactory(OVERRIDE_KEYWORD),
+                                            ChangeMemberFunctionSignatureFix,
+                                            AddFunctionToSupertypeFix)
         VIRTUAL_MEMBER_HIDDEN.registerFactory(AddModifierFix.createFactory(OVERRIDE_KEYWORD))
 
         USELESS_CAST.registerFactory(RemoveUselessCastFix)
@@ -98,10 +99,12 @@ class QuickFixRegistrar : QuickFixContributor {
         WRONG_GETTER_RETURN_TYPE.registerFactory(ChangeAccessorTypeFix)
 
         USELESS_ELVIS.registerFactory(RemoveUselessElvisFix)
+        USELESS_ELVIS_RIGHT_IS_NULL.registerFactory(RemoveUselessElvisFix)
 
         val removeRedundantModifierFactory = RemoveModifierFix.createRemoveModifierFactory(true)
         REDUNDANT_MODIFIER.registerFactory(removeRedundantModifierFactory)
-        REDUNDANT_OPEN_IN_INTERFACE.registerFactory(removeRedundantModifierFactory)
+        REDUNDANT_OPEN_IN_INTERFACE.registerFactory(RemoveModifierFix.createRemoveModifierFromListOwnerFactory(OPEN_KEYWORD))
+        UNNECESSARY_LATEINIT.registerFactory(RemoveModifierFix.createRemoveModifierFromListOwnerFactory(LATEINIT_KEYWORD))
 
         REDUNDANT_PROJECTION.registerFactory(RemoveModifierFix.createRemoveProjectionFactory(true))
         INCOMPATIBLE_MODIFIERS.registerFactory(RemoveModifierFix.createRemoveModifierFactory(false))
@@ -127,18 +130,26 @@ class QuickFixRegistrar : QuickFixContributor {
         NON_PRIVATE_CONSTRUCTOR_IN_ENUM.registerFactory(removeModifierFactory)
         NON_PRIVATE_CONSTRUCTOR_IN_SEALED.registerFactory(removeModifierFactory)
 
-        UNRESOLVED_REFERENCE.registerFactory(AutoImportFix)
+        UNRESOLVED_REFERENCE.registerFactory(ImportMemberFix)
+        UNRESOLVED_REFERENCE.registerFactory(ImportFix)
+
+        TOO_MANY_ARGUMENTS.registerFactory(ImportForMismatchingArgumentsFix)
+        NO_VALUE_FOR_PARAMETER.registerFactory(ImportForMismatchingArgumentsFix)
+        TYPE_MISMATCH.registerFactory(ImportForMismatchingArgumentsFix)
+        CONSTANT_EXPECTED_TYPE_MISMATCH.registerFactory(ImportForMismatchingArgumentsFix)
+        NAMED_PARAMETER_NOT_FOUND.registerFactory(ImportForMismatchingArgumentsFix)
+
         UNRESOLVED_REFERENCE.registerFactory(AddTestLibQuickFix)
 
-        UNRESOLVED_REFERENCE_WRONG_RECEIVER.registerFactory(AutoImportFix)
+        UNRESOLVED_REFERENCE_WRONG_RECEIVER.registerFactory(ImportFix)
 
-        FUNCTION_EXPECTED.registerFactory(MissingInvokeAutoImportFix)
+        FUNCTION_EXPECTED.registerFactory(InvokeImportFix)
 
-        DELEGATE_SPECIAL_FUNCTION_MISSING.registerFactory(MissingDelegateAccessorsAutoImportFix)
-        COMPONENT_FUNCTION_MISSING.registerFactory(MissingComponentsAutoImportFix)
+        DELEGATE_SPECIAL_FUNCTION_MISSING.registerFactory(DelegateAccessorsImportFix)
+        COMPONENT_FUNCTION_MISSING.registerFactory(ComponentsImportFix)
 
-        NO_GET_METHOD.registerFactory(MissingArrayAccessorAutoImportFix)
-        NO_SET_METHOD.registerFactory(MissingArrayAccessorAutoImportFix)
+        NO_GET_METHOD.registerFactory(ArrayAccessorImportFix)
+        NO_SET_METHOD.registerFactory(ArrayAccessorImportFix)
 
         CONFLICTING_IMPORT.registerFactory(RemovePsiElementSimpleFix.RemoveImportFactory)
 
@@ -171,19 +182,22 @@ class QuickFixRegistrar : QuickFixContributor {
 
         VAL_WITH_SETTER.registerFactory(ChangeVariableMutabilityFix.VAL_WITH_SETTER_FACTORY)
         VAL_REASSIGNMENT.registerFactory(ChangeVariableMutabilityFix.VAL_REASSIGNMENT_FACTORY)
+        VAL_REASSIGNMENT.registerFactory(LiftAssignmentOutOfTryFix)
         CAPTURED_VAL_INITIALIZATION.registerFactory(ChangeVariableMutabilityFix.CAPTURED_VAL_INITIALIZATION_FACTORY)
         VAR_OVERRIDDEN_BY_VAL.registerFactory(ChangeVariableMutabilityFix.VAR_OVERRIDDEN_BY_VAL_FACTORY)
         VAR_ANNOTATION_PARAMETER.registerFactory(ChangeVariableMutabilityFix.VAR_ANNOTATION_PARAMETER_FACTORY)
 
         VAL_OR_VAR_ON_FUN_PARAMETER.registerFactory(RemoveValVarFromParameterFix)
         VAL_OR_VAR_ON_LOOP_PARAMETER.registerFactory(RemoveValVarFromParameterFix)
-        VAL_OR_VAR_ON_LOOP_MULTI_PARAMETER.registerFactory(RemoveValVarFromParameterFix)
         VAL_OR_VAR_ON_CATCH_PARAMETER.registerFactory(RemoveValVarFromParameterFix)
         VAL_OR_VAR_ON_SECONDARY_CONSTRUCTOR_PARAMETER.registerFactory(RemoveValVarFromParameterFix)
 
         VIRTUAL_MEMBER_HIDDEN.registerFactory(AddOverrideToEqualsHashCodeToStringActionFactory)
 
         UNUSED_VARIABLE.registerFactory(RemovePsiElementSimpleFix.RemoveVariableFactory)
+        UNUSED_VARIABLE.registerFactory(RenameToUnderscoreFix.Factory)
+
+        UNUSED_DESTRUCTURED_PARAMETER_ENTRY.registerFactory(RenameToUnderscoreFix.Factory)
 
         SENSELESS_COMPARISON.registerFactory(SimplifyComparisonFix)
 
@@ -202,8 +216,11 @@ class QuickFixRegistrar : QuickFixContributor {
         TYPE_MISMATCH.registerFactory(WrapWithSafeLetCallFix.TypeMismatchFactory)
 
         UNSAFE_CALL.registerFactory(AddExclExclCallFix)
+        UNSAFE_INFIX_CALL.registerFactory(AddExclExclCallFix)
         UNNECESSARY_NOT_NULL_ASSERTION.registerFactory(RemoveExclExclCallFix)
-        UNSAFE_INFIX_CALL.registerFactory(ReplaceInfixCallFix)
+        UNSAFE_INFIX_CALL.registerFactory(ReplaceInfixOrOperatorCallFix)
+        UNSAFE_CALL.registerFactory(ReplaceInfixOrOperatorCallFix) // [] only
+        UNSAFE_IMPLICIT_INVOKE_CALL.registerFactory(ReplaceInfixOrOperatorCallFix)
 
         AMBIGUOUS_ANONYMOUS_TYPE_INFERRED.registerActions(SpecifyTypeExplicitlyFix())
         PROPERTY_WITH_NO_TYPE_NO_INITIALIZER.registerActions(SpecifyTypeExplicitlyFix())
@@ -258,6 +275,8 @@ class QuickFixRegistrar : QuickFixContributor {
         TOO_MANY_ARGUMENTS.registerFactory(ChangeFunctionSignatureFix)
         NO_VALUE_FOR_PARAMETER.registerFactory(ChangeFunctionSignatureFix)
         UNUSED_PARAMETER.registerFactory(RemoveUnusedFunctionParameterFix)
+        UNUSED_PARAMETER.registerFactory(RenameToUnderscoreFix.Factory)
+        UNUSED_PARAMETER.registerFactory(RemoveSingleLambdaParameterFix)
         EXPECTED_PARAMETERS_NUMBER_MISMATCH.registerFactory(ChangeFunctionLiteralSignatureFix)
 
         EXPECTED_PARAMETER_TYPE_MISMATCH.registerFactory(ChangeTypeFix)
@@ -276,6 +295,7 @@ class QuickFixRegistrar : QuickFixContributor {
         NONE_APPLICABLE.registerFactory(CreateBinaryOperationActionFactory)
         NO_VALUE_FOR_PARAMETER.registerFactory(CreateBinaryOperationActionFactory)
         TOO_MANY_ARGUMENTS.registerFactory(CreateBinaryOperationActionFactory)
+        TYPE_MISMATCH_ERRORS.forEach { it.registerFactory(CreateBinaryOperationActionFactory) }
 
         UNRESOLVED_REFERENCE_WRONG_RECEIVER.registerFactory(*CreateCallableFromCallActionFactory.INSTANCES)
         UNRESOLVED_REFERENCE.registerFactory(*CreateCallableFromCallActionFactory.INSTANCES)
@@ -320,7 +340,9 @@ class QuickFixRegistrar : QuickFixContributor {
         MANY_CLASSES_IN_SUPERTYPE_LIST.registerFactory(RemoveSupertypeFix)
 
         NO_GET_METHOD.registerFactory(CreateGetFunctionActionFactory)
+        TYPE_MISMATCH_ERRORS.forEach { it.registerFactory(CreateGetFunctionActionFactory) }
         NO_SET_METHOD.registerFactory(CreateSetFunctionActionFactory)
+        TYPE_MISMATCH_ERRORS.forEach { it.registerFactory(CreateSetFunctionActionFactory) }
         HAS_NEXT_MISSING.registerFactory(CreateHasNextFunctionActionFactory)
         HAS_NEXT_FUNCTION_NONE_APPLICABLE.registerFactory(CreateHasNextFunctionActionFactory)
         NEXT_MISSING.registerFactory(CreateNextFunctionActionFactory)
@@ -333,9 +355,12 @@ class QuickFixRegistrar : QuickFixContributor {
         DELEGATE_SPECIAL_FUNCTION_NONE_APPLICABLE.registerFactory(CreatePropertyDelegateAccessorsActionFactory)
 
         UNRESOLVED_REFERENCE.registerFactory(CreateClassFromTypeReferenceActionFactory,
-                                        CreateClassFromReferenceExpressionActionFactory,
-                                        CreateClassFromCallWithConstructorCalleeActionFactory,
-                                             PlatformUnresolvedProvider)
+                                             CreateClassFromReferenceExpressionActionFactory,
+                                             CreateClassFromCallWithConstructorCalleeActionFactory)
+
+        UNRESOLVED_REFERENCE.registerFactory(CreateTypeAliasFromTypeReferenceActionFactory)
+
+        UNRESOLVED_REFERENCE.registerFactory(PlatformUnresolvedProvider)
 
         PRIMARY_CONSTRUCTOR_DELEGATION_CALL_EXPECTED.registerFactory(InsertDelegationCallQuickfix.InsertThisDelegationCallFactory)
 
@@ -343,12 +368,12 @@ class QuickFixRegistrar : QuickFixContributor {
         EXPLICIT_DELEGATION_CALL_REQUIRED.registerFactory(InsertDelegationCallQuickfix.InsertSuperDelegationCallFactory)
 
         MISSING_CONSTRUCTOR_KEYWORD.registerFactory(MissingConstructorKeywordFix,
-                                               MissingConstructorKeywordFix.createWholeProjectFixFactory())
+                                                    MissingConstructorKeywordFix.createWholeProjectFixFactory())
 
         ANONYMOUS_FUNCTION_WITH_NAME.registerFactory(RemoveNameFromFunctionExpressionFix)
 
         UNRESOLVED_REFERENCE.registerFactory(ReplaceObsoleteLabelSyntaxFix,
-                                        ReplaceObsoleteLabelSyntaxFix.createWholeProjectFixFactory())
+                                             ReplaceObsoleteLabelSyntaxFix.createWholeProjectFixFactory())
 
         DEPRECATION.registerFactory(DeprecatedSymbolUsageFix, DeprecatedSymbolUsageInWholeProjectFix)
         DEPRECATION_ERROR.registerFactory(DeprecatedSymbolUsageFix, DeprecatedSymbolUsageInWholeProjectFix)
@@ -367,7 +392,7 @@ class QuickFixRegistrar : QuickFixContributor {
         NON_CONST_VAL_USED_IN_CONSTANT_EXPRESSION.registerFactory(ConstFixFactory)
 
         OPERATOR_MODIFIER_REQUIRED.registerFactory(AddModifierFixFactory(KtTokens.OPERATOR_KEYWORD))
-        OPERATOR_MODIFIER_REQUIRED.registerFactory(AutoImportForMissingOperatorFactory)
+        OPERATOR_MODIFIER_REQUIRED.registerFactory(ImportForMissingOperatorFactory)
 
         INFIX_MODIFIER_REQUIRED.registerFactory(AddModifierFixFactory(KtTokens.INFIX_KEYWORD))
         INFIX_MODIFIER_REQUIRED.registerFactory(InfixCallFix)
@@ -399,5 +424,31 @@ class QuickFixRegistrar : QuickFixContributor {
         UNUSED_LAMBDA_EXPRESSION.registerFactory(AddRunToLambdaFix)
 
         WRONG_LONG_SUFFIX.registerFactory(WrongLongSuffixFix)
+
+        REIFIED_TYPE_PARAMETER_NO_INLINE.registerFactory(AddInlineToFunctionWithReifiedFix)
+
+        VALUE_PARAMETER_WITH_NO_TYPE_ANNOTATION.registerFactory(AddTypeAnnotationToValueParameterFix)
+
+        UNRESOLVED_REFERENCE.registerFactory(CreateTypeParameterByRefActionFactory)
+
+        FINAL_UPPER_BOUND.registerFactory(InlineTypeParameterFix)
+        FINAL_UPPER_BOUND.registerFactory(RemoveFinalUpperBoundFix)
+
+        TYPE_PARAMETER_AS_REIFIED.registerFactory(AddReifiedToTypeParameterOfFunctionFix)
+
+        TOO_MANY_CHARACTERS_IN_CHARACTER_LITERAL.registerFactory(TooLongCharLiteralToStringFix)
+
+        UNUSED_VALUE.registerFactory(RemoveUnusedValueFix)
+
+        ANNOTATIONS_ON_BLOCK_LEVEL_EXPRESSION_ON_THE_SAME_LINE.registerFactory(AddNewLineAfterAnnotationsFix)
+
+        INAPPLICABLE_LATEINIT_MODIFIER.registerFactory(ChangeVariableMutabilityFix.LATEINIT_VAL_FACTORY)
+        INAPPLICABLE_LATEINIT_MODIFIER.registerFactory(RemoveNullableFix.LATEINIT_FACTORY)
+
+        OVERLOADS_ABSTRACT.registerFactory(RemoveAnnotationFix.JvmOverloads)
+        OVERLOADS_INTERFACE.registerFactory(RemoveAnnotationFix.JvmOverloads)
+        OVERLOADS_PRIVATE.registerFactory(RemoveAnnotationFix.JvmOverloads)
+        OVERLOADS_LOCAL.registerFactory(RemoveAnnotationFix.JvmOverloads)
+        OVERLOADS_WITHOUT_DEFAULT_ARGUMENTS.registerFactory(RemoveAnnotationFix.JvmOverloads)
     }
 }

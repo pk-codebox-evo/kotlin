@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
+ * Copyright 2010-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,50 +16,29 @@
 
 package org.jetbrains.kotlin.js.test.semantics
 
-import org.jetbrains.kotlin.js.test.*
+import org.jetbrains.kotlin.js.test.BasicBoxTest
 
-abstract class AbstractBlackBoxTest(d: String) : SingleFileTranslationTest(d) {
-    override fun doTest(filename: String) = checkBlackBoxIsOkByPath(filename)
+abstract class BorrowedInlineTest(relativePath: String) : BasicBoxTest(
+        "compiler/testData/codegen/boxInline/$relativePath",
+        "${BasicBoxTest.TEST_DATA_DIR_PATH}/out/codegen/boxInline/$relativePath/"
+) {
+    init {
+        additionalCommonFileDirectories += BasicBoxTest.TEST_DATA_DIR_PATH + relativePath + "/_commonFiles/"
+    }
 }
 
-abstract class AbstractBridgeTest : AbstractBlackBoxTest("bridges/")
+abstract class AbstractNonLocalReturnsTest : BorrowedInlineTest("nonLocalReturns/")
 
-abstract class AbstractCallableReferenceTest(main: String) : SingleFileTranslationTest("callableReference/" + main)
+abstract class AbstractPropertyAccessorsInlineTests : BorrowedInlineTest("property/")
 
-abstract class AbstractCompanionObjectTest : SingleFileTranslationTest("objectIntrinsics/")
+abstract class AbstractNoInlineTests : BorrowedInlineTest("noInline/")
 
-abstract class AbstractDynamicTest : SingleFileTranslationTest("dynamic/")
+abstract class AbstractBoxJsTest() : BasicBoxTest(
+        BasicBoxTest.TEST_DATA_DIR_PATH + "box/",
+        BasicBoxTest.TEST_DATA_DIR_PATH + "out/box/"
+)
 
-abstract class AbstractFunctionExpressionTest : AbstractBlackBoxTest("functionExpression/")
-
-abstract class AbstractInlineEvaluationOrderTest : AbstractSingleFileTranslationWithDirectivesTest("inlineEvaluationOrder/")
-
-abstract class AbstractInlineJsStdlibTest : AbstractSingleFileTranslationWithDirectivesTest("inlineStdlib/")
-
-abstract class AbstractInlineJsTest : AbstractSingleFileTranslationWithDirectivesTest("inline/")
-
-abstract class AbstractJsCodeTest : AbstractSingleFileTranslationWithDirectivesTest("jsCode/")
-
-abstract class AbstractLabelTest : AbstractSingleFileTranslationWithDirectivesTest("labels/")
-
-abstract class AbstractMultiModuleTest : MultipleModulesTranslationTest("multiModule/")
-
-abstract class AbstractInlineMultiModuleTest : MultipleModulesTranslationTest("inlineMultiModule/")
-
-abstract class AbstractReservedWordTest : SingleFileTranslationTest("reservedWords/")
-
-abstract class AbstractSecondaryConstructorTest : AbstractBlackBoxTest("secondaryConstructors/")
-
-abstract class AbstractInnerNestedTest : AbstractBlackBoxTest("innerNested/")
-
-abstract class AbstractClassesTest : AbstractBlackBoxTest("classes/")
-
-abstract class AbstractSuperTest : AbstractBlackBoxTest("super/")
-
-abstract class AbstractLocalClassesTest : AbstractBlackBoxTest("localClasses/")
-
-abstract class AbstractNonLocalReturnsTest : KotlinJSMultiFileTest("inline.generated/nonLocalReturns/")
-
-public abstract class AbstractRttiTest : SingleFileTranslationTest("rtti/")
-
-public abstract class AbstractCastTest : SingleFileTranslationTest("expression/cast/")
+abstract class AbstractJsCodegenBoxTest : BasicBoxTest(
+        "compiler/testData/codegen/box/",
+        BasicBoxTest.TEST_DATA_DIR_PATH + "out/codegen/box/"
+)

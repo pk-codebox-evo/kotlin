@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
+ * Copyright 2010-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,8 +24,11 @@ import org.jetbrains.kotlin.cfg.pseudocodeTraverser.Edges
 import org.jetbrains.kotlin.cfg.pseudocodeTraverser.TraversalOrder
 import org.jetbrains.kotlin.cfg.pseudocodeTraverser.collectData
 import org.jetbrains.kotlin.cfg.pseudocodeTraverser.traverse
+import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.VariableDescriptor
 import org.jetbrains.kotlin.resolve.BindingContext
+import org.jetbrains.kotlin.resolve.BindingContextUtils
+import org.jetbrains.kotlin.resolve.calls.tower.getFakeDescriptorForObject
 import java.util.ArrayList
 import java.util.HashMap
 
@@ -37,12 +40,11 @@ class PseudocodeVariableDataCollector(
 
     fun <I : ControlFlowInfo<*>> collectData(
             traversalOrder: TraversalOrder,
-            mergeDataWithLocalDeclarations: Boolean,
             initialInfo: I,
             instructionDataMergeStrategy: (Instruction, Collection<I>) -> Edges<I>
     ): Map<Instruction, Edges<I>> {
         return pseudocode.collectData(
-                traversalOrder, mergeDataWithLocalDeclarations,
+                traversalOrder,
                 instructionDataMergeStrategy,
                 { from, to, info -> filterOutVariablesOutOfScope(from, to, info) },
                 initialInfo
@@ -74,19 +76,12 @@ class PseudocodeVariableDataCollector(
         pseudocode.traverse(TraversalOrder.FORWARD, { instruction ->
             if (instruction is VariableDeclarationInstruction) {
                 val variableDeclarationElement = instruction.variableDeclarationElement
-                val descriptor = bindingContext.get(BindingContext.DECLARATION_TO_DESCRIPTOR, variableDeclarationElement)
-                if (descriptor != null) {
-                    // TODO: investigate why tests fail without this eager computation here
-                    descriptor.toString()
-
-                    assert(descriptor is VariableDescriptor) {
-                        "Variable descriptor should correspond to the instruction for ${instruction.element.text}.\n" +
-                        "Descriptor: $descriptor"
-                    }
-                    blockScopeVariableInfo.registerVariableDeclaredInScope(
-                            descriptor as VariableDescriptor, instruction.blockScope
-                    )
-                }
+                val descriptor = bindingContext.get(BindingContext.DECLARATION_TO_DESCRIPTOR, variableDeclarationElement) ?: return@traverse
+                val variableDescriptor = BindingContextUtils.variableDescriptorForDeclaration(descriptor)
+                                         ?: throw AssertionError("Variable or class descriptor should correspond to " +
+                                                                 "the instruction for ${instruction.element.text}.\n" +
+                                                                 "Descriptor: $descriptor")
+                blockScopeVariableInfo.registerVariableDeclaredInScope(variableDescriptor, instruction.blockScope)
             }
         })
         return blockScopeVariableInfo

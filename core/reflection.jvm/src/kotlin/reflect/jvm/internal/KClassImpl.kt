@@ -16,40 +16,148 @@
 
 package kotlin.reflect.jvm.internal
 
+import org.jetbrains.kotlin.builtins.CompanionObjectMapping
 import org.jetbrains.kotlin.descriptors.*
-import org.jetbrains.kotlin.descriptors.annotations.Annotated
 import org.jetbrains.kotlin.incremental.components.NoLookupLocation
 import org.jetbrains.kotlin.load.java.JvmAbi
-import org.jetbrains.kotlin.load.java.reflect.tryLoadClass
-import org.jetbrains.kotlin.load.java.structure.reflect.safeClassLoader
+import org.jetbrains.kotlin.load.java.structure.reflect.functionClassArity
+import org.jetbrains.kotlin.load.java.structure.reflect.wrapperByPrimitive
 import org.jetbrains.kotlin.load.kotlin.header.KotlinClassHeader
 import org.jetbrains.kotlin.load.kotlin.reflect.ReflectKotlinClass
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.platform.JavaToKotlinClassMap
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.scopes.MemberScope
 import org.jetbrains.kotlin.serialization.deserialization.findClassAcrossModuleDependencies
-import kotlin.reflect.KCallable
-import kotlin.reflect.KClass
-import kotlin.reflect.KFunction
-import kotlin.reflect.KotlinReflectionInternalError
+import kotlin.jvm.internal.TypeIntrinsics
+import kotlin.reflect.*
+import kotlin.reflect.jvm.internal.KDeclarationContainerImpl.MemberBelonginess.DECLARED
+import kotlin.reflect.jvm.internal.KDeclarationContainerImpl.MemberBelonginess.INHERITED
 
-internal class KClassImpl<T : Any>(override val jClass: Class<T>) : KDeclarationContainerImpl(), KClass<T>, KAnnotatedElementImpl {
-    private val descriptor_ = ReflectProperties.lazySoft {
-        val classId = classId
+internal class KClassImpl<T : Any>(override val jClass: Class<T>) : KDeclarationContainerImpl(), KClass<T>, KClassifierImpl {
+    inner class Data : KDeclarationContainerImpl.Data() {
+        val descriptor: ClassDescriptor by ReflectProperties.lazySoft {
+            val classId = classId
+            val moduleData = data().moduleData
 
-        val descriptor =
-                if (classId.isLocal) moduleData.localClassifierResolver.resolveLocalClass(classId)
-                else moduleData.module.findClassAcrossModuleDependencies(classId)
+            val descriptor =
+                    if (classId.isLocal) moduleData.deserialization.deserializeClass(classId)
+                    else moduleData.module.findClassAcrossModuleDependencies(classId)
 
-        descriptor ?: reportUnresolvedClass()
+            descriptor ?: reportUnresolvedClass()
+        }
+
+        val annotations: List<Annotation> by ReflectProperties.lazySoft { descriptor.computeAnnotations() }
+
+        val simpleName: String? by ReflectProperties.lazySoft {
+            if (jClass.isAnonymousClass) return@lazySoft null
+
+            val classId = classId
+            when {
+                classId.isLocal -> calculateLocalClassName(jClass)
+                else -> classId.shortClassName.asString()
+            }
+        }
+
+        val qualifiedName: String? by ReflectProperties.lazySoft {
+            if (jClass.isAnonymousClass) return@lazySoft null
+
+            val classId = classId
+            when {
+                classId.isLocal -> null
+                else -> classId.asSingleFqName().asString()
+            }
+        }
+
+        private fun calculateLocalClassName(jClass: Class<*>): String {
+            val name = jClass.simpleName
+            jClass.enclosingMethod?.let { method ->
+                return name.substringAfter(method.name + "$")
+            }
+            jClass.enclosingConstructor?.let { constructor ->
+                return name.substringAfter(constructor.name + "$")
+            }
+            return name.substringAfter('$')
+        }
+
+        @Suppress("UNCHECKED_CAST")
+        val constructors: Collection<KFunction<T>> by ReflectProperties.lazySoft {
+            constructorDescriptors.map { descriptor ->
+                KFunctionImpl(this@KClassImpl, descriptor) as KFunction<T>
+            }
+        }
+
+        val nestedClasses: Collection<KClass<*>> by ReflectProperties.lazySoft {
+            descriptor.unsubstitutedInnerClassesScope.getContributedDescriptors().filterNot(DescriptorUtils::isEnumEntry).mapNotNull {
+                nestedClass ->
+                val jClass = (nestedClass as ClassDescriptor).toJavaClass()
+                jClass?.let { KClassImpl(it) }
+            }
+        }
+
+        @Suppress("UNCHECKED_CAST")
+        val objectInstance: T? by ReflectProperties.lazy {
+            val descriptor = descriptor
+            if (descriptor.kind != ClassKind.OBJECT) return@lazy null
+
+            val field = if (descriptor.isCompanionObject && !CompanionObjectMapping.isMappedIntrinsicCompanionObject(descriptor)) {
+                jClass.enclosingClass.getDeclaredField(descriptor.name.asString())
+            }
+            else {
+                jClass.getDeclaredField(JvmAbi.INSTANCE_FIELD)
+            }
+            field.get(null) as T
+        }
+
+        val typeParameters: List<KTypeParameter> by ReflectProperties.lazySoft {
+            descriptor.declaredTypeParameters.map(::KTypeParameterImpl)
+        }
+
+        val supertypes: List<KType> by ReflectProperties.lazySoft {
+            descriptor.typeConstructor.supertypes.map { kotlinType ->
+                KTypeImpl(kotlinType) {
+                    val superClass = kotlinType.constructor.declarationDescriptor
+                    if (superClass !is ClassDescriptor) throw KotlinReflectionInternalError("Supertype not a class: $superClass")
+
+                    val superJavaClass = superClass.toJavaClass()
+                                         ?: throw KotlinReflectionInternalError("Unsupported superclass of $this: $superClass")
+
+                    if (jClass.superclass == superJavaClass) {
+                        jClass.genericSuperclass
+                    }
+                    else {
+                        val index = jClass.interfaces.indexOf(superJavaClass)
+                        if (index < 0) throw KotlinReflectionInternalError("No superclass of $this in Java reflection for $superClass")
+                        jClass.genericInterfaces[index]
+                    }
+                }
+            }
+        }
+
+        val declaredNonStaticMembers: Collection<KCallableImpl<*>>
+                by ReflectProperties.lazySoft { getMembers(memberScope, DECLARED) }
+        val declaredStaticMembers: Collection<KCallableImpl<*>>
+                by ReflectProperties.lazySoft { getMembers(staticScope, DECLARED) }
+        val inheritedNonStaticMembers: Collection<KCallableImpl<*>>
+                by ReflectProperties.lazySoft { getMembers(memberScope, INHERITED) }
+        val inheritedStaticMembers: Collection<KCallableImpl<*>>
+                by ReflectProperties.lazySoft { getMembers(staticScope, INHERITED) }
+
+        val allNonStaticMembers: Collection<KCallableImpl<*>>
+                by ReflectProperties.lazySoft { declaredNonStaticMembers + inheritedNonStaticMembers }
+        val allStaticMembers: Collection<KCallableImpl<*>>
+                by ReflectProperties.lazySoft { declaredStaticMembers + inheritedStaticMembers }
+        val declaredMembers: Collection<KCallableImpl<*>>
+                by ReflectProperties.lazySoft { declaredNonStaticMembers + declaredStaticMembers }
+        val allMembers: Collection<KCallableImpl<*>>
+                by ReflectProperties.lazySoft { allNonStaticMembers + allStaticMembers }
     }
 
-    val descriptor: ClassDescriptor
-        get() = descriptor_()
+    val data = ReflectProperties.lazy { Data() }
 
-    override val annotated: Annotated get() = descriptor
+    override val descriptor: ClassDescriptor get() = data().descriptor
+
+    override val annotations: List<Annotation> get() = data().annotations
 
     private val classId: ClassId get() = RuntimeTypeMapper.mapJvmClassToKotlinClassId(jClass)
 
@@ -57,21 +165,17 @@ internal class KClassImpl<T : Any>(override val jClass: Class<T>) : KDeclaration
 
     internal val staticScope: MemberScope get() = descriptor.staticScope
 
-    override val members: Collection<KCallable<*>>
-        get() = getMembers(memberScope, declaredOnly = false, nonExtensions = true, extensions = true)
-                .plus(getMembers(staticScope, declaredOnly = false, nonExtensions = true, extensions = true))
-                .toList()
+    override val members: Collection<KCallable<*>> get() = data().allMembers
 
     override val constructorDescriptors: Collection<ConstructorDescriptor>
         get() {
             val descriptor = descriptor
-            if (descriptor.kind == ClassKind.CLASS || descriptor.kind == ClassKind.ENUM_CLASS) {
-                return descriptor.constructors
+            if (descriptor.kind == ClassKind.INTERFACE || descriptor.kind == ClassKind.OBJECT) {
+                return emptyList()
             }
-            return emptyList()
+            return descriptor.constructors
         }
 
-    @Suppress("UNCHECKED_CAST")
     override fun getProperties(name: Name): Collection<PropertyDescriptor> =
             (memberScope.getContributedVariables(name, NoLookupLocation.FROM_REFLECTION) +
              staticScope.getContributedVariables(name, NoLookupLocation.FROM_REFLECTION))
@@ -80,79 +184,57 @@ internal class KClassImpl<T : Any>(override val jClass: Class<T>) : KDeclaration
             memberScope.getContributedFunctions(name, NoLookupLocation.FROM_REFLECTION) +
             staticScope.getContributedFunctions(name, NoLookupLocation.FROM_REFLECTION)
 
-    override val simpleName: String? get() {
-        if (jClass.isAnonymousClass) return null
+    override val simpleName: String? get() = data().simpleName
 
-        val classId = classId
-        return when {
-            classId.isLocal -> calculateLocalClassName(jClass)
-            else -> classId.shortClassName.asString()
+    override val qualifiedName: String? get() = data().qualifiedName
+
+    override val constructors: Collection<KFunction<T>> get() = data().constructors
+
+    override val nestedClasses: Collection<KClass<*>> get() = data().nestedClasses
+
+    override val objectInstance: T? get() = data().objectInstance
+
+    override fun isInstance(value: Any?): Boolean {
+        // TODO: use Kotlin semantics for mutable/read-only collections once KT-11754 is supported (see TypeIntrinsics)
+        jClass.functionClassArity?.let { arity ->
+            return TypeIntrinsics.isFunctionOfArity(value, arity)
         }
+        return (jClass.wrapperByPrimitive ?: jClass).isInstance(value)
     }
 
-    private fun calculateLocalClassName(jClass: Class<*>): String {
-        val name = jClass.simpleName
-        jClass.enclosingMethod?.let { method ->
-            return name.substringAfter(method.name + "$")
-        }
-        jClass.enclosingConstructor?.let { constructor ->
-            return name.substringAfter(constructor.name + "$")
-        }
-        return name.substringAfter('$')
-    }
+    override val typeParameters: List<KTypeParameter> get() = data().typeParameters
 
-    override val qualifiedName: String? get() {
-        if (jClass.isAnonymousClass) return null
+    override val supertypes: List<KType> get() = data().supertypes
 
-        val classId = classId
-        return when {
-            classId.isLocal -> null
-            else -> classId.asSingleFqName().asString()
-        }
-    }
+    override val visibility: KVisibility?
+        get() = descriptor.visibility.toKVisibility()
 
-    @Suppress("UNCHECKED_CAST")
-    override val constructors: Collection<KFunction<T>>
-        get() = constructorDescriptors.map {
-            KFunctionImpl(this, it) as KFunction<T>
-        }
+    override val isFinal: Boolean
+        get() = descriptor.modality == Modality.FINAL
 
-    override val nestedClasses: Collection<KClass<*>>
-        get() = descriptor.unsubstitutedInnerClassesScope.getContributedDescriptors().filterNot(DescriptorUtils::isEnumEntry).mapNotNull {
-            nestedClass ->
-            (nestedClass as ClassDescriptor).toJavaClass() ?: run {
-                // If neither a Kotlin class nor a Java class, it must be a built-in
-                val classId = JavaToKotlinClassMap.INSTANCE.mapKotlinToJava(DescriptorUtils.getFqName(nestedClass))
-                              ?: throw KotlinReflectionInternalError("Class with no source must be a built-in: $nestedClass")
-                val packageName = classId.packageFqName.asString()
-                val className = classId.relativeClassName.asString().replace('.', '$')
-                // All pseudo-classes like String.Companion must be accessible from the current class loader
-                (this as Any).javaClass.safeClassLoader.tryLoadClass("$packageName.$className")
-            }
-        }.map { KClassImpl(it) }
+    override val isOpen: Boolean
+        get() = descriptor.modality == Modality.OPEN
 
-    @Suppress("UNCHECKED_CAST")
-    private val objectInstance_ = ReflectProperties.lazy {
-        val descriptor = descriptor
-        if (descriptor.kind != ClassKind.OBJECT) return@lazy null
+    override val isAbstract: Boolean
+        get() = descriptor.modality == Modality.ABSTRACT
 
-        val field = if (descriptor.isCompanionObject) {
-            jClass.enclosingClass.getDeclaredField(descriptor.name.asString())
-        }
-        else {
-            jClass.getDeclaredField(JvmAbi.INSTANCE_FIELD)
-        }
-        field.get(null) as T
-    }
+    override val isSealed: Boolean
+        get() = descriptor.modality == Modality.SEALED
 
-    override val objectInstance: T?
-        get() = objectInstance_()
+    override val isData: Boolean
+        get() = descriptor.isData
+
+    override val isInner: Boolean
+        get() = descriptor.isInner
+
+    override val isCompanion: Boolean
+        get() = descriptor.isCompanionObject
 
     override fun equals(other: Any?): Boolean =
-            other is KClassImpl<*> && jClass == other.jClass
+            other is KClassImpl<*> && javaObjectType == other.javaObjectType
 
     override fun hashCode(): Int =
-            jClass.hashCode()
+            javaObjectType.hashCode()
 
     override fun toString(): String {
         return "class " + classId.let { classId ->

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
+ * Copyright 2010-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,18 +20,26 @@ import com.google.dart.compiler.backend.js.ast.*
 import com.google.dart.compiler.backend.js.ast.metadata.SideEffectKind
 import com.google.dart.compiler.backend.js.ast.metadata.sideEffects
 import com.intellij.util.SmartList
+import org.jetbrains.kotlin.descriptors.ClassDescriptor
+import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor
+import org.jetbrains.kotlin.descriptors.ValueParameterDescriptor
 import org.jetbrains.kotlin.js.translate.context.Namer
 import org.jetbrains.kotlin.js.translate.context.TemporaryConstVariable
 import org.jetbrains.kotlin.js.translate.context.TranslationContext
+import org.jetbrains.kotlin.js.translate.expression.LiteralFunctionTranslator
 import org.jetbrains.kotlin.js.translate.expression.PatternTranslator
 import org.jetbrains.kotlin.js.translate.general.AbstractTranslator
 import org.jetbrains.kotlin.js.translate.general.Translation
 import org.jetbrains.kotlin.js.translate.utils.AnnotationsUtils
 import org.jetbrains.kotlin.js.translate.utils.JsAstUtils
 import org.jetbrains.kotlin.js.translate.utils.TranslationUtils
+import org.jetbrains.kotlin.js.translate.utils.getReferenceToJsClass
+import org.jetbrains.kotlin.psi.KtLambdaExpression
+import org.jetbrains.kotlin.psi.KtPsiUtil
 import org.jetbrains.kotlin.psi.ValueArgument
 import org.jetbrains.kotlin.resolve.calls.model.*
+import org.jetbrains.kotlin.resolve.calls.resolvedCallUtil.getImplicitReceiverValue
 import org.jetbrains.kotlin.types.KotlinType
 import java.util.*
 
@@ -68,9 +76,6 @@ class CallArgumentTranslator private constructor(
 
     private fun translate(): ArgumentsInfo {
         val valueParameters = resolvedCall.resultingDescriptor.valueParameters
-        if (valueParameters.isEmpty()) {
-            return ArgumentsInfo(listOf<JsExpression>(), false, null)
-        }
         var hasSpreadOperator = false
         var cachedReceiver: TemporaryConstVariable? = null
 
@@ -118,7 +123,7 @@ class CallArgumentTranslator private constructor(
                 }
             }
             else {
-                translateSingleArgument(actualArgument, result, argContext)
+                translateSingleArgument(parameterDescriptor, actualArgument, result, argContext)
             }
 
             context().moveVarsFrom(argContext)
@@ -151,7 +156,16 @@ class CallArgumentTranslator private constructor(
             }
         }
 
+        val callableDescriptor = resolvedCall.resultingDescriptor
+        if (callableDescriptor is FunctionDescriptor && callableDescriptor.isSuspend &&
+            callableDescriptor.initialSignatureDescriptor != null
+        ) {
+            val coroutineDescriptor = resolvedCall.getImplicitReceiverValue()!!.declarationDescriptor
+            result.add(context().getAliasForDescriptor(coroutineDescriptor) ?: JsLiteral.THIS)
+        }
+
         removeLastUndefinedArguments(result)
+
         return ArgumentsInfo(result, hasSpreadOperator, cachedReceiver)
     }
 
@@ -171,14 +185,18 @@ class CallArgumentTranslator private constructor(
 
             if (CallExpressionTranslator.shouldBeInlined(callDescriptor)) {
                 val typeArgs = resolvedCall.typeArguments
-                return typeArgs.addReifiedTypeArgsTo(result, context)
+                return result.copy(reifiedArguments = typeArgs.buildReifiedTypeArgs(context))
             }
 
             return result
         }
 
-        private fun translateSingleArgument(actualArgument: ResolvedValueArgument, result: MutableList<JsExpression>,
-                                            context: TranslationContext) {
+        private fun translateSingleArgument(
+                parameterDescriptor: ValueParameterDescriptor,
+                actualArgument: ResolvedValueArgument,
+                result: MutableList<JsExpression>,
+                context: TranslationContext
+        ) {
             val valueArguments = actualArgument.arguments
 
             if (actualArgument is DefaultValueArgument) {
@@ -189,10 +207,19 @@ class CallArgumentTranslator private constructor(
             assert(actualArgument is ExpressionValueArgument)
             assert(valueArguments.size == 1)
 
-            val argumentExpression = valueArguments[0].getArgumentExpression()!!
+            val argumentExpression = KtPsiUtil.deparenthesize(valueArguments[0].getArgumentExpression())!!
 
-            val jsExpression = Translation.translateAsExpression(argumentExpression, context)
-            result.add(jsExpression)
+            result += if (parameterDescriptor.isCoroutine && argumentExpression is KtLambdaExpression) {
+                val continuationType = parameterDescriptor.type.arguments.last().type
+                val continuationDescriptor = continuationType.constructor.declarationDescriptor as ClassDescriptor
+                val controllerType = parameterDescriptor.type.arguments[0].type
+                val controllerDescriptor = controllerType.constructor.declarationDescriptor as ClassDescriptor
+                LiteralFunctionTranslator(context).translate(
+                        argumentExpression.functionLiteral, continuationDescriptor, controllerDescriptor)
+            }
+            else {
+                Translation.translateAsExpression(argumentExpression, context)
+            }
         }
 
         private fun translateVarargArgument(arguments: List<ValueArgument>, result: MutableList<JsExpression>,
@@ -242,7 +269,7 @@ class CallArgumentTranslator private constructor(
         }
 
         private fun concatArgumentsIfNeeded(concatArguments: List<JsExpression>): JsExpression {
-            assert(concatArguments.size > 0) { "concatArguments.size should not be 0" }
+            assert(concatArguments.isNotEmpty()) { "concatArguments.size should not be 0" }
 
             if (concatArguments.size > 1) {
                 return JsInvocation(JsNameRef("concat", concatArguments[0]), concatArguments.subList(1, concatArguments.size))
@@ -254,7 +281,7 @@ class CallArgumentTranslator private constructor(
         }
 
         private fun prepareConcatArguments(arguments: List<ValueArgument>, list: List<JsExpression>): MutableList<JsExpression> {
-            assert(arguments.size != 0) { "arguments.size should not be 0" }
+            assert(arguments.isNotEmpty()) { "arguments.size should not be 0" }
             assert(arguments.size == list.size) { "arguments.size: " + arguments.size + " != list.size: " + list.size }
 
             val concatArguments = SmartList<JsExpression>()
@@ -303,10 +330,9 @@ class CallArgumentTranslator private constructor(
 
 }
 
-private fun Map<TypeParameterDescriptor, KotlinType>.addReifiedTypeArgsTo(
-        info: CallArgumentTranslator.ArgumentsInfo,
+public fun Map<TypeParameterDescriptor, KotlinType>.buildReifiedTypeArgs(
         context: TranslationContext
-): CallArgumentTranslator.ArgumentsInfo {
+): List<JsExpression> {
 
     val reifiedTypeArguments = SmartList<JsExpression>()
     val patternTranslator = PatternTranslator.newInstance(context)
@@ -316,9 +342,11 @@ private fun Map<TypeParameterDescriptor, KotlinType>.addReifiedTypeArgsTo(
 
         val argumentType = get(param) ?: continue
 
+        reifiedTypeArguments.add(getReferenceToJsClass(argumentType, context))
+
         val isCheckCallable = patternTranslator.getIsTypeCheckCallable(argumentType)
         reifiedTypeArguments.add(isCheckCallable)
     }
 
-    return info.copy(reifiedArguments = reifiedTypeArguments)
+    return reifiedTypeArguments
 }

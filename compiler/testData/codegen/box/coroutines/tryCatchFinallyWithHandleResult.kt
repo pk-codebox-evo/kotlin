@@ -2,7 +2,7 @@
 var globalResult = ""
 var wasCalled = false
 class Controller {
-    val postponedActions = java.util.ArrayList<() -> Unit>()
+    val postponedActions = ArrayList<() -> Unit>()
 
     suspend fun suspendWithValue(v: String, x: Continuation<String>) {
         postponedActions.add {
@@ -27,6 +27,8 @@ class Controller {
             postponedActions.removeAt(0)
         }
     }
+
+    // INTERCEPT_RESUME_PLACEHOLDER
 }
 
 fun builder(expectException: Boolean = false, coroutine c: Controller.() -> Continuation<Unit>) {

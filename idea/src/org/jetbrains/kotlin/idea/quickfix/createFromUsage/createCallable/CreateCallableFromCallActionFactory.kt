@@ -30,6 +30,7 @@ import org.jetbrains.kotlin.idea.codeInsight.DescriptorToSourceUtilsIde
 import org.jetbrains.kotlin.idea.quickfix.createFromUsage.callableBuilder.*
 import org.jetbrains.kotlin.idea.refactoring.canRefactor
 import org.jetbrains.kotlin.idea.refactoring.getExtractionContainers
+import org.jetbrains.kotlin.idea.refactoring.isInterfaceClass
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.load.java.descriptors.JavaClassDescriptor
 import org.jetbrains.kotlin.psi.*
@@ -43,6 +44,7 @@ import org.jetbrains.kotlin.resolve.scopes.receivers.*
 import org.jetbrains.kotlin.resolve.source.getPsi
 import org.jetbrains.kotlin.types.Variance
 import org.jetbrains.kotlin.types.typeUtil.isSubtypeOf
+import java.lang.AssertionError
 import java.util.*
 
 sealed class CreateCallableFromCallActionFactory<E : KtExpression>(
@@ -73,9 +75,7 @@ sealed class CreateCallableFromCallActionFactory<E : KtExpression>(
             Errors.TOO_MANY_ARGUMENTS,
             Errors.NONE_APPLICABLE -> diagElement.getNonStrictParentOfType<KtCallExpression>()
 
-            Errors.TYPE_MISMATCH -> diagElement
-                    .getParentOfTypeAndBranch<KtValueArgument> { getArgumentExpression() }
-                    ?.getStrictParentOfType<KtCallExpression>()
+            Errors.TYPE_MISMATCH -> (diagElement.parent as? KtValueArgument)?.getStrictParentOfType<KtCallExpression>()
 
             else -> throw AssertionError("Unexpected diagnostic: ${diagnostic.factory}")
         } as? KtExpression
@@ -183,7 +183,23 @@ sealed class CreateCallableFromCallActionFactory<E : KtExpression>(
             return PropertyInfo(name, receiverType, returnType, varExpected, possibleContainers)
         }
 
-        object Default : Property()
+        object Default : Property() {
+            override fun doCreateCallableInfo(
+                    expression: KtSimpleNameExpression,
+                    context: BindingContext,
+                    name: String,
+                    receiverType: TypeInfo,
+                    possibleContainers: List<KtElement>
+            ): CallableInfo? {
+                return super.doCreateCallableInfo(
+                        expression,
+                        context,
+                        name,
+                        receiverType,
+                        possibleContainers.filterNot { it is KtClassBody && (it.parent as KtClassOrObject).isInterfaceClass() }
+                )
+            }
+        }
 
         object Abstract : Property() {
             override fun doCreateCallableInfo(
@@ -279,8 +295,8 @@ sealed class CreateCallableFromCallActionFactory<E : KtExpression>(
             if ((klass !is KtClass && klass !is PsiClass) || !klass.canRefactor()) return null
 
             val expectedType = context[BindingContext.EXPECTED_EXPRESSION_TYPE, expression.getQualifiedExpressionForSelectorOrThis()]
-                               ?: classDescriptor!!.builtIns.nullableAnyType
-            if (!classDescriptor!!.defaultType.isSubtypeOf(expectedType)) return null
+                               ?: classDescriptor.builtIns.nullableAnyType
+            if (!classDescriptor.defaultType.isSubtypeOf(expectedType)) return null
 
             val parameters = expression.getParameterInfos()
 

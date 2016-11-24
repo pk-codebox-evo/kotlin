@@ -57,11 +57,11 @@ import org.jetbrains.kotlin.idea.KotlinLanguage
 import org.jetbrains.kotlin.idea.caches.resolve.getJavaClassDescriptor
 import org.jetbrains.kotlin.idea.core.quoteIfNeeded
 import org.jetbrains.kotlin.idea.core.quoteSegmentsIfNeeded
+import org.jetbrains.kotlin.idea.debugger.DebuggerUtils
 import org.jetbrains.kotlin.idea.debugger.evaluate.KotlinDebuggerCaches.CompiledDataDescriptor
 import org.jetbrains.kotlin.idea.debugger.evaluate.KotlinDebuggerCaches.ParametersDescriptor
 import org.jetbrains.kotlin.idea.debugger.evaluate.compilingEvaluator.loadClasses
 import org.jetbrains.kotlin.idea.refactoring.introduce.extractionEngine.ExtractionResult
-import org.jetbrains.kotlin.idea.util.DebuggerUtils
 import org.jetbrains.kotlin.idea.util.application.runReadAction
 import org.jetbrains.kotlin.idea.util.attachment.attachmentByPsiFile
 import org.jetbrains.kotlin.idea.util.attachment.mergeAttachments
@@ -73,6 +73,7 @@ import org.jetbrains.kotlin.resolve.AnalyzingUtils
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.BindingTrace
 import org.jetbrains.kotlin.resolve.jvm.JvmClassName
+import org.jetbrains.kotlin.serialization.deserialization.findClassAcrossModuleDependencies
 import org.jetbrains.org.objectweb.asm.*
 import org.jetbrains.org.objectweb.asm.Opcodes.ASM5
 import org.jetbrains.org.objectweb.asm.Type
@@ -92,20 +93,18 @@ object KotlinEvaluationBuilder: EvaluatorBuilder {
             return EvaluatorBuilderImpl.getInstance()!!.build(codeFragment, position)
         }
 
-        val file = position.file
-        if (file !is KtFile) {
-            throw EvaluateExceptionUtil.createEvaluateException("Couldn't evaluate kotlin expression in non-kotlin context")
-        }
-
         if (position.line < 0) {
             throw EvaluateExceptionUtil.createEvaluateException("Couldn't evaluate kotlin expression at $position")
         }
 
-        val document = PsiDocumentManager.getInstance(file.project).getDocument(file)
-        if (document == null || document.lineCount < position.line) {
-            throw EvaluateExceptionUtil.createEvaluateException(
-                    "Couldn't evaluate kotlin expression: breakpoint is placed outside the file. " +
-                    "It may happen when you've changed source file after starting a debug process.")
+        val file = position.file
+        if (file is KtFile) {
+            val document = PsiDocumentManager.getInstance(file.project).getDocument(file)
+            if (document == null || document.lineCount < position.line) {
+                throw EvaluateExceptionUtil.createEvaluateException(
+                        "Couldn't evaluate kotlin expression: breakpoint is placed outside the file. " +
+                        "It may happen when you've changed source file after starting a debug process.")
+            }
         }
 
         if (codeFragment.context !is KtElement) {
@@ -392,7 +391,7 @@ class KotlinEvaluator(val codeFragment: KtCodeFragment, val sourcePosition: Sour
 
                 val state = GenerationState(
                         fileForDebugger.project,
-                        if (!DEBUG_MODE) ClassBuilderFactories.BINARIES else ClassBuilderFactories.TEST,
+                        if (!DEBUG_MODE) ClassBuilderFactories.binaries(false) else ClassBuilderFactories.TEST,
                         moduleDescriptor,
                         bindingContext,
                         files,
@@ -551,8 +550,10 @@ fun Type.getClassDescriptor(scope: GlobalSearchScope): ClassDescriptor? {
 
     val jvmName = JvmClassName.byInternalName(internalName).fqNameForClassNameWithoutDollars
 
-    val platformClasses = JavaToKotlinClassMap.INSTANCE.mapPlatformClass(jvmName, DefaultBuiltIns.Instance)
-    if (platformClasses.isNotEmpty()) return platformClasses.first()
+    // TODO: use the correct built-ins from the module instead of DefaultBuiltIns here
+    JavaToKotlinClassMap.INSTANCE.mapJavaToKotlin(jvmName)?.let(
+            DefaultBuiltIns.Instance.builtInsModule::findClassAcrossModuleDependencies
+    )?.let { return it }
 
     return runReadAction {
         val classes = JavaPsiFacade.getInstance(scope.project).findClasses(jvmName.asString(), scope)

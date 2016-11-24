@@ -18,29 +18,48 @@ package org.jetbrains.kotlin.js.translate.expression
 
 import com.google.dart.compiler.backend.js.ast.*
 import com.google.dart.compiler.backend.js.ast.metadata.*
+import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.descriptors.impl.ValueParameterDescriptorImpl
+import org.jetbrains.kotlin.js.descriptorUtils.isCoroutineLambda
 import org.jetbrains.kotlin.js.inline.util.getInnerFunction
 import org.jetbrains.kotlin.js.translate.context.TranslationContext
 import org.jetbrains.kotlin.js.translate.context.getNameForCapturedDescriptor
 import org.jetbrains.kotlin.js.translate.context.hasCapturedExceptContaining
 import org.jetbrains.kotlin.js.translate.context.isCaptured
 import org.jetbrains.kotlin.js.translate.general.AbstractTranslator
+import org.jetbrains.kotlin.js.translate.reference.ReferenceTranslator
 import org.jetbrains.kotlin.js.translate.utils.BindingUtils.getFunctionDescriptor
 import org.jetbrains.kotlin.js.translate.utils.FunctionBodyTranslator.translateFunctionBody
 import org.jetbrains.kotlin.js.translate.utils.JsAstUtils
 import org.jetbrains.kotlin.js.translate.utils.TranslationUtils.simpleReturnFunction
+import org.jetbrains.kotlin.name.ClassId
+import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.KtDeclarationWithBody
+import org.jetbrains.kotlin.psi.KtParameter
+import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils
 import org.jetbrains.kotlin.resolve.inline.InlineUtil
+import org.jetbrains.kotlin.serialization.deserialization.findClassAcrossModuleDependencies
 
 class LiteralFunctionTranslator(context: TranslationContext) : AbstractTranslator(context) {
-    fun translate(declaration: KtDeclarationWithBody): JsExpression {
+    fun translate(
+            declaration: KtDeclarationWithBody,
+            continuationType: ClassDescriptor? = null,
+            controllerType: ClassDescriptor? = null
+    ): JsExpression {
         val invokingContext = context()
         val descriptor = getFunctionDescriptor(invokingContext.bindingContext(), declaration)
 
         val lambda = invokingContext.getFunctionObject(descriptor)
         val functionContext = invokingContext.newFunctionBodyWithUsageTracker(lambda, descriptor)
-
         FunctionTranslator.addParameters(lambda.parameters, descriptor, functionContext)
+
+        descriptor.valueParameters.forEach {
+            if (it is ValueParameterDescriptorImpl.WithDestructuringDeclaration) {
+                lambda.body.statements.add(it.translate(functionContext))
+            }
+        }
+
         val functionBody = translateFunctionBody(descriptor, declaration, functionContext)
         lambda.body.statements.addAll(functionBody.statements)
         lambda.functionDescriptor = descriptor
@@ -49,23 +68,65 @@ class LiteralFunctionTranslator(context: TranslationContext) : AbstractTranslato
 
         val isRecursive = tracker.isCaptured(descriptor)
 
-        if (isRecursive) {
-            lambda.name = tracker.getNameForCapturedDescriptor(descriptor)
+        lambda.name = if (isRecursive) {
+            tracker.getNameForCapturedDescriptor(descriptor)
+        }
+        else {
+            invokingContext.getInnerNameForDescriptor(descriptor)
         }
 
         if (tracker.hasCapturedExceptContaining()) {
             val lambdaCreator = simpleReturnFunction(invokingContext.scope(), lambda)
+            lambdaCreator.name = invokingContext.getInnerNameForDescriptor(descriptor)
             lambdaCreator.isLocal = true
-            return lambdaCreator.withCapturedParameters(functionContext, invokingContext, descriptor)
+            lambdaCreator.coroutineType = continuationType
+            lambdaCreator.controllerType = controllerType
+            if (!isRecursive || descriptor.isCoroutineLambda) {
+                lambda.name = null
+            }
+            lambdaCreator.name.staticRef = lambdaCreator
+            lambdaCreator.continuationInterfaceRef = invokingContext.getContinuationInterfaceReference()
+            return lambdaCreator.withCapturedParameters(descriptor, descriptor.wrapContextForCoroutineIfNecessary(functionContext),
+                                                        invokingContext)
         }
 
         lambda.isLocal = true
-        return invokingContext.define(descriptor, lambda).apply { sideEffects = SideEffectKind.PURE }
+        lambda.coroutineType = continuationType
+        lambda.controllerType = controllerType
+
+        invokingContext.addDeclarationStatement(lambda.makeStmt())
+        lambda.name.staticRef = lambda
+        lambda.continuationInterfaceRef = invokingContext.getContinuationInterfaceReference()
+        return getReferenceToLambda(invokingContext, descriptor, lambda.name)
+    }
+
+    fun ValueParameterDescriptorImpl.WithDestructuringDeclaration.translate(context: TranslationContext): JsVars {
+        val destructuringDeclaration =
+                (DescriptorToSourceUtils.descriptorToDeclaration(this) as? KtParameter)?.destructuringDeclaration
+                ?: error("Destructuring declaration for descriptor $this not found")
+
+        val jsParameter = JsParameter(context.getNameForDescriptor(this))
+        return DestructuringDeclarationTranslator.translate(destructuringDeclaration, jsParameter.name, null, context)
     }
 }
 
-fun JsFunction.withCapturedParameters(context: TranslationContext, invokingContext: TranslationContext, descriptor: MemberDescriptor): JsExpression {
-    val ref = invokingContext.define(descriptor, this).apply { sideEffects = SideEffectKind.PURE }
+private fun TranslationContext.getContinuationInterfaceReference(): JsExpression {
+    val coroutineClassId = ClassId.topLevel(KotlinBuiltIns.COROUTINES_PACKAGE_FQ_NAME.child(Name.identifier("Continuation")))
+    val classDescriptor = currentModule.findClassAcrossModuleDependencies(coroutineClassId)!!
+    return ReferenceTranslator.translateAsTypeReference(classDescriptor, this)
+}
+
+private fun CallableMemberDescriptor.wrapContextForCoroutineIfNecessary(context: TranslationContext): TranslationContext {
+    return if (isCoroutineLambda) context.innerContextWithDescriptorsAliased(mapOf(this to JsLiteral.THIS)) else context
+}
+
+fun JsFunction.withCapturedParameters(
+        descriptor: CallableMemberDescriptor,
+        context: TranslationContext,
+        invokingContext: TranslationContext
+): JsExpression {
+    context.addDeclarationStatement(makeStmt())
+    val ref = getReferenceToLambda(invokingContext, descriptor, name)
     val invocation = JsInvocation(ref).apply { sideEffects = SideEffectKind.PURE }
 
     val invocationArguments = invocation.arguments
@@ -74,7 +135,7 @@ fun JsFunction.withCapturedParameters(context: TranslationContext, invokingConte
     val tracker = context.usageTracker()!!
 
     for ((capturedDescriptor, name) in tracker.capturedDescriptorToJsName) {
-        if (capturedDescriptor == tracker.containingDescriptor) continue
+        if (capturedDescriptor == tracker.containingDescriptor && !capturedDescriptor.isCoroutineLambda) continue
 
         val capturedRef = invokingContext.getArgumentForClosureConstructor(capturedDescriptor)
         var additionalArgs = listOf(capturedRef)
@@ -96,6 +157,19 @@ fun JsFunction.withCapturedParameters(context: TranslationContext, invokingConte
     }
 
     return invocation
+}
+
+private fun getReferenceToLambda(context: TranslationContext, descriptor: CallableMemberDescriptor, name: JsName): JsExpression {
+    return if (context.isPublicInlineFunction) {
+        val fqn = context.getQualifiedReference(descriptor)
+        if (fqn is JsNameRef) {
+            fqn.name?.let { it.staticRef = name.staticRef }
+        }
+        fqn
+    }
+    else {
+        JsAstUtils.pureFqn(name, null)
+    }
 }
 
 private data class CapturedArgsParams(val arguments: List<JsExpression> = listOf(), val parameters: List<JsParameter> = listOf())

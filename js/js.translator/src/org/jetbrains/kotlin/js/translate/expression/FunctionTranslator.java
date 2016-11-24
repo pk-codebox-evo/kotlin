@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
+ * Copyright 2010-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -44,9 +44,12 @@ import static org.jetbrains.kotlin.js.translate.utils.JsAstUtils.setParameters;
 
 public final class FunctionTranslator extends AbstractTranslator {
     @NotNull
-    public static FunctionTranslator newInstance(@NotNull KtDeclarationWithBody function,
-            @NotNull TranslationContext context) {
-        return new FunctionTranslator(function, context);
+    public static FunctionTranslator newInstance(
+            @NotNull KtDeclarationWithBody declaration,
+            @NotNull TranslationContext context,
+            @NotNull JsFunction function
+    ) {
+        return new FunctionTranslator(declaration, context, function);
     }
 
     @NotNull
@@ -60,11 +63,12 @@ public final class FunctionTranslator extends AbstractTranslator {
     @NotNull
     private final FunctionDescriptor descriptor;
 
-    private FunctionTranslator(@NotNull KtDeclarationWithBody functionDeclaration, @NotNull TranslationContext context) {
+    private FunctionTranslator(@NotNull KtDeclarationWithBody functionDeclaration, @NotNull TranslationContext context,
+            @NotNull JsFunction function) {
         super(context);
         this.descriptor = getFunctionDescriptor(context.bindingContext(), functionDeclaration);
         this.functionDeclaration = functionDeclaration;
-        this.functionObject = context().getFunctionObject(descriptor);
+        this.functionObject = function;
         assert this.functionObject.getParameters().isEmpty()
                 : message(descriptor, "Function " + functionDeclaration.getText() + " processed for the second time.");
         //NOTE: it's important we compute the context before we start the computation
@@ -94,17 +98,21 @@ public final class FunctionTranslator extends AbstractTranslator {
         return TranslationUtils.translateFunctionAsEcma5PropertyDescriptor(functionObject, descriptor, context());
     }
 
-    @NotNull
-    public JsPropertyInitializer translateAsMethod() {
-        JsName functionName = context().getNameForDescriptor(descriptor);
+    public void translateAsMethodWithoutMetadata() {
         generateFunctionObject();
+    }
 
-        if (shouldBeInlined(descriptor) && DescriptorUtilsKt.isEffectivelyPublicApi(descriptor)) {
+    @NotNull
+    public JsExpression translateAsMethod() {
+        translateAsMethodWithoutMetadata();
+
+        if (shouldBeInlined(descriptor, context()) && DescriptorUtilsKt.isEffectivelyPublicApi(descriptor)) {
             InlineMetadata metadata = InlineMetadata.compose(functionObject, descriptor);
-            return new JsPropertyInitializer(functionName.makeRef(), metadata.getFunctionWithMetadata());
+            return metadata.getFunctionWithMetadata();
         }
-
-        return new JsPropertyInitializer(functionName.makeRef(), functionObject);
+        else {
+            return functionObject;
+        }
     }
 
     private void generateFunctionObject() {
@@ -126,8 +134,11 @@ public final class FunctionTranslator extends AbstractTranslator {
         List<JsParameter> jsParameters = new SmartList<JsParameter>();
         Map<DeclarationDescriptor, JsExpression> aliases = new HashMap<DeclarationDescriptor, JsExpression>();
 
-        for (TypeParameterDescriptor type : descriptor.getTypeParameters()) {
+        for (TypeParameterDescriptor type : getTypeParameters(descriptor)) {
             if (type.isReified()) {
+                JsName paramNameForType = context().getNameForDescriptor(type);
+                jsParameters.add(new JsParameter(paramNameForType));
+
                 String suggestedName = Namer.isInstanceSuggestedName(type);
                 JsName paramName = functionObject.getScope().declareName(suggestedName);
                 jsParameters.add(new JsParameter(paramName));
@@ -144,6 +155,13 @@ public final class FunctionTranslator extends AbstractTranslator {
         mayBeAddThisParameterForExtensionFunction(jsParameters);
         addParameters(jsParameters, descriptor, context());
         return jsParameters;
+    }
+
+    private static List<TypeParameterDescriptor> getTypeParameters(FunctionDescriptor functionDescriptor) {
+        if (functionDescriptor instanceof PropertyAccessorDescriptor) {
+            return ((PropertyAccessorDescriptor) functionDescriptor).getCorrespondingProperty().getTypeParameters();
+        }
+        return functionDescriptor.getTypeParameters();
     }
 
     public static void addParameters(List<JsParameter> list, FunctionDescriptor descriptor, TranslationContext context) {

@@ -7,18 +7,20 @@ class Controller {
     operator fun handleResult(x: Unit, y: Continuation<Nothing>) {
         wasHandleResultCalled = true
     }
+
+    // INTERCEPT_RESUME_PLACEHOLDER
 }
 
 fun builder(coroutine c: Controller.() -> Continuation<Unit>) {
     val controller = Controller()
     c(controller).resume(Unit)
 
-    if (!controller.wasHandleResultCalled) throw java.lang.RuntimeException("fail 1")
+    if (!controller.wasHandleResultCalled) throw RuntimeException("fail 1")
 }
 
 var varWithCustomSetter: String = ""
     set(value) {
-        if (field != "") throw java.lang.RuntimeException("fail 2")
+        if (field != "") throw RuntimeException("fail 2")
         field = value
     }
 
@@ -28,7 +30,7 @@ fun box(): String {
     builder {
         result += "O"
 
-        if (suspendHere() != "OK") throw java.lang.RuntimeException("fail 3")
+        if (suspendHere() != "OK") throw RuntimeException("fail 3")
 
         result += "K"
     }
@@ -36,7 +38,7 @@ fun box(): String {
     if (result != "OK") return "fail 4"
 
     builder {
-        if (suspendHere() != "OK") throw java.lang.RuntimeException("fail 5")
+        if (suspendHere() != "OK") throw RuntimeException("fail 5")
 
         varWithCustomSetter = "OK"
     }

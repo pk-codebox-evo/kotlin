@@ -12,12 +12,14 @@ fun generateFunction(repository: Repository, function: Operation, functionName: 
         function.attributes.map { it.call }.toSet().let { attributes ->
             GenerateFunction(
                     name = functionName,
-                    returnType = mapType(repository, function.returnType).let { mapped -> if (nativeGetterOrSetter == NativeGetterOrSetter.GETTER) mapped.toNullable() else mapped },
+                    returnType = mapType(repository, function.returnType).let { mapped -> if (nativeGetterOrSetter == NativeGetterOrSetter.GETTER) mapped.toNullableIfNonPrimitive() else mapped },
                     arguments = function.parameters.map {
+                        val mappedType = mapType(repository, it.type)
+
                         GenerateAttribute(
                                 name = it.name,
-                                type = mapType(repository, it.type),
-                                initializer = it.defaultValue,
+                                type = mappedType,
+                                initializer = mapLiteral(it.defaultValue, mappedType),
                                 getterSetterNoImpl = false,
                                 override = false,
                                 kind = AttributeKind.ARGUMENT,
@@ -31,7 +33,12 @@ fun generateFunction(repository: Repository, function: Operation, functionName: 
         }
 
 fun generateFunctions(repository: Repository, function: Operation): List<GenerateFunction> {
-    val realFunction = if (function.name == "") null else generateFunction(repository, function, function.name, NativeGetterOrSetter.NONE)
+    val realFunction = when {
+        function.name == "" -> null
+        function.getterOrSetter() == NativeGetterOrSetter.NONE -> generateFunction(repository, function, function.name, NativeGetterOrSetter.NONE)
+        function.name == "get" || function.name == "set" -> null
+        else -> generateFunction(repository, function, function.name, NativeGetterOrSetter.NONE)
+    }
     val getterOrSetterFunction = when (function.getterOrSetter()) {
         NativeGetterOrSetter.NONE -> null
         NativeGetterOrSetter.GETTER -> generateFunction(repository, function, "get")
@@ -59,10 +66,10 @@ fun generateFunctions(repository: Repository, function: Operation): List<Generat
     return listOf(realFunction, getterOrSetterFunction, functionWithCallbackOrNull).filterNotNull()
 }
 
-fun generateAttribute(putNoImpl: Boolean, repository: Repository, attribute: Attribute): GenerateAttribute =
+fun generateAttribute(putNoImpl: Boolean, repository: Repository, attribute: Attribute, nullableAttributes: Boolean): GenerateAttribute =
         GenerateAttribute(attribute.name,
-                type = mapType(repository, attribute.type),
-                initializer = attribute.defaultValue,
+                type = mapType(repository, attribute.type).let { if (nullableAttributes) it.toNullable() else it },
+                initializer = mapLiteral(attribute.defaultValue, mapType(repository, attribute.type)),
                 getterSetterNoImpl = putNoImpl,
                 kind = if (attribute.readOnly) AttributeKind.VAL else AttributeKind.VAR,
                 override = false,
@@ -72,22 +79,32 @@ fun generateAttribute(putNoImpl: Boolean, repository: Repository, attribute: Att
 
 private fun InterfaceDefinition.superTypes(repository: Repository) = superTypes.map { repository.interfaces[it] }.filterNotNull()
 private fun resolveDefinitionKind(repository: Repository, iface: InterfaceDefinition, constructors: List<ExtendedAttribute> = iface.findConstructors()): GenerateDefinitionKind =
-        if (constructors.isNotEmpty() || iface.superTypes(repository).any { resolveDefinitionKind(repository, it) == GenerateDefinitionKind.CLASS }) {
-            GenerateDefinitionKind.CLASS
-        } else {
-            GenerateDefinitionKind.TRAIT
+        when {
+            iface.dictionary -> GenerateDefinitionKind.INTERFACE
+            iface.extendedAttributes.any { it.call == "NoInterfaceObject" } -> GenerateDefinitionKind.INTERFACE
+            constructors.isNotEmpty() || iface.superTypes(repository).any { resolveDefinitionKind(repository, it) == GenerateDefinitionKind.CLASS } -> {
+                GenerateDefinitionKind.CLASS
+            }
+            iface.callback -> GenerateDefinitionKind.INTERFACE
+            else -> GenerateDefinitionKind.ABSTRACT_CLASS
         }
 
-private fun InterfaceDefinition.mapAttributes(repository: Repository) = attributes.map { generateAttribute(!dictionary, repository, it) }
+private fun InterfaceDefinition.mapAttributes(repository: Repository)
+        = attributes.map { generateAttribute(putNoImpl = !dictionary, repository = repository, attribute = it, nullableAttributes = dictionary) }
 private fun InterfaceDefinition.mapOperations(repository: Repository) = operations.flatMap { generateFunctions(repository, it) }
 private fun Constant.mapConstant(repository : Repository) = GenerateAttribute(name, mapType(repository, type), value, false, AttributeKind.VAL, false, false, true)
 private val EMPTY_CONSTRUCTOR = ExtendedAttribute(null, "Constructor", emptyList())
 
 fun generateTrait(repository: Repository, iface: InterfaceDefinition): GenerateTraitOrClass {
     val superClasses = iface.superTypes
-            .map { repository.interfaces[it] }
-            .filterNotNull()
-            .filter { resolveDefinitionKind(repository, it) == GenerateDefinitionKind.CLASS }
+            .mapNotNull { repository.interfaces[it] }
+            .filter {
+                when (resolveDefinitionKind(repository, it)) {
+                    GenerateDefinitionKind.CLASS,
+                    GenerateDefinitionKind.ABSTRACT_CLASS -> true
+                    else -> false
+                }
+            }
 
     assert(superClasses.size <= 1) { "Type ${iface.name} should have one or zero super classes but found ${superClasses.map { it.name }}" }
     val superClass = superClasses.singleOrNull()
@@ -95,11 +112,11 @@ fun generateTrait(repository: Repository, iface: InterfaceDefinition): GenerateT
 
     val declaredConstructors = iface.findConstructors()
     val entityKind = resolveDefinitionKind(repository, iface, declaredConstructors)
-    val extensions = repository.externals[iface.name]?.map { repository.interfaces[it] }?.filterNotNull() ?: emptyList()
+    val extensions = repository.externals[iface.name]?.mapNotNull { repository.interfaces[it] } ?: emptyList()
 
     val primaryConstructor = when {
         declaredConstructors.size == 1 -> declaredConstructors.single()
-        declaredConstructors.isEmpty() && entityKind == GenerateDefinitionKind.CLASS -> EMPTY_CONSTRUCTOR
+        declaredConstructors.isEmpty() && (entityKind == GenerateDefinitionKind.CLASS || entityKind == GenerateDefinitionKind.ABSTRACT_CLASS)  -> EMPTY_CONSTRUCTOR
         else -> declaredConstructors.firstOrNull { it.arguments.isEmpty() }
     }
     val secondaryConstructors = declaredConstructors.filter { it != primaryConstructor }
@@ -125,9 +142,9 @@ fun generateTrait(repository: Repository, iface: InterfaceDefinition): GenerateT
         ConstructorWithSuperTypeCall(constructorAsFunction, secondaryConstructor, initCall)
     }
 
-    return GenerateTraitOrClass(iface.name, iface.namespace, entityKind, iface.superTypes,
-            memberAttributes = (iface.mapAttributes(repository) + extensions.flatMap { it.mapAttributes(repository) }).distinct().toList(),
-            memberFunctions = (iface.mapOperations(repository) + extensions.flatMap { it.mapOperations(repository) }).distinct().toList(),
+    return GenerateTraitOrClass(iface.name, iface.namespace, entityKind, (iface.superTypes + extensions.map { it.name }).distinct(),
+            memberAttributes = iface.mapAttributes(repository),
+            memberFunctions = iface.mapOperations(repository),
             constants = (iface.constants.map { it.mapConstant(repository) } + extensions.flatMap { it.constants.map { it.mapConstant(repository) } }.distinct().toList()),
             primaryConstructor = primaryConstructorWithCall,
             secondaryConstructors = secondaryConstructorsWithCall,
@@ -154,7 +171,7 @@ fun superOrPrimaryConstructorCall(constructorAsFunction: GenerateFunction, super
 fun mapUnionType(it: UnionType) = GenerateTraitOrClass(
         name = it.name,
         namespace = it.namespace,
-        kind = GenerateDefinitionKind.TRAIT,
+        kind = GenerateDefinitionKind.INTERFACE,
         superTypes = emptyList(),
         memberAttributes = emptyList(),
         memberFunctions = emptyList(),
@@ -167,7 +184,7 @@ fun mapUnionType(it: UnionType) = GenerateTraitOrClass(
 fun generateUnionTypeTraits(allUnionTypes: Sequence<UnionType>): Sequence<GenerateTraitOrClass> = allUnionTypes.map(::mapUnionType)
 
 fun mapDefinitions(repository: Repository, definitions: Iterable<InterfaceDefinition>) =
-        definitions.filter { "NoInterfaceObject" !in it.extendedAttributes.map { it.call } }.map { generateTrait(repository, it) }
+        definitions.map { generateTrait(repository, it) }
 
 fun generateUnions(ifaces: List<GenerateTraitOrClass>, typedefs: Iterable<TypedefDefinition>): GenerateUnionTypes {
     val declaredTypes = ifaces.associateBy { it.name }
@@ -201,4 +218,14 @@ fun generateUnions(ifaces: List<GenerateTraitOrClass>, typedefs: Iterable<Typede
             anonymousUnionsMap = anonymousUnionsMap,
             typedefsMarkersMap = typedefsMarkersMap
     )
+}
+
+private fun mapLiteral(literal: String?, expectedType: Type = DynamicType) = when (literal) {
+    "[]" -> when {
+        expectedType == DynamicType -> "arrayOf<dynamic>()"
+        expectedType is AnyType -> "arrayOf<dynamic>()"
+        expectedType is UnionType -> "arrayOf<dynamic>()"
+        else -> "arrayOf()"
+    }
+    else -> literal
 }

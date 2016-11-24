@@ -36,6 +36,7 @@ import org.jetbrains.kotlin.idea.refactoring.dropOverrideKeywordIfNecessary
 import org.jetbrains.kotlin.idea.refactoring.replaceListPsiAndKeepDelimiters
 import org.jetbrains.kotlin.idea.core.ShortenReferences
 import org.jetbrains.kotlin.idea.core.ShortenReferences.Options
+import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.getElementTextWithContext
 import org.jetbrains.kotlin.psi.psiUtil.getValueParameterList
@@ -188,7 +189,7 @@ class KotlinCallableDefinitionUsage<T : PsiElement>(
                 }
             }
             else {
-                newParameterList = psiFactory.createFunctionLiteralParameterList(changeInfo.getNewParametersSignatureWithoutParentheses(this))
+                newParameterList = psiFactory.createLambdaParameterList(changeInfo.getNewParametersSignatureWithoutParentheses(this))
                 canReplaceEntireList = true
             }
         }
@@ -260,7 +261,11 @@ class KotlinCallableDefinitionUsage<T : PsiElement>(
             parameter.setTypeReference(psiFactory.createType(renderedType))
         }
 
-        val newIdentifier = psiFactory.createIdentifier(parameterInfo.getInheritedName(this))
-        parameter.nameIdentifier?.replace(newIdentifier)
+
+        val inheritedName = parameterInfo.getInheritedName(this)
+        if (Name.isValidIdentifier(inheritedName)) {
+            val newIdentifier = psiFactory.createIdentifier(inheritedName)
+            parameter.nameIdentifier?.replace(newIdentifier)
+        }
     }
 }

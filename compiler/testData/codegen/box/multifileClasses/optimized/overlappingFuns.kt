@@ -1,3 +1,6 @@
+// TODO: muted automatically, investigate should it be ran for JS or not
+// IGNORE_BACKEND: JS
+
 // WITH_RUNTIME
 // KOTLIN_CONFIGURATION_FLAGS: +JVM.INHERIT_MULTIFILE_PARTS
 // FILE: box.kt
@@ -16,7 +19,7 @@ private fun overlapping() = "oops #1"
 @file:[JvmName("MultifileClass") JvmMultifileClass]
 package a
 
-fun overlapping() = "OK"
+private fun overlapping() = "OK"
 
 fun ok() = overlapping()
 

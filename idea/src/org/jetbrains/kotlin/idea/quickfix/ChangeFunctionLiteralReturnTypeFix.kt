@@ -24,10 +24,10 @@ import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.diagnostics.Diagnostic
 import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.caches.resolve.analyzeFullyAndGetResult
+import org.jetbrains.kotlin.idea.core.ShortenReferences
 import org.jetbrains.kotlin.idea.core.quickfix.QuickFixUtil
 import org.jetbrains.kotlin.idea.project.builtIns
 import org.jetbrains.kotlin.idea.util.IdeDescriptorRenderers
-import org.jetbrains.kotlin.idea.core.ShortenReferences
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.calls.callUtil.getParentResolvedCall
@@ -44,7 +44,8 @@ class ChangeFunctionLiteralReturnTypeFix(
 
     private val typePresentation = IdeDescriptorRenderers.SOURCE_CODE_SHORT_NAMES_IN_TYPES.renderType(type)
     private val typeSourceCode = IdeDescriptorRenderers.SOURCE_CODE.renderType(type)
-    private val functionLiteralReturnTypeRef = functionLiteralExpression.functionLiteral.typeReference
+    private val functionLiteralReturnTypeRef: KtTypeReference?
+        get() = element?.functionLiteral?.typeReference
     private val appropriateQuickFix = createAppropriateQuickFix(functionLiteralExpression, type)
 
     private fun createAppropriateQuickFix(functionLiteralExpression: KtLambdaExpression, type: KotlinType): IntentionAction? {
@@ -95,7 +96,7 @@ class ChangeFunctionLiteralReturnTypeFix(
             val parentFunctionReturnTypeRef = parentFunction.typeReference
             val parentFunctionReturnType = context.get(BindingContext.TYPE, parentFunctionReturnTypeRef)
             return if (parentFunctionReturnType != null && !KotlinTypeChecker.DEFAULT.isSubtypeOf(eventualFunctionLiteralType, parentFunctionReturnType))
-                ChangeFunctionReturnTypeFix(parentFunction, eventualFunctionLiteralType)
+                ChangeFunctionReturnTypeFix.ForEnclosing(parentFunction, eventualFunctionLiteralType)
             else
                 null
         }
@@ -113,8 +114,8 @@ class ChangeFunctionLiteralReturnTypeFix(
     }
 
     override fun invoke(project: Project, editor: Editor?, file: KtFile) {
-        if (functionLiteralReturnTypeRef != null) {
-            val newTypeRef = functionLiteralReturnTypeRef.replace(KtPsiFactory(file).createType(typeSourceCode)) as KtTypeReference
+        functionLiteralReturnTypeRef?.let {
+            val newTypeRef = it.replace(KtPsiFactory(file).createType(typeSourceCode)) as KtTypeReference
             ShortenReferences.DEFAULT.process(newTypeRef)
         }
         if (appropriateQuickFix != null && appropriateQuickFix.isAvailable(project, editor!!, file)) {

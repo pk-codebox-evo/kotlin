@@ -25,6 +25,7 @@ import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.cfg.WhenMissingCase
 import org.jetbrains.kotlin.cfg.hasUnknown
 import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.descriptors.impl.TypeAliasConstructorDescriptor
 import org.jetbrains.kotlin.diagnostics.rendering.TabledDescriptorRenderer.newTable
 import org.jetbrains.kotlin.diagnostics.rendering.TabledDescriptorRenderer.newText
 import org.jetbrains.kotlin.psi.KtClass
@@ -39,17 +40,16 @@ import org.jetbrains.kotlin.resolve.calls.inference.TypeBounds.BoundKind.LOWER_B
 import org.jetbrains.kotlin.resolve.calls.inference.TypeBounds.BoundKind.UPPER_BOUND
 import org.jetbrains.kotlin.resolve.calls.inference.constraintPosition.ConstraintPosition
 import org.jetbrains.kotlin.resolve.calls.inference.constraintPosition.ConstraintPositionKind
-import org.jetbrains.kotlin.resolve.calls.inference.constraintPosition.ConstraintPositionKind.RECEIVER_POSITION
-import org.jetbrains.kotlin.resolve.calls.inference.constraintPosition.ConstraintPositionKind.VALUE_PARAMETER_POSITION
+import org.jetbrains.kotlin.resolve.calls.inference.constraintPosition.ConstraintPositionKind.*
+import org.jetbrains.kotlin.resolve.calls.inference.constraintPosition.derivedFrom
+import org.jetbrains.kotlin.resolve.calls.inference.constraintPosition.getValidityConstraintForConstituentType
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
-import org.jetbrains.kotlin.types.KotlinType
-import org.jetbrains.kotlin.types.TypeIntersector
-import org.jetbrains.kotlin.types.TypeUtils
-import org.jetbrains.kotlin.types.Variance
+import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.checker.KotlinTypeChecker
 import org.jetbrains.kotlin.utils.addToStdlib.firstIsInstanceOrNull
 import java.io.PrintWriter
 import java.io.StringWriter
+import java.lang.AssertionError
 
 object Renderers {
 
@@ -85,7 +85,9 @@ object Renderers {
         val declarationKindWithSpace = when (it) {
             is PackageFragmentDescriptor -> "package "
             is ClassDescriptor -> "${it.renderKind()} "
+            is TypeAliasDescriptor -> "typealias "
             is ConstructorDescriptor -> "constructor "
+            is TypeAliasConstructorDescriptor -> "typealias constructor "
             is PropertyGetterDescriptor -> "property getter "
             is PropertySetterDescriptor -> "property setter "
             is FunctionDescriptor -> "function "
@@ -113,9 +115,9 @@ object Renderers {
         if (classOrObject is KtClass) "Class" + name else "Object" + name
     }
 
-    @JvmField val RENDER_CLASS_OR_OBJECT_NAME = Renderer<ClassDescriptor> { it.renderKindWithName() }
+    @JvmField val RENDER_CLASS_OR_OBJECT_NAME = Renderer<ClassifierDescriptorWithTypeParameters> { it.renderKindWithName() }
 
-    @JvmField val RENDER_TYPE = SmartTypeRenderer(DescriptorRenderer.FQ_NAMES_IN_TYPES)
+    @JvmField val RENDER_TYPE = SmartTypeRenderer(DescriptorRenderer.FQ_NAMES_IN_TYPES.withOptions { parameterNamesInFunctionalTypes = false })
 
     @JvmField val RENDER_POSITION_VARIANCE = Renderer {
         variance: Variance ->
@@ -265,16 +267,26 @@ object Renderers {
         LOG.assertTrue(status.hasViolatedUpperBound(),
                        debugMessage("Upper bound violated renderer is applied for incorrect status", inferenceErrorData))
 
-        val systemWithoutWeakConstraints = constraintSystem.filterConstraintsOut(ConstraintPositionKind.TYPE_BOUND_POSITION)
+        val systemWithoutWeakConstraints = constraintSystem.filterConstraintsOut(TYPE_BOUND_POSITION)
         val typeParameterDescriptor = inferenceErrorData.descriptor.typeParameters.firstOrNull {
             !ConstraintsUtil.checkUpperBoundIsSatisfied(systemWithoutWeakConstraints, it, inferenceErrorData.call, true)
         }
-        if (typeParameterDescriptor == null && status.hasConflictingConstraints()) {
-            return renderConflictingSubstitutionsInferenceError(inferenceErrorData, result)
-        }
+
         if (typeParameterDescriptor == null) {
-            LOG.error(debugMessage("There is no type parameter with violated upper bound for 'upper bound violated' error", inferenceErrorData))
-            return result
+            if (inferenceErrorData.descriptor is TypeAliasConstructorDescriptor) {
+                renderUpperBoundViolatedInferenceErrorForTypeAliasConstructor(
+                        inferenceErrorData, result, systemWithoutWeakConstraints
+                )?.let {
+                    return it
+                }
+            }
+
+            return if (status.hasConflictingConstraints())
+                renderConflictingSubstitutionsInferenceError(inferenceErrorData, result)
+            else {
+                LOG.error(debugMessage("There is no type parameter with violated upper bound for 'upper bound violated' error", inferenceErrorData))
+                result
+            }
         }
 
         val typeVariable = systemWithoutWeakConstraints.descriptorToVariable(inferenceErrorData.call.toHandle(), typeParameterDescriptor)
@@ -318,6 +330,51 @@ object Renderers {
         return result
     }
 
+    private fun renderUpperBoundViolatedInferenceErrorForTypeAliasConstructor(
+            inferenceErrorData: InferenceErrorData,
+            result: TabledDescriptorRenderer,
+            systemWithoutWeakConstraints: ConstraintSystem
+    ): TabledDescriptorRenderer? {
+        val descriptor = inferenceErrorData.descriptor
+        if (descriptor !is TypeAliasConstructorDescriptor) {
+            LOG.error("Type alias constructor descriptor expected: $descriptor")
+            return result
+        }
+
+        val inferredTypesForTypeParameters = descriptor.typeParameters.map {
+            val typeVariable = systemWithoutWeakConstraints.descriptorToVariable(inferenceErrorData.call.toHandle(), it)
+            systemWithoutWeakConstraints.getTypeBounds(typeVariable).value
+        }
+        val inferredTypeSubstitutor = TypeSubstitutor.create(object : TypeConstructorSubstitution() {
+            override fun get(key: TypeConstructor): TypeProjection? {
+                val typeDescriptor = key.declarationDescriptor as? TypeParameterDescriptor ?: return null
+                if (typeDescriptor.containingDeclaration != descriptor.typeAliasDescriptor) return null
+                return inferredTypesForTypeParameters[typeDescriptor.index]?.let { TypeProjectionImpl(it) }
+            }
+        })
+
+        for (constraintError in inferenceErrorData.constraintSystem.status.constraintErrors) {
+            val constraintInfo = constraintError.constraintPosition.getValidityConstraintForConstituentType() ?: continue
+
+            val violatedUpperBound = inferredTypeSubstitutor.safeSubstitute(constraintInfo.bound, Variance.INVARIANT)
+            val violatingInferredType = inferredTypeSubstitutor.safeSubstitute(constraintInfo.typeArgument, Variance.INVARIANT)
+
+            val context = RenderingContext.of(violatingInferredType, violatedUpperBound)
+            val typeRenderer = result.typeRenderer
+
+            result.text(newText().normal("Type parameter bound for ").strong(constraintInfo.typeParameter.name)
+                                .normal(" in type inferred from type alias expansion for "))
+                    .table(newTable().descriptor(inferenceErrorData.descriptor))
+
+            result.text(newText().normal(" is not satisfied: inferred type ").error(typeRenderer.render(violatingInferredType, context))
+                                .normal(" is not a subtype of ").strong(typeRenderer.render(violatedUpperBound, context)))
+
+            return result
+        }
+
+        return null
+    }
+
     @JvmStatic fun renderCannotCaptureTypeParameterError(
             inferenceErrorData: InferenceErrorData, result: TabledDescriptorRenderer
     ): TabledDescriptorRenderer {
@@ -338,16 +395,16 @@ object Renderers {
         }
 
         val typeParameter = typeVariableWithCapturedConstraint.originalTypeParameter
-
-        val explanation: String
         val upperBound = TypeIntersector.getUpperBoundsAsType(typeParameter)
-        if (!KotlinBuiltIns.isNullableAny(upperBound) && capturedTypeConstructor.typeProjection.projectionKind == Variance.IN_VARIANCE) {
-            explanation = "Type parameter has an upper bound '" + result.typeRenderer.render(upperBound, RenderingContext.of(upperBound)) + "'" +
-                          " that cannot be satisfied capturing 'in' projection"
+
+        assert(!KotlinBuiltIns.isNullableAny(upperBound) && capturedTypeConstructor.typeProjection.projectionKind == Variance.IN_VARIANCE) {
+            "There is the only reason to report TYPE_INFERENCE_CANNOT_CAPTURE_TYPES"
         }
-        else {
-            explanation = "Only top-level type projections can be captured"
-        }
+
+        val explanation =
+                "Type parameter has an upper bound '" + result.typeRenderer.render(upperBound, RenderingContext.of(upperBound)) + "'" +
+                " that cannot be satisfied capturing 'in' projection"
+
         result.text(newText().normal(
                 "'" + typeParameter.name + "'" +
                 " cannot capture " +

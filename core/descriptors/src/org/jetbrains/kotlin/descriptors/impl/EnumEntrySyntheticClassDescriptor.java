@@ -43,9 +43,9 @@ import java.util.*;
 
 public class EnumEntrySyntheticClassDescriptor extends ClassDescriptorBase {
     private final TypeConstructor typeConstructor;
-    private final ConstructorDescriptor primaryConstructor;
+    private final ClassConstructorDescriptor primaryConstructor;
     private final MemberScope scope;
-    private final NotNullLazyValue<Collection<Name>> enumMemberNames;
+    private final NotNullLazyValue<Set<Name>> enumMemberNames;
     private final Annotations annotations;
 
     /**
@@ -57,7 +57,7 @@ public class EnumEntrySyntheticClassDescriptor extends ClassDescriptorBase {
             @NotNull StorageManager storageManager,
             @NotNull ClassDescriptor enumClass,
             @NotNull Name name,
-            @NotNull NotNullLazyValue<Collection<Name>> enumMemberNames,
+            @NotNull NotNullLazyValue<Set<Name>> enumMemberNames,
             @NotNull Annotations annotations,
             @NotNull SourceElement source
     ) {
@@ -71,7 +71,7 @@ public class EnumEntrySyntheticClassDescriptor extends ClassDescriptorBase {
             @NotNull ClassDescriptor containingClass,
             @NotNull KotlinType supertype,
             @NotNull Name name,
-            @NotNull NotNullLazyValue<Collection<Name>> enumMemberNames,
+            @NotNull NotNullLazyValue<Set<Name>> enumMemberNames,
             @NotNull Annotations annotations,
             @NotNull SourceElement source
     ) {
@@ -80,13 +80,13 @@ public class EnumEntrySyntheticClassDescriptor extends ClassDescriptorBase {
 
         this.annotations = annotations;
         this.typeConstructor = new ClassTypeConstructorImpl(
-                this, getAnnotations(), true, Collections.<TypeParameterDescriptor>emptyList(), Collections.singleton(supertype)
+                this, true, Collections.<TypeParameterDescriptor>emptyList(), Collections.singleton(supertype)
         );
 
         this.scope = new EnumEntryScope(storageManager);
         this.enumMemberNames = enumMemberNames;
 
-        ConstructorDescriptorImpl primaryConstructor = DescriptorFactory.createPrimaryConstructorForObject(this, source);
+        ClassConstructorDescriptorImpl primaryConstructor = DescriptorFactory.createPrimaryConstructorForObject(this, source);
         primaryConstructor.setReturnType(getDefaultType());
         this.primaryConstructor = primaryConstructor;
     }
@@ -105,7 +105,7 @@ public class EnumEntrySyntheticClassDescriptor extends ClassDescriptorBase {
 
     @NotNull
     @Override
-    public Collection<ConstructorDescriptor> getConstructors() {
+    public Collection<ClassConstructorDescriptor> getConstructors() {
         return Collections.singleton(primaryConstructor);
     }
 
@@ -156,7 +156,7 @@ public class EnumEntrySyntheticClassDescriptor extends ClassDescriptorBase {
 
     @Nullable
     @Override
-    public ConstructorDescriptor getUnsubstitutedPrimaryConstructor() {
+    public ClassConstructorDescriptor getUnsubstitutedPrimaryConstructor() {
         return primaryConstructor;
     }
 
@@ -286,6 +286,18 @@ public class EnumEntrySyntheticClassDescriptor extends ClassDescriptorBase {
                 result.addAll(getContributedVariables(name, NoLookupLocation.FOR_NON_TRACKED_SCOPE));
             }
             return result;
+        }
+
+        @NotNull
+        @Override
+        public Set<Name> getFunctionNames() {
+            return enumMemberNames.invoke();
+        }
+
+        @NotNull
+        @Override
+        public Set<Name> getVariableNames() {
+            return enumMemberNames.invoke();
         }
 
         @Override

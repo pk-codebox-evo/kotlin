@@ -9,12 +9,14 @@ class Controller {
     operator fun handleResult(u: Unit, v: Continuation<Nothing>) {
         ok = true
     }
+
+    // INTERCEPT_RESUME_PLACEHOLDER
 }
 
 fun builder(coroutine c: Controller.() -> Continuation<Unit>): String {
     val controller = Controller()
     c(controller).resume(Unit)
-    if (!controller.ok) throw java.lang.RuntimeException("Fail 1")
+    if (!controller.ok) throw RuntimeException("Fail 1")
     return controller.v
 }
 

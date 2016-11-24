@@ -29,6 +29,7 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.lexer.KtTokens;
 import org.jetbrains.kotlin.name.FqName;
 import org.jetbrains.kotlin.name.Name;
+import org.jetbrains.kotlin.psi.psiUtil.KtPsiUtilKt;
 import org.jetbrains.kotlin.psi.stubs.KotlinStubWithFqName;
 import org.jetbrains.kotlin.types.expressions.OperatorConventions;
 
@@ -102,7 +103,18 @@ abstract class KtNamedDeclarationStub<T extends KotlinStubWithFqName<?>> extends
     @Override
     public SearchScope getUseScope() {
         KtElement enclosingBlock = KtPsiUtil.getEnclosingElementForLocalDeclaration(this, false);
-        if (enclosingBlock != null) return new LocalSearchScope(enclosingBlock);
+        if (enclosingBlock != null) {
+            PsiElement enclosingParent = enclosingBlock.getParent();
+            if (enclosingParent instanceof KtContainerNode) {
+                enclosingParent = enclosingParent.getParent();
+            }
+            if (enclosingBlock instanceof KtBlockExpression && enclosingParent instanceof KtDoWhileExpression) {
+                KtExpression condition = ((KtDoWhileExpression) enclosingParent).getCondition();
+                if (condition != null) return new LocalSearchScope(new PsiElement[] { enclosingBlock, condition });
+            }
+
+            return new LocalSearchScope(enclosingBlock);
+        }
 
         if (hasModifier(KtTokens.PRIVATE_KEYWORD)) {
             KtElement containingClass = PsiTreeUtil.getParentOfType(this, KtClassOrObject.class);
@@ -117,7 +129,14 @@ abstract class KtNamedDeclarationStub<T extends KotlinStubWithFqName<?>> extends
             }
         }
 
-        return super.getUseScope();
+        SearchScope scope = super.getUseScope();
+
+        KtClassOrObject classOrObject = KtPsiUtilKt.getContainingClassOrObject(this);
+        if (classOrObject != null) {
+            scope = scope.intersectWith(classOrObject.getUseScope());
+        }
+
+        return scope;
     }
 
     @Nullable
@@ -130,5 +149,18 @@ abstract class KtNamedDeclarationStub<T extends KotlinStubWithFqName<?>> extends
             return stub.getFqName();
         }
         return KtNamedDeclarationUtil.getFQName(this);
+    }
+
+    @Override
+    public void delete() throws IncorrectOperationException {
+        KtClassOrObject classOrObject = KtPsiUtilKt.getContainingClassOrObject(this);
+
+        super.delete();
+
+        if (classOrObject instanceof KtObjectDeclaration
+            && ((KtObjectDeclaration) classOrObject).isCompanion()
+            && classOrObject.getDeclarations().isEmpty()) {
+            classOrObject.delete();
+        }
     }
 }

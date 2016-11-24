@@ -17,6 +17,7 @@
 package org.jetbrains.kotlin.psi;
 
 import com.intellij.lang.ASTNode;
+import com.intellij.psi.PsiElement;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.KtNodeTypes;
@@ -32,14 +33,16 @@ public class KtForExpression extends KtLoopExpression {
         return visitor.visitForExpression(this, data);
     }
 
-    @Nullable
+    @Nullable @IfNotParsed
     public KtParameter getLoopParameter() {
         return (KtParameter) findChildByType(KtNodeTypes.VALUE_PARAMETER);
     }
 
     @Nullable
-    public KtDestructuringDeclaration getDestructuringParameter() {
-        return (KtDestructuringDeclaration) findChildByType(KtNodeTypes.DESTRUCTURING_DECLARATION);
+    public KtDestructuringDeclaration getDestructuringDeclaration() {
+        KtParameter loopParameter = getLoopParameter();
+        if (loopParameter == null) return null;
+        return loopParameter.getDestructuringDeclaration();
     }
 
     @Nullable @IfNotParsed
@@ -48,7 +51,12 @@ public class KtForExpression extends KtLoopExpression {
     }
 
     @Nullable @IfNotParsed
-    public ASTNode getInKeywordNode() {
-        return getNode().findChildByType(KtTokens.IN_KEYWORD);
+    public PsiElement getInKeyword() {
+        return findChildByType(KtTokens.IN_KEYWORD);
+    }
+
+    @NotNull
+    public PsiElement getForKeyword() {
+        return findChildByType(KtTokens.FOR_KEYWORD);
     }
 }

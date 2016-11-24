@@ -17,15 +17,17 @@
 package org.jetbrains.kotlin.idea.refactoring.rename
 
 import com.intellij.openapi.editor.Editor
+import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiReference
+import com.intellij.psi.util.PsiUtilCore
 import com.intellij.refactoring.JavaRefactoringSettings
 import com.intellij.refactoring.listeners.RefactoringElementListener
 import com.intellij.refactoring.rename.RenamePsiElementProcessor
 import com.intellij.usageView.UsageInfo
-import org.jetbrains.kotlin.asJava.KtLightClass
-import org.jetbrains.kotlin.asJava.KtLightClassForExplicitDeclaration
-import org.jetbrains.kotlin.asJava.KtLightClassForFacade
+import org.jetbrains.kotlin.asJava.classes.KtLightClass
+import org.jetbrains.kotlin.asJava.classes.KtLightClassForFacade
+import org.jetbrains.kotlin.asJava.classes.KtLightClassForSourceDeclaration
 import org.jetbrains.kotlin.asJava.namedUnwrappedElement
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
@@ -77,6 +79,17 @@ class RenameKotlinClassProcessor : RenameKotlinPsiProcessor() {
         }
     }
 
+    override fun getQualifiedNameAfterRename(element: PsiElement, newName: String?, nonJava: Boolean): String? {
+        if (!nonJava) return newName
+
+        val qualifiedName = when (element) {
+            is KtClassOrObject -> element.fqName?.asString() ?: element.name
+            is PsiClass -> element.qualifiedName ?: element.name
+            else -> return null
+        }
+        return PsiUtilCore.getQualifiedNameAfterRename(qualifiedName, newName)
+    }
+
     override fun findReferences(element: PsiElement): Collection<PsiReference> {
         if (element is KtObjectDeclaration && element.isCompanion()) {
             return super.findReferences(element).filter { !it.isCompanionObjectClassReference() }
@@ -112,7 +125,7 @@ class RenameKotlinClassProcessor : RenameKotlinPsiProcessor() {
     private fun getClassOrObject(element: PsiElement?): PsiElement? = when (element) {
         is KtLightClass ->
             when (element) {
-                is KtLightClassForExplicitDeclaration -> element.kotlinOrigin
+                is KtLightClassForSourceDeclaration -> element.kotlinOrigin
                 is KtLightClassForFacade -> element
                 else -> throw AssertionError("Should not be suggested to rename element of type " + element.javaClass + " " + element)
             }

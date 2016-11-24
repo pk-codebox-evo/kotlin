@@ -11,11 +11,17 @@ private fun <O : Appendable> O.indent(commented: Boolean = false, level: Int) {
     }
 }
 
-private fun Appendable.renderAttributeDeclaration(arg: GenerateAttribute, override: Boolean, open: Boolean, omitDefaults: Boolean = false) {
-    when {
-        override -> append("override ")
-        open -> append("open ")
-        arg.vararg -> append("vararg ")
+private fun Appendable.renderAttributeDeclaration(arg: GenerateAttribute, modality: MemberModality, omitDefaults: Boolean = false) {
+    if (arg.vararg) {
+        append("vararg ")
+    }
+    else {
+        when (modality) {
+            MemberModality.OVERRIDE -> append("override ")
+            MemberModality.ABSTRACT -> append("abstract ")
+            MemberModality.OPEN -> append("open ")
+            MemberModality.FINAL -> {}
+        }
     }
 
     append(when(arg.kind) {
@@ -26,16 +32,28 @@ private fun Appendable.renderAttributeDeclaration(arg: GenerateAttribute, overri
     append(arg.name.replaceKeywords())
     append(": ")
     append(arg.type.render())
-    if (arg.initializer != null && !omitDefaults) {
+    if (arg.initializer != null) {
+        if (omitDefaults) {
+            append(" /*")
+        }
+
         append(" = ")
         append(arg.initializer.replaceWrongConstants(arg.type))
+
+        if (omitDefaults) {
+            append(" */")
+        }
     }
 }
 
-private fun Appendable.renderAttributeDeclarationAsProperty(arg: GenerateAttribute, override: Boolean, open: Boolean, commented: Boolean, level: Int, omitDefaults: Boolean = false) {
+private fun Appendable.renderAttributeDeclarationAsProperty(arg: GenerateAttribute, modality: MemberModality, commented: Boolean, level: Int, omitDefaults: Boolean = false) {
     indent(commented, level)
 
-    renderAttributeDeclaration(arg, override, open, omitDefaults)
+    if (arg.name in keywords) {
+        append("@native(\"${arg.name}\") ")
+    }
+
+    renderAttributeDeclaration(arg, modality, omitDefaults)
 
     appendln()
     if (arg.getterNoImpl) {
@@ -48,7 +66,7 @@ private fun Appendable.renderAttributeDeclarationAsProperty(arg: GenerateAttribu
     }
 }
 
-private val keywords = setOf("interface")
+private val keywords = setOf("interface", "is", "as")
 
 private fun String.parse() = if (this.startsWith("0x")) BigInteger(this.substring(2), 16) else BigInteger(this)
 private fun String.replaceWrongConstants(type: Type) = when {
@@ -60,17 +78,24 @@ private fun String.replaceKeywords() = if (this in keywords) this + "_" else thi
 
 private fun Appendable.renderArgumentsDeclaration(args: List<GenerateAttribute>, omitDefaults: Boolean = false) =
         args.joinTo(this, ", ", "(", ")") {
-            StringBuilder().apply { renderAttributeDeclaration(it, it.override, false, omitDefaults) }
+            StringBuilder().apply { renderAttributeDeclaration(it, if (it.override) MemberModality.OVERRIDE else MemberModality.FINAL, omitDefaults) }
         }
 
-private fun renderCall(call: GenerateFunctionCall) = "${call.name.replaceKeywords()}(${call.arguments.joinToString(", ") { it.replaceKeywords() }})"
+private fun renderCall(call: GenerateFunctionCall) = "${call.name.replaceKeywords()}(${call.arguments.joinToString(separator = ", ", transform = String::replaceKeywords)})"
 
 private fun Appendable.renderFunctionDeclaration(f: GenerateFunction, override: Boolean, commented: Boolean, level: Int = 1) {
     indent(commented, level)
 
+    if (f.nativeGetterOrSetter == NativeGetterOrSetter.GETTER
+            && !f.returnType.nullable
+            && f.returnType != DynamicType) {
+        appendln("@Suppress(\"NATIVE_GETTER_RETURN_TYPE_SHOULD_BE_NULLABLE\")")
+        indent(commented, level)
+    }
+
     when (f.nativeGetterOrSetter) {
-        NativeGetterOrSetter.GETTER -> append("operator @nativeGetter ")
-        NativeGetterOrSetter.SETTER -> append("operator @nativeSetter ")
+        NativeGetterOrSetter.GETTER -> { appendln("@nativeGetter"); indent(commented, level); append("operator ") }
+        NativeGetterOrSetter.SETTER -> { appendln("@nativeSetter"); indent(commented, level); append("operator ") }
         NativeGetterOrSetter.NONE -> {}
     }
 
@@ -101,7 +126,8 @@ fun Appendable.render(allTypes: Map<String, GenerateTraitOrClass>, typeNamesToUn
     }
     when (iface.kind) {
         GenerateDefinitionKind.CLASS -> append("open class ")
-        GenerateDefinitionKind.TRAIT -> append("interface ")
+        GenerateDefinitionKind.ABSTRACT_CLASS -> append("abstract class ")
+        GenerateDefinitionKind.INTERFACE -> append("interface ")
     }
 
     val allSuperTypes = iface.allSuperTypes(allTypes)
@@ -113,10 +139,11 @@ fun Appendable.render(allTypes: Map<String, GenerateTraitOrClass>, typeNamesToUn
         renderArgumentsDeclaration(primary.constructor.fixRequiredArguments(iface.name).arguments.dynamicIfUnknownType(allTypes.keys), false)
     }
 
+    val superTypesExclude = inheritanceExclude[iface.name] ?: emptySet()
     val superCallName = primary?.initTypeCall?.name
     val superTypesWithCalls =
             (primary?.initTypeCall?.let { listOf(renderCall(it)) } ?: emptyList()) +
-                    iface.superTypes.filter { it != superCallName && it in allSuperTypesNames } +
+                    iface.superTypes.filter { it != superCallName && it in allSuperTypesNames }.filter { it !in superTypesExclude } +
                     (typeNamesToUnions[iface.name] ?: emptyList())
 
     if (superTypesWithCalls.isNotEmpty()) {
@@ -146,14 +173,35 @@ fun Appendable.render(allTypes: Map<String, GenerateTraitOrClass>, typeNamesToUn
     iface.memberAttributes
         .filter { it !in superAttributes && !it.static && (it.isVar || (it.isVal && superAttributesByName[it.name]?.hasNoVars() ?: true)) }
         .map { it.dynamicIfUnknownType(allTypes.keys) }
-        .groupBy { it.signature }.reduceValues().values.forEach { arg ->
-        renderAttributeDeclarationAsProperty(arg,
-                override = arg.signature in superSignatures,
-                open = iface.kind == GenerateDefinitionKind.CLASS && arg.isVal,
-                commented = arg.isCommented(iface.name),
-                omitDefaults = iface.kind == GenerateDefinitionKind.TRAIT,
-                level = 1
-        )
+        .groupBy { it.name }
+        .mapValues { it.value.filter { "${iface.name}.${it.name}" !in commentOutDeclarations && "${iface.name}.${it.name}: ${it.type.render()}" !in commentOutDeclarations  } }
+        .filterValues { it.isNotEmpty() }
+        .reduceValues(::merge).values.forEach { attribute ->
+            val modality = when {
+                attribute.signature in superSignatures -> MemberModality.OVERRIDE
+                iface.kind == GenerateDefinitionKind.CLASS && attribute.isVal -> MemberModality.OPEN
+                iface.kind == GenerateDefinitionKind.ABSTRACT_CLASS -> when {
+                    attribute.initializer != null || attribute.getterSetterNoImpl -> MemberModality.OPEN
+                    else -> MemberModality.ABSTRACT
+                }
+                else -> MemberModality.FINAL
+            }
+
+            if (attribute.name in superAttributesByName && attribute.signature !in superSignatures) {
+                System.err.println("Property ${iface.name}.${attribute.name} has different type in super type(s) so will not be generated: ")
+                for ((superTypeName, attributes) in allSuperTypes.map { it.name to it.memberAttributes.filter { it.name == attribute.name }.distinct() }) {
+                    for (superAttribute in attributes) {
+                        System.err.println("  $superTypeName.${attribute.name}: ${superAttribute.type.render()}")
+                    }
+                }
+            } else {
+                renderAttributeDeclarationAsProperty(attribute,
+                        modality = modality,
+                        commented = attribute.isCommented(iface.name),
+                        omitDefaults = iface.kind == GenerateDefinitionKind.INTERFACE,
+                        level = 1
+                )
+            }
     }
     iface.memberFunctions.filter { it !in superFunctions && !it.static }.map { it.dynamicIfUnknownType(allTypes.keys) }.groupBy { it.signature }.reduceValues(::betterFunction).values.forEach {
         renderFunctionDeclaration(it.fixRequiredArguments(iface.name), it.signature in superSignatures, commented = it.isCommented(iface.name))
@@ -167,10 +215,10 @@ fun Appendable.render(allTypes: Map<String, GenerateTraitOrClass>, typeNamesToUn
         indent(false, 1)
         appendln("companion object {")
         iface.constants.forEach {
-            renderAttributeDeclarationAsProperty(it, override = false, open = false, level = 2, commented = it.isCommented(iface.name))
+            renderAttributeDeclarationAsProperty(it, MemberModality.FINAL, level = 2, commented = it.isCommented(iface.name))
         }
         staticAttributes.forEach {
-            renderAttributeDeclarationAsProperty(it, override = false, open = false, level = 2, commented = it.isCommented(iface.name))
+            renderAttributeDeclarationAsProperty(it, MemberModality.FINAL, level = 2, commented = it.isCommented(iface.name))
         }
         staticFunctions.forEach {
             renderFunctionDeclaration(it.fixRequiredArguments(iface.name), override = false, level = 2, commented = it.isCommented(iface.name))
@@ -217,12 +265,34 @@ fun betterFunction(f1: GenerateFunction, f2: GenerateFunction): GenerateFunction
         f1.copy(
                 arguments = f1.arguments
                         .zip(f2.arguments)
-                        .map { it.first.copy(type = it.map { it.type }.betterType(), name = it.map { it.name }.betterName()) }
+                        .map { it.first.copy(type = it.map { it.type }.betterType(), name = it.map { it.name }.betterName()) },
+                nativeGetterOrSetter = listOf(f1.nativeGetterOrSetter, f2.nativeGetterOrSetter)
+                        .firstOrNull { it != NativeGetterOrSetter.NONE } ?: NativeGetterOrSetter.NONE
         )
 
 private fun <F, T> Pair<F, F>.map(block: (F) -> T) = block(first) to block(second)
 private fun Pair<Type, Type>.betterType() = if (first is DynamicType || first is AnyType) first else second
-private fun Pair<String, String>.betterName() = if (((0..9).map { it.toString() } + listOf("arg")).none { first.toLowerCase().contains(it) }) first else second
+private fun Pair<String, String>.betterName() = if (((0..9).map(Int::toString) + listOf("arg")).none { first.toLowerCase().contains(it) }) first else second
+
+private fun merge(a: GenerateAttribute, b: GenerateAttribute): GenerateAttribute {
+    require(a.name == b.name)
+
+    val type = when {
+        a.type.dropNullable() == b.type.dropNullable() -> a.type.withNullability(a.type.nullable || b.type.nullable)
+        else -> DynamicType
+    }
+
+    return GenerateAttribute(
+            a.name,
+            type,
+            a.initializer ?: b.initializer,
+            a.getterSetterNoImpl || b.getterSetterNoImpl,
+            a.kind,
+            a.override,
+            a.vararg,
+            a.static
+    )
+}
 
 fun <K, V> List<Pair<K, V>>.toMultiMap(): Map<K, List<V>> = groupBy { it.first }.mapValues { it.value.map { it.second } }
 
@@ -243,3 +313,9 @@ fun Appendable.render(namespace: String, ifaces: List<GenerateTraitOrClass>, uni
     }
 }
 
+enum class MemberModality {
+    OPEN,
+    ABSTRACT,
+    OVERRIDE,
+    FINAL
+}

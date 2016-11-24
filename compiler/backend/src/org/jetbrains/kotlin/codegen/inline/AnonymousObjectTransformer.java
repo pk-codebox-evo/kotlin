@@ -23,6 +23,7 @@ import org.jetbrains.kotlin.codegen.AsmUtil;
 import org.jetbrains.kotlin.codegen.ClassBuilder;
 import org.jetbrains.kotlin.codegen.FieldInfo;
 import org.jetbrains.kotlin.codegen.StackValue;
+import org.jetbrains.kotlin.resolve.jvm.AsmTypes;
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOrigin;
 import org.jetbrains.org.objectweb.asm.*;
 import org.jetbrains.org.objectweb.asm.commons.InstructionAdapter;
@@ -67,13 +68,8 @@ public class AnonymousObjectTransformer extends ObjectTransformer<AnonymousObjec
             public void visit(int version, int access, @NotNull String name, String signature, String superName, String[] interfaces) {
                 InlineCodegenUtil.assertVersionNotGreaterThanGeneratedOne(version, name, inliningContext.state);
                 classBuilder.defineClass(null, version, access, name, signature, superName, interfaces);
-                if (interfaces != null) {
-                    for (String anInterface : interfaces) {
-                        if("kotlin/coroutines/Continuation".equals(anInterface)) {
-                            inliningContext.setContinuation(true);
-                            break;
-                        }
-                    }
+                if(AsmTypes.COROUTINE_IMPL.getInternalName().equals(superName)) {
+                    inliningContext.setContinuation(true);
                 }
             }
 
@@ -251,7 +247,7 @@ public class AnonymousObjectTransformer extends ObjectTransformer<AnonymousObjec
         List<Type> descTypes = new ArrayList<Type>();
 
         Parameters constructorParams = constructorInlineBuilder.buildParameters();
-        int[] capturedIndexes = new int[constructorParams.getReal().size() + constructorParams.getCaptured().size()];
+        int[] capturedIndexes = new int[constructorParams.getParameters().size()];
         int index = 0;
         int size = 0;
 
@@ -432,7 +428,7 @@ public class AnonymousObjectTransformer extends ObjectTransformer<AnonymousObjec
 
         Type[] types = Type.getArgumentTypes(constructorDesc);
         for (Type type : types) {
-            LambdaInfo info = indexToLambda.get(constructorParamBuilder.getNextValueParameterIndex());
+            LambdaInfo info = indexToLambda.get(constructorParamBuilder.getNextParameterOffset());
             ParameterInfo parameterInfo = constructorParamBuilder.addNextParameter(type, info != null);
             parameterInfo.setLambda(info);
             if (capturedParams.contains(parameterInfo.getIndex())) {

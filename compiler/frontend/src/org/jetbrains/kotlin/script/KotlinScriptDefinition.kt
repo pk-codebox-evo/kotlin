@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
+ * Copyright 2010-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,87 +18,58 @@ package org.jetbrains.kotlin.script
 
 import com.intellij.openapi.fileTypes.LanguageFileType
 import com.intellij.openapi.project.Project
-import org.jetbrains.kotlin.descriptors.ScriptDescriptor
 import org.jetbrains.kotlin.idea.KotlinFileType
-import org.jetbrains.kotlin.name.ClassId
-import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.parsing.KotlinParserDefinition
 import org.jetbrains.kotlin.psi.KtScript
-import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
-import org.jetbrains.kotlin.resolve.descriptorUtil.module
-import org.jetbrains.kotlin.serialization.deserialization.NotFoundClasses
-import org.jetbrains.kotlin.serialization.deserialization.findNonGenericClassAcrossDependencies
-import org.jetbrains.kotlin.storage.LockBasedStorageManager
-import org.jetbrains.kotlin.types.KotlinType
-import org.jetbrains.kotlin.types.Variance
 import java.io.File
-import java.util.concurrent.Future
-import java.util.concurrent.TimeUnit
+import kotlin.comparisons.compareValues
 import kotlin.reflect.KClass
+import kotlin.script.templates.standard.ScriptTemplateWithArgs
 
-interface KotlinScriptDefinition {
-    val name: String get() = "Kotlin Script"
+open class KotlinScriptDefinition(val template: KClass<out Any>) {
+
+    open val name: String = "Kotlin Script"
 
     // TODO: consider creating separate type (subtype? for kotlin scripts)
-    val fileType: LanguageFileType get() = KotlinFileType.INSTANCE
+    open val fileType: LanguageFileType = KotlinFileType.INSTANCE
 
-    fun <TF> isScript(file: TF): Boolean =
+    open fun <TF> isScript(file: TF): Boolean =
             getFileName(file).endsWith(KotlinParserDefinition.STD_SCRIPT_EXT)
 
-    // TODO: replace these 3 functions with template property
-    fun getScriptParameters(scriptDescriptor: ScriptDescriptor): List<ScriptParameter>
-    fun getScriptSupertypes(scriptDescriptor: ScriptDescriptor): List<KotlinType> = emptyList()
-    fun getScriptParametersToPassToSuperclass(scriptDescriptor: ScriptDescriptor): List<Name> = emptyList()
-
-    fun getScriptName(script: KtScript): Name =
+    open fun getScriptName(script: KtScript): Name =
         ScriptNameUtil.fileNameWithExtensionStripped(script, KotlinParserDefinition.STD_SCRIPT_EXT)
 
-    fun <TF> getDependenciesFor(file: TF, project: Project, previousDependencies: KotlinScriptExternalDependencies?): KotlinScriptExternalDependencies? = null
+    open fun <TF> getDependenciesFor(file: TF, project: Project, previousDependencies: KotlinScriptExternalDependencies?): KotlinScriptExternalDependencies? = null
 }
 
-interface KotlinScriptExternalDependencies {
+interface KotlinScriptExternalDependencies : Comparable<KotlinScriptExternalDependencies> {
     val javaHome: String? get() = null
     val classpath: Iterable<File> get() = emptyList()
     val imports: Iterable<String> get() = emptyList()
     val sources: Iterable<File> get() = emptyList()
     val scripts: Iterable<File> get() = emptyList()
+
+    override fun compareTo(other: KotlinScriptExternalDependencies): Int =
+            compareValues(javaHome, other.javaHome)
+            .chainCompare { compareIterables(classpath, other.classpath) }
+            .chainCompare { compareIterables(imports, other.imports) }
+            .chainCompare { compareIterables(sources, other.sources) }
+            .chainCompare { compareIterables(scripts, other.scripts) }
 }
 
-class KotlinScriptExternalDependenciesUnion(val dependencies: Iterable<KotlinScriptExternalDependencies>) : KotlinScriptExternalDependencies {
-    override val javaHome: String? get() = dependencies.firstOrNull { it.javaHome != null }?.javaHome
-    override val classpath: Iterable<File> get() = dependencies.flatMap { it.classpath }
-    override val imports: Iterable<String> get() = dependencies.flatMap { it.imports }
-    override val sources: Iterable<File> get() = dependencies.flatMap { it.sources }
-    override val scripts: Iterable<File> get() = dependencies.flatMap { it.scripts }
+object StandardScriptDefinition : KotlinScriptDefinition(ScriptTemplateWithArgs::class)
+
+private fun<T: Comparable<T>> compareIterables(a: Iterable<T>, b: Iterable<T>): Int {
+    val ia = a.iterator()
+    val ib = b.iterator()
+    while (true) {
+        if (ia.hasNext() && !ib.hasNext()) return 1
+        if (!ia.hasNext() && !ib.hasNext()) return 0
+        if (!ia.hasNext()) return -1
+        val compRes = compareValues(ia.next(), ib.next())
+        if (compRes != 0) return compRes
+    }
 }
 
-data class ScriptParameter(val name: Name, val type: KotlinType)
-
-object StandardScriptDefinition : KotlinScriptDefinition {
-    private val ARGS_NAME = Name.identifier("args")
-
-    // NOTE: for now we treat .kts files as if they have 'args: Array<String>' parameter
-    // this is not supposed to be final design
-    override fun getScriptParameters(scriptDescriptor: ScriptDescriptor): List<ScriptParameter> =
-            makeStringListScriptParameters(scriptDescriptor, ARGS_NAME)
-}
-
-fun makeStringListScriptParameters(scriptDescriptor: ScriptDescriptor, propertyName: Name): List<ScriptParameter> {
-    val builtIns = scriptDescriptor.builtIns
-    val arrayOfStrings = builtIns.getArrayType(Variance.INVARIANT, builtIns.stringType)
-    return listOf(ScriptParameter(propertyName, arrayOfStrings))
-}
-
-fun makeReflectedClassScriptParameter(scriptDescriptor: ScriptDescriptor, propertyName: Name, kClass: KClass<out Any>): ScriptParameter =
-        ScriptParameter(propertyName, getKotlinType(scriptDescriptor, kClass))
-
-fun getKotlinType(scriptDescriptor: ScriptDescriptor, kClass: KClass<out Any>): KotlinType =
-        getKotlinTypeByFqName(scriptDescriptor,
-                              kClass.qualifiedName ?: throw RuntimeException("Cannot get FQN from $kClass"))
-
-fun getKotlinTypeByFqName(scriptDescriptor: ScriptDescriptor, fqName: String): KotlinType =
-        scriptDescriptor.module.findNonGenericClassAcrossDependencies(
-                ClassId.topLevel(FqName(fqName)),
-                NotFoundClasses(LockBasedStorageManager.NO_LOCKS, scriptDescriptor.module)
-        ).defaultType
+private inline fun Int.chainCompare(compFn: () -> Int ): Int = if (this != 0) this else compFn()

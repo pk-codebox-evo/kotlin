@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.js.translate.general;
 import com.google.dart.compiler.backend.js.ast.*;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.kotlin.builtins.KotlinBuiltIns;
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor;
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor;
 import org.jetbrains.kotlin.idea.MainFunctionDetector;
@@ -49,6 +50,12 @@ import org.jetbrains.kotlin.psi.KtFile;
 import org.jetbrains.kotlin.psi.KtNamedFunction;
 import org.jetbrains.kotlin.resolve.BindingTrace;
 import org.jetbrains.kotlin.resolve.bindingContextUtil.BindingContextUtilsKt;
+import org.jetbrains.kotlin.resolve.constants.CompileTimeConstant;
+import org.jetbrains.kotlin.resolve.constants.ConstantValue;
+import org.jetbrains.kotlin.resolve.constants.NullValue;
+import org.jetbrains.kotlin.resolve.constants.evaluate.ConstantExpressionEvaluator;
+import org.jetbrains.kotlin.types.KotlinType;
+import org.jetbrains.kotlin.types.TypeUtils;
 import org.jetbrains.kotlin.utils.ExceptionUtilsKt;
 
 import java.util.ArrayList;
@@ -56,7 +63,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
-import static org.jetbrains.kotlin.js.translate.general.ModuleWrapperTranslation.*;
+import static org.jetbrains.kotlin.js.translate.general.ModuleWrapperTranslation.wrapIfNecessary;
 import static org.jetbrains.kotlin.js.translate.utils.BindingUtils.getFunctionDescriptor;
 import static org.jetbrains.kotlin.js.translate.utils.JsAstUtils.convertToStatement;
 import static org.jetbrains.kotlin.js.translate.utils.JsAstUtils.toStringLiteralList;
@@ -72,9 +79,12 @@ public final class Translation {
     }
 
     @NotNull
-    public static FunctionTranslator functionTranslator(@NotNull KtDeclarationWithBody function,
-            @NotNull TranslationContext context) {
-        return FunctionTranslator.newInstance(function, context);
+    public static FunctionTranslator functionTranslator(
+            @NotNull KtDeclarationWithBody declaration,
+            @NotNull TranslationContext context,
+            @NotNull JsFunction function
+    ) {
+        return FunctionTranslator.newInstance(declaration, context, function);
     }
 
     @NotNull
@@ -100,6 +110,42 @@ public final class Translation {
         block.getStatements().addAll(innerContext.dynamicContext().jsBlock().getStatements());
 
         return result;
+    }
+
+    @Nullable
+    public static JsExpression translateConstant(
+            @NotNull CompileTimeConstant compileTimeValue,
+            @NotNull KtExpression expression,
+            @NotNull TranslationContext context
+    ) {
+        KotlinType expectedType = context.bindingContext().getType(expression);
+        ConstantValue<?> constant = compileTimeValue.toConstantValue(expectedType != null ? expectedType : TypeUtils.NO_EXPECTED_TYPE);
+        if (constant instanceof NullValue) {
+            return JsLiteral.NULL;
+        }
+        Object value = constant.getValue();
+        if (value instanceof Integer || value instanceof Short || value instanceof Byte) {
+            return context.program().getNumberLiteral(((Number) value).intValue());
+        }
+        else if (value instanceof Long) {
+            return JsAstUtils.newLong((Long) value, context);
+        }
+        else if (value instanceof Number) {
+            return context.program().getNumberLiteral(((Number) value).doubleValue());
+        }
+        else if (value instanceof Boolean) {
+            return JsLiteral.getBoolean((Boolean) value);
+        }
+
+        //TODO: test
+        if (value instanceof String) {
+            return context.program().getStringLiteral((String) value);
+        }
+        if (value instanceof Character) {
+            return context.program().getStringLiteral(value.toString());
+        }
+
+        return null;
     }
 
     @NotNull
@@ -129,6 +175,15 @@ public final class Translation {
             @NotNull TranslationContext context,
             @NotNull JsBlock block
     ) {
+        CompileTimeConstant<?> compileTimeValue = ConstantExpressionEvaluator.getConstant(expression, context.bindingContext());
+        if (compileTimeValue != null) {
+            KotlinType type = context.bindingContext().getType(expression);
+            if (type != null && KotlinBuiltIns.isLong(type)) {
+                JsExpression constantResult = translateConstant(compileTimeValue, expression, context);
+                if (constantResult != null) return constantResult;
+            }
+        }
+
         JsNode jsNode = translateExpression(expression, context, block);
         if (jsNode instanceof  JsExpression) {
             return (JsExpression) jsNode;
@@ -198,17 +253,24 @@ public final class Translation {
     ) {
         StaticContext staticContext = StaticContext.generateStaticContext(bindingTrace, config, moduleDescriptor);
         JsProgram program = staticContext.getProgram();
+        JsName rootPackageName = program.getRootScope().declareName(Namer.getRootPackageName());
 
-        JsFunction rootFunction = JsAstUtils.createFunctionWithEmptyBody(program.getScope());
+        JsFunction rootFunction = staticContext.getRootFunction();
         JsBlock rootBlock = rootFunction.getBody();
         List<JsStatement> statements = rootBlock.getStatements();
-        statements.add(program.getStringLiteral("use strict").makeStmt());
+
+        program.getScope().declareName("_");
 
         TranslationContext context = TranslationContext.rootContext(staticContext, rootFunction);
-        statements.addAll(PackageDeclarationTranslator.translateFiles(files, context));
-        defineModule(context, statements, config.getModuleId());
+        PackageDeclarationTranslator.translateFiles(files, context);
+        staticContext.postProcess();
+        statements.add(0, program.getStringLiteral("use strict").makeStmt());
+        if (!staticContext.isBuiltinModule()) {
+            defineModule(context, statements, config.getModuleId());
+        }
 
         mayBeGenerateTests(files, config, rootBlock, context);
+        rootFunction.getParameters().add(new JsParameter((rootPackageName)));
 
         // Invoke function passing modules as arguments
         // This should help minifier tool to recognize references to these modules as local variables and make them shorter.
@@ -229,7 +291,7 @@ public final class Translation {
             }
         }
 
-        statements.add(new JsReturn(program.getRootScope().declareName(Namer.getRootPackageName()).makeRef()));
+        statements.add(new JsReturn(rootPackageName.makeRef()));
 
         JsBlock block = program.getGlobalBlock();
         block.getStatements().addAll(wrapIfNecessary(config.getModuleId(), rootFunction, importedModuleList, program,

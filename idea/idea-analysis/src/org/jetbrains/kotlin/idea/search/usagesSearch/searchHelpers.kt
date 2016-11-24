@@ -22,10 +22,6 @@ import org.jetbrains.kotlin.asJava.LightClassUtil.PropertyAccessorsPsiMethods
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.descriptors.ValueParameterDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
-import org.jetbrains.kotlin.idea.references.KtDestructuringDeclarationReference
-import org.jetbrains.kotlin.lexer.KtSingleValueToken
-import org.jetbrains.kotlin.lexer.KtTokens
-import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.getNonStrictParentOfType
 import org.jetbrains.kotlin.resolve.BindingContext
@@ -61,23 +57,6 @@ fun PsiNamedElement.getClassNameForCompanionObject(): String? {
         getNonStrictParentOfType<KtClass>()?.name
     } else {
         null
-    }
-}
-
-fun PsiNamedElement.getSpecialNamesToSearch(): Pair<List<String>, Class<*>?> {
-    val name = name
-    return when {
-        name == null || !Name.isValidIdentifier(name) -> Collections.emptyList<String>() to null
-        this is KtParameter -> {
-            val componentFunctionName = this.dataClassComponentFunction()?.name
-            if (componentFunctionName == null) return Collections.emptyList<String>() to null
-
-            return listOf(componentFunctionName.asString(), KtTokens.LPAR.value) to KtDestructuringDeclarationReference::class.java
-        }
-        else -> {
-            val operationSymbolsToSearch = Name.identifier(name).getOperationSymbolsToSearch()
-            operationSymbolsToSearch.first.map { (it as KtSingleValueToken).value } to operationSymbolsToSearch.second
-        }
     }
 }
 

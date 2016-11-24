@@ -1,7 +1,5 @@
 package kotlin.js
 
-import java.util.*
-
 @native
 public val noImpl: Nothing
     get() = throw Exception()
@@ -40,3 +38,6 @@ public fun js(code: String): dynamic = noImpl
  * Function corresponding to JavaScript's `typeof` operator
  */
 public inline fun jsTypeOf(a: Any?): String = js("typeof a")
+
+@library
+internal fun deleteProperty(`object`: Any, property: Any): Unit = noImpl

@@ -16,11 +16,9 @@
 
 package kotlin.jvm.internal
 
-import kotlin.reflect.KCallable
-import kotlin.reflect.KClass
-import kotlin.reflect.KFunction
+import kotlin.reflect.*
 
-class ClassReference(override val jClass: Class<*>) : KClass<Any>, ClassBasedDeclarationContainer {
+public class ClassReference(override val jClass: Class<*>) : KClass<Any>, ClassBasedDeclarationContainer {
     override val simpleName: String?
         get() = error()
 
@@ -42,13 +40,45 @@ class ClassReference(override val jClass: Class<*>) : KClass<Any>, ClassBasedDec
     override val objectInstance: Any?
         get() = error()
 
+    override fun isInstance(value: Any?): Boolean = error()
+
+    override val typeParameters: List<KTypeParameter>
+        get() = error()
+
+    override val supertypes: List<KType>
+        get() = error()
+
+    override val visibility: KVisibility?
+        get() = error()
+
+    override val isFinal: Boolean
+        get() = error()
+
+    override val isOpen: Boolean
+        get() = error()
+
+    override val isAbstract: Boolean
+        get() = error()
+
+    override val isSealed: Boolean
+        get() = error()
+
+    override val isData: Boolean
+        get() = error()
+
+    override val isInner: Boolean
+        get() = error()
+
+    override val isCompanion: Boolean
+        get() = error()
+
     private fun error(): Nothing = throw KotlinReflectionNotSupportedError()
 
     override fun equals(other: Any?) =
-            other is ClassReference && jClass == other.jClass
+            other is ClassReference && javaObjectType == other.javaObjectType
 
     override fun hashCode() =
-            jClass.hashCode()
+            javaObjectType.hashCode()
 
     override fun toString() =
             jClass.toString() + Reflection.REFLECTION_NOT_AVAILABLE

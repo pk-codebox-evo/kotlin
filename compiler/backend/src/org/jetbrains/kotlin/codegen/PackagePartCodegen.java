@@ -85,18 +85,18 @@ public class PackagePartCodegen extends MemberCodegen<KtFile> {
             }
         }
         Annotated annotatedFile = new AnnotatedSimple(new AnnotationsImpl(fileAnnotationDescriptors));
-        AnnotationCodegen.forClass(v.getVisitor(), state.getTypeMapper()).genAnnotations(annotatedFile, null);
+        AnnotationCodegen.forClass(v.getVisitor(), this,  state.getTypeMapper()).genAnnotations(annotatedFile, null);
     }
 
     @Override
     protected void generateBody() {
         for (KtDeclaration declaration : element.getDeclarations()) {
-            if (declaration instanceof KtNamedFunction || declaration instanceof KtProperty) {
-                genFunctionOrProperty(declaration);
+            if (declaration instanceof KtNamedFunction || declaration instanceof KtProperty || declaration instanceof KtTypeAlias) {
+                genSimpleMember(declaration);
             }
         }
 
-        if (state.getClassBuilderMode() == ClassBuilderMode.FULL) {
+        if (state.getClassBuilderMode().generateBodies) {
             generateInitializers(new Function0<ExpressionCodegen>() {
                 @Override
                 public ExpressionCodegen invoke() {

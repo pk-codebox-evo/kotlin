@@ -233,6 +233,10 @@ abstract class KotlinParameterInfoWithCallHandlerBase<TArgumentList : KtElement,
     override fun getParametersForLookup(item: LookupElement, context: ParameterInfoContext) = emptyArray<Any>()
     override fun getParametersForDocumentation(item: FunctionDescriptor, context: ParameterInfoContext) = emptyArray<Any>()
 
+    private val RENDERER = DescriptorRenderer.SHORT_NAMES_IN_TYPES.withOptions {
+        renderUnabbreviatedType = false
+    }
+
     private fun renderParameter(parameter: ValueParameterDescriptor, includeName: Boolean, named: Boolean, project: Project): String {
         return buildString {
             if (named) append("[")
@@ -246,7 +250,7 @@ abstract class KotlinParameterInfoWithCallHandlerBase<TArgumentList : KtElement,
                 append(": ")
             }
 
-            append(DescriptorRenderer.SHORT_NAMES_IN_TYPES.renderType(parameterTypeToRender(parameter)))
+            append(RENDERER.renderType(parameterTypeToRender(parameter)))
 
             if (parameter.hasDefaultValue()) {
                 append(" = ")
@@ -351,7 +355,12 @@ abstract class KotlinParameterInfoWithCallHandlerBase<TArgumentList : KtElement,
         }
 
         val candidates = callToUse.resolveCandidates(bindingContext, resolutionFacade)
-        val resolvedCall = candidates.firstOrNull { descriptorsEqual(it.resultingDescriptor, overload) } ?: return null
+        // First try to find strictly matching descriptor, then one with the same declaration.
+        // The second way is needed for the case when the descriptor was invalidated and new one has been built.
+        // See testLocalFunctionBug().
+        val resolvedCall = candidates.singleOrNull { it.resultingDescriptor.original == overload.original }
+                           ?: candidates.singleOrNull { descriptorsEqual(it.resultingDescriptor, overload) }
+                           ?: return null
         val resultingDescriptor = resolvedCall.resultingDescriptor
 
         fun argumentToParameter(argument: ValueArgument): ValueParameterDescriptor? {

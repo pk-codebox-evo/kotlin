@@ -16,8 +16,10 @@
 
 package org.jetbrains.kotlin.idea.inspections
 
+import com.intellij.codeInsight.FileModificationService
 import com.intellij.codeInsight.intention.LowPriorityAction
 import com.intellij.codeInspection.*
+import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.progress.ProgressIndicator
@@ -27,7 +29,8 @@ import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElementVisitor
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
-import com.intellij.util.ui.UIUtil
+import com.intellij.ui.GuiUtils
+import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
@@ -37,6 +40,7 @@ import org.jetbrains.kotlin.idea.core.targetDescriptors
 import org.jetbrains.kotlin.idea.imports.importableFqName
 import org.jetbrains.kotlin.idea.quickfix.KotlinQuickFixAction
 import org.jetbrains.kotlin.idea.references.KtSimpleNameReference
+import org.jetbrains.kotlin.idea.resolve.frontendService
 import org.jetbrains.kotlin.idea.stubindex.KotlinSourceFilterScope
 import org.jetbrains.kotlin.idea.util.application.executeWriteCommand
 import org.jetbrains.kotlin.idea.util.application.runReadAction
@@ -48,6 +52,7 @@ import org.jetbrains.kotlin.renderer.render
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.isReallySuccess
 import org.jetbrains.kotlin.resolve.isHiddenInResolution
+import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
 import org.jetbrains.kotlin.resolve.scopes.SyntheticScopes
 import org.jetbrains.kotlin.resolve.scopes.collectSyntheticExtensionProperties
 import org.jetbrains.kotlin.synthetic.SyntheticJavaPropertyDescriptor
@@ -66,11 +71,11 @@ class ConflictingExtensionPropertyInspection : AbstractKotlinInspection(), Clean
                     val nameElement = property.nameIdentifier ?: return
                     val propertyDescriptor = property.resolveToDescriptor() as? PropertyDescriptor ?: return
 
-                    val syntheticScopes = resolutionFacade.getFrontendService(SyntheticScopes::class.java)
+                    val syntheticScopes = resolutionFacade.frontendService<SyntheticScopes>()
                     val conflictingExtension = conflictingSyntheticExtension(propertyDescriptor, syntheticScopes) ?: return
 
                     // don't report on hidden declarations
-                    if (propertyDescriptor.isHiddenInResolution()) return
+                    if (propertyDescriptor.isHiddenInResolution(resolutionFacade.frontendService<LanguageVersionSettings>())) return
 
                     val fixes = createFixes(property, conflictingExtension, isOnTheFly)
 
@@ -186,8 +191,8 @@ class ConflictingExtensionPropertyInspection : AbstractKotlinInspection(), Clean
         override fun startInWriteAction() = false
 
         override fun invoke(project: Project, editor: Editor?, file: KtFile) {
-            val declaration = element
-            val fqName = declaration.resolveToDescriptor().importableFqName
+            val declaration = element ?: return
+            val fqName = declaration.resolveToDescriptor(BodyResolveMode.PARTIAL).importableFqName
             if (fqName != null) {
                 ProgressManager.getInstance().run(
                         object : Task.Modal(project, "Searching for imports to delete", true) {
@@ -199,9 +204,10 @@ class ConflictingExtensionPropertyInspection : AbstractKotlinInspection(), Clean
                                             .mapNotNull { ref -> ref.expression.getStrictParentOfType<KtImportDirective>() }
                                             .filter { import -> !import.isAllUnder && import.targetDescriptors().size == 1 }
                                 }
-                                UIUtil.invokeLaterIfNeeded {
+                                GuiUtils.invokeLaterIfNeeded({
                                     project.executeWriteCommand(text) {
                                         importsToDelete.forEach { import ->
+                                            if (!FileModificationService.getInstance().preparePsiElementForWrite(import)) return@forEach
                                             try {
                                                 import.delete()
                                             }
@@ -211,7 +217,7 @@ class ConflictingExtensionPropertyInspection : AbstractKotlinInspection(), Clean
                                         }
                                         declaration.delete()
                                     }
-                                }
+                                }, ModalityState.NON_MODAL)
                             }
                         })
             }
@@ -226,6 +232,7 @@ class ConflictingExtensionPropertyInspection : AbstractKotlinInspection(), Clean
         override fun getText() = familyName
 
         override fun invoke(project: Project, editor: Editor?, file: KtFile) {
+            val element = element ?: return
             val factory = KtPsiFactory(project)
             val name = element.nameAsName!!.render()
             element.addAnnotationWithLineBreak(factory.createAnnotationEntry("@Deprecated(\"Is replaced with automatic synthetic extension\", ReplaceWith(\"$name\"), level = DeprecationLevel.HIDDEN)"))

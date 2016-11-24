@@ -1,4 +1,6 @@
 // WITH_RUNTIME
+// TARGET_BACKEND: JVM
+// NO_INTERCEPT_RESUME_TESTS
 class Controller {
     suspend fun suspendHere(x: Continuation<Unit>) {
         x.resume(Unit)
@@ -11,7 +13,7 @@ fun builder1(coroutine c: Controller.() -> Continuation<Unit>) {
 
 fun builder2(coroutine c: Controller.() -> Continuation<Unit>) {
     val continuation = c(Controller())
-    val declaredField = continuation!!.javaClass.getDeclaredField("label")
+    val declaredField = continuation.javaClass.superclass.getDeclaredField("label")
     declaredField.setAccessible(true)
     declaredField.set(continuation, -3)
     continuation.resume(Unit)
@@ -35,7 +37,27 @@ fun box(): String {
         return "fail 3"
     } catch (e: java.lang.IllegalStateException) {
         if (e.message != "call to 'resume' before 'invoke' with coroutine") return "fail 4: ${e.message!!}"
-        return "OK"
+    }
+
+    var result = "OK"
+
+    try {
+        builder1 {
+            result = "fail 5"
+        }
+        return "fail 6"
+    } catch (e: java.lang.IllegalStateException) {
+        if (e.message != "call to 'resume' before 'invoke' with coroutine") return "fail 7: ${e.message!!}"
+    }
+
+    try {
+        builder2 {
+            result = "fail 8"
+        }
+        return "fail 9"
+    } catch (e: java.lang.IllegalStateException) {
+        if (e.message != "call to 'resume' before 'invoke' with coroutine") return "fail 10: ${e.message!!}"
+        return result
     }
 
     return "fail"

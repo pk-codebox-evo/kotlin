@@ -9,9 +9,6 @@ package kotlin.collections
 //
 
 import kotlin.comparisons.*
-import java.util.*
-
-import java.util.Collections // TODO: it's temporary while we have java.util.Collections in js
 
 /**
  * Returns 1st *element* from the collection.
@@ -4430,7 +4427,7 @@ public fun CharArray.reverse(): Unit {
 public fun <T> Array<out T>.reversed(): List<T> {
     if (isEmpty()) return emptyList()
     val list = toMutableList()
-    Collections.reverse(list)
+    list.reverse()
     return list
 }
 
@@ -4440,7 +4437,7 @@ public fun <T> Array<out T>.reversed(): List<T> {
 public fun ByteArray.reversed(): List<Byte> {
     if (isEmpty()) return emptyList()
     val list = toMutableList()
-    Collections.reverse(list)
+    list.reverse()
     return list
 }
 
@@ -4450,7 +4447,7 @@ public fun ByteArray.reversed(): List<Byte> {
 public fun ShortArray.reversed(): List<Short> {
     if (isEmpty()) return emptyList()
     val list = toMutableList()
-    Collections.reverse(list)
+    list.reverse()
     return list
 }
 
@@ -4460,7 +4457,7 @@ public fun ShortArray.reversed(): List<Short> {
 public fun IntArray.reversed(): List<Int> {
     if (isEmpty()) return emptyList()
     val list = toMutableList()
-    Collections.reverse(list)
+    list.reverse()
     return list
 }
 
@@ -4470,7 +4467,7 @@ public fun IntArray.reversed(): List<Int> {
 public fun LongArray.reversed(): List<Long> {
     if (isEmpty()) return emptyList()
     val list = toMutableList()
-    Collections.reverse(list)
+    list.reverse()
     return list
 }
 
@@ -4480,7 +4477,7 @@ public fun LongArray.reversed(): List<Long> {
 public fun FloatArray.reversed(): List<Float> {
     if (isEmpty()) return emptyList()
     val list = toMutableList()
-    Collections.reverse(list)
+    list.reverse()
     return list
 }
 
@@ -4490,7 +4487,7 @@ public fun FloatArray.reversed(): List<Float> {
 public fun DoubleArray.reversed(): List<Double> {
     if (isEmpty()) return emptyList()
     val list = toMutableList()
-    Collections.reverse(list)
+    list.reverse()
     return list
 }
 
@@ -4500,7 +4497,7 @@ public fun DoubleArray.reversed(): List<Double> {
 public fun BooleanArray.reversed(): List<Boolean> {
     if (isEmpty()) return emptyList()
     val list = toMutableList()
-    Collections.reverse(list)
+    list.reverse()
     return list
 }
 
@@ -4510,7 +4507,7 @@ public fun BooleanArray.reversed(): List<Boolean> {
 public fun CharArray.reversed(): List<Char> {
     if (isEmpty()) return emptyList()
     val list = toMutableList()
-    Collections.reverse(list)
+    list.reverse()
     return list
 }
 
@@ -5151,6 +5148,326 @@ public fun CharArray.sortedWith(comparator: Comparator<in Char>): List<Char> {
 }
 
 /**
+ * Returns `true` if the two specified arrays are *deeply* equal to one another,
+ * i.e. contain the same number of the same elements in the same order.
+ * 
+ * If two corresponding elements are nested arrays, they are also compared deeply.
+ * If any of arrays contains itself on any nesting level the behavior is undefined.
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline infix fun <T> Array<out T>.contentDeepEquals(other: Array<out T>): Boolean {
+    return java.util.Arrays.deepEquals(this, other)
+}
+
+/**
+ * Returns a hash code based on the contents of this array as if it is [List].
+ * Nested arrays are treated as lists too.
+ * 
+ * If any of arrays contains itself on any nesting level the behavior is undefined.
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline fun <T> Array<out T>.contentDeepHashCode(): Int {
+    return java.util.Arrays.deepHashCode(this)
+}
+
+/**
+ * Returns a string representation of the contents of this array as if it is a [List].
+ * Nested arrays are treated as lists too.
+ * 
+ * If any of arrays contains itself on any nesting level that reference
+ * is rendered as `"[...]"` to prevent recursion.
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline fun <T> Array<out T>.contentDeepToString(): String {
+    return java.util.Arrays.deepToString(this)
+}
+
+/**
+ * Returns `true` if the two specified arrays are *structurally* equal to one another,
+ * i.e. contain the same number of the same elements in the same order.
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline infix fun <T> Array<out T>.contentEquals(other: Array<out T>): Boolean {
+    return java.util.Arrays.equals(this, other)
+}
+
+/**
+ * Returns `true` if the two specified arrays are *structurally* equal to one another,
+ * i.e. contain the same number of the same elements in the same order.
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline infix fun ByteArray.contentEquals(other: ByteArray): Boolean {
+    return java.util.Arrays.equals(this, other)
+}
+
+/**
+ * Returns `true` if the two specified arrays are *structurally* equal to one another,
+ * i.e. contain the same number of the same elements in the same order.
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline infix fun ShortArray.contentEquals(other: ShortArray): Boolean {
+    return java.util.Arrays.equals(this, other)
+}
+
+/**
+ * Returns `true` if the two specified arrays are *structurally* equal to one another,
+ * i.e. contain the same number of the same elements in the same order.
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline infix fun IntArray.contentEquals(other: IntArray): Boolean {
+    return java.util.Arrays.equals(this, other)
+}
+
+/**
+ * Returns `true` if the two specified arrays are *structurally* equal to one another,
+ * i.e. contain the same number of the same elements in the same order.
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline infix fun LongArray.contentEquals(other: LongArray): Boolean {
+    return java.util.Arrays.equals(this, other)
+}
+
+/**
+ * Returns `true` if the two specified arrays are *structurally* equal to one another,
+ * i.e. contain the same number of the same elements in the same order.
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline infix fun FloatArray.contentEquals(other: FloatArray): Boolean {
+    return java.util.Arrays.equals(this, other)
+}
+
+/**
+ * Returns `true` if the two specified arrays are *structurally* equal to one another,
+ * i.e. contain the same number of the same elements in the same order.
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline infix fun DoubleArray.contentEquals(other: DoubleArray): Boolean {
+    return java.util.Arrays.equals(this, other)
+}
+
+/**
+ * Returns `true` if the two specified arrays are *structurally* equal to one another,
+ * i.e. contain the same number of the same elements in the same order.
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline infix fun BooleanArray.contentEquals(other: BooleanArray): Boolean {
+    return java.util.Arrays.equals(this, other)
+}
+
+/**
+ * Returns `true` if the two specified arrays are *structurally* equal to one another,
+ * i.e. contain the same number of the same elements in the same order.
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline infix fun CharArray.contentEquals(other: CharArray): Boolean {
+    return java.util.Arrays.equals(this, other)
+}
+
+/**
+ * Returns a hash code based on the contents of this array as if it is [List].
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline fun <T> Array<out T>.contentHashCode(): Int {
+    return java.util.Arrays.hashCode(this)
+}
+
+/**
+ * Returns a hash code based on the contents of this array as if it is [List].
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline fun ByteArray.contentHashCode(): Int {
+    return java.util.Arrays.hashCode(this)
+}
+
+/**
+ * Returns a hash code based on the contents of this array as if it is [List].
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline fun ShortArray.contentHashCode(): Int {
+    return java.util.Arrays.hashCode(this)
+}
+
+/**
+ * Returns a hash code based on the contents of this array as if it is [List].
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline fun IntArray.contentHashCode(): Int {
+    return java.util.Arrays.hashCode(this)
+}
+
+/**
+ * Returns a hash code based on the contents of this array as if it is [List].
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline fun LongArray.contentHashCode(): Int {
+    return java.util.Arrays.hashCode(this)
+}
+
+/**
+ * Returns a hash code based on the contents of this array as if it is [List].
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline fun FloatArray.contentHashCode(): Int {
+    return java.util.Arrays.hashCode(this)
+}
+
+/**
+ * Returns a hash code based on the contents of this array as if it is [List].
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline fun DoubleArray.contentHashCode(): Int {
+    return java.util.Arrays.hashCode(this)
+}
+
+/**
+ * Returns a hash code based on the contents of this array as if it is [List].
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline fun BooleanArray.contentHashCode(): Int {
+    return java.util.Arrays.hashCode(this)
+}
+
+/**
+ * Returns a hash code based on the contents of this array as if it is [List].
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline fun CharArray.contentHashCode(): Int {
+    return java.util.Arrays.hashCode(this)
+}
+
+/**
+ * Returns a string representation of the contents of the specified array as if it is [List].
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline fun <T> Array<out T>.contentToString(): String {
+    return java.util.Arrays.toString(this)
+}
+
+/**
+ * Returns a string representation of the contents of the specified array as if it is [List].
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline fun ByteArray.contentToString(): String {
+    return java.util.Arrays.toString(this)
+}
+
+/**
+ * Returns a string representation of the contents of the specified array as if it is [List].
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline fun ShortArray.contentToString(): String {
+    return java.util.Arrays.toString(this)
+}
+
+/**
+ * Returns a string representation of the contents of the specified array as if it is [List].
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline fun IntArray.contentToString(): String {
+    return java.util.Arrays.toString(this)
+}
+
+/**
+ * Returns a string representation of the contents of the specified array as if it is [List].
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline fun LongArray.contentToString(): String {
+    return java.util.Arrays.toString(this)
+}
+
+/**
+ * Returns a string representation of the contents of the specified array as if it is [List].
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline fun FloatArray.contentToString(): String {
+    return java.util.Arrays.toString(this)
+}
+
+/**
+ * Returns a string representation of the contents of the specified array as if it is [List].
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline fun DoubleArray.contentToString(): String {
+    return java.util.Arrays.toString(this)
+}
+
+/**
+ * Returns a string representation of the contents of the specified array as if it is [List].
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline fun BooleanArray.contentToString(): String {
+    return java.util.Arrays.toString(this)
+}
+
+/**
+ * Returns a string representation of the contents of the specified array as if it is [List].
+ */
+@kotlin.jvm.JvmVersion
+@SinceKotlin("1.1")
+@kotlin.internal.InlineOnly
+public inline fun CharArray.contentToString(): String {
+    return java.util.Arrays.toString(this)
+}
+
+/**
  * Returns the range of valid indices for the array.
  */
 public val <T> Array<out T>.indices: IntRange
@@ -5485,7 +5802,9 @@ public fun Array<out Short>.toShortArray(): ShortArray {
 /**
  * Returns a [Map] containing key-value pairs provided by [transform] function
  * applied to elements of the given array.
+ * 
  * If any of two pairs would have the same key the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <T, K, V> Array<out T>.associate(transform: (T) -> Pair<K, V>): Map<K, V> {
@@ -5497,7 +5816,9 @@ public inline fun <T, K, V> Array<out T>.associate(transform: (T) -> Pair<K, V>)
 /**
  * Returns a [Map] containing key-value pairs provided by [transform] function
  * applied to elements of the given array.
+ * 
  * If any of two pairs would have the same key the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <K, V> ByteArray.associate(transform: (Byte) -> Pair<K, V>): Map<K, V> {
@@ -5509,7 +5830,9 @@ public inline fun <K, V> ByteArray.associate(transform: (Byte) -> Pair<K, V>): M
 /**
  * Returns a [Map] containing key-value pairs provided by [transform] function
  * applied to elements of the given array.
+ * 
  * If any of two pairs would have the same key the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <K, V> ShortArray.associate(transform: (Short) -> Pair<K, V>): Map<K, V> {
@@ -5521,7 +5844,9 @@ public inline fun <K, V> ShortArray.associate(transform: (Short) -> Pair<K, V>):
 /**
  * Returns a [Map] containing key-value pairs provided by [transform] function
  * applied to elements of the given array.
+ * 
  * If any of two pairs would have the same key the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <K, V> IntArray.associate(transform: (Int) -> Pair<K, V>): Map<K, V> {
@@ -5533,7 +5858,9 @@ public inline fun <K, V> IntArray.associate(transform: (Int) -> Pair<K, V>): Map
 /**
  * Returns a [Map] containing key-value pairs provided by [transform] function
  * applied to elements of the given array.
+ * 
  * If any of two pairs would have the same key the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <K, V> LongArray.associate(transform: (Long) -> Pair<K, V>): Map<K, V> {
@@ -5545,7 +5872,9 @@ public inline fun <K, V> LongArray.associate(transform: (Long) -> Pair<K, V>): M
 /**
  * Returns a [Map] containing key-value pairs provided by [transform] function
  * applied to elements of the given array.
+ * 
  * If any of two pairs would have the same key the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <K, V> FloatArray.associate(transform: (Float) -> Pair<K, V>): Map<K, V> {
@@ -5557,7 +5886,9 @@ public inline fun <K, V> FloatArray.associate(transform: (Float) -> Pair<K, V>):
 /**
  * Returns a [Map] containing key-value pairs provided by [transform] function
  * applied to elements of the given array.
+ * 
  * If any of two pairs would have the same key the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <K, V> DoubleArray.associate(transform: (Double) -> Pair<K, V>): Map<K, V> {
@@ -5569,7 +5900,9 @@ public inline fun <K, V> DoubleArray.associate(transform: (Double) -> Pair<K, V>
 /**
  * Returns a [Map] containing key-value pairs provided by [transform] function
  * applied to elements of the given array.
+ * 
  * If any of two pairs would have the same key the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <K, V> BooleanArray.associate(transform: (Boolean) -> Pair<K, V>): Map<K, V> {
@@ -5581,7 +5914,9 @@ public inline fun <K, V> BooleanArray.associate(transform: (Boolean) -> Pair<K, 
 /**
  * Returns a [Map] containing key-value pairs provided by [transform] function
  * applied to elements of the given array.
+ * 
  * If any of two pairs would have the same key the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <K, V> CharArray.associate(transform: (Char) -> Pair<K, V>): Map<K, V> {
@@ -5593,7 +5928,9 @@ public inline fun <K, V> CharArray.associate(transform: (Char) -> Pair<K, V>): M
 /**
  * Returns a [Map] containing the elements from the given array indexed by the key
  * returned from [keySelector] function applied to each element.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <T, K> Array<out T>.associateBy(keySelector: (T) -> K): Map<K, T> {
@@ -5605,7 +5942,9 @@ public inline fun <T, K> Array<out T>.associateBy(keySelector: (T) -> K): Map<K,
 /**
  * Returns a [Map] containing the elements from the given array indexed by the key
  * returned from [keySelector] function applied to each element.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <K> ByteArray.associateBy(keySelector: (Byte) -> K): Map<K, Byte> {
@@ -5617,7 +5956,9 @@ public inline fun <K> ByteArray.associateBy(keySelector: (Byte) -> K): Map<K, By
 /**
  * Returns a [Map] containing the elements from the given array indexed by the key
  * returned from [keySelector] function applied to each element.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <K> ShortArray.associateBy(keySelector: (Short) -> K): Map<K, Short> {
@@ -5629,7 +5970,9 @@ public inline fun <K> ShortArray.associateBy(keySelector: (Short) -> K): Map<K, 
 /**
  * Returns a [Map] containing the elements from the given array indexed by the key
  * returned from [keySelector] function applied to each element.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <K> IntArray.associateBy(keySelector: (Int) -> K): Map<K, Int> {
@@ -5641,7 +5984,9 @@ public inline fun <K> IntArray.associateBy(keySelector: (Int) -> K): Map<K, Int>
 /**
  * Returns a [Map] containing the elements from the given array indexed by the key
  * returned from [keySelector] function applied to each element.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <K> LongArray.associateBy(keySelector: (Long) -> K): Map<K, Long> {
@@ -5653,7 +5998,9 @@ public inline fun <K> LongArray.associateBy(keySelector: (Long) -> K): Map<K, Lo
 /**
  * Returns a [Map] containing the elements from the given array indexed by the key
  * returned from [keySelector] function applied to each element.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <K> FloatArray.associateBy(keySelector: (Float) -> K): Map<K, Float> {
@@ -5665,7 +6012,9 @@ public inline fun <K> FloatArray.associateBy(keySelector: (Float) -> K): Map<K, 
 /**
  * Returns a [Map] containing the elements from the given array indexed by the key
  * returned from [keySelector] function applied to each element.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <K> DoubleArray.associateBy(keySelector: (Double) -> K): Map<K, Double> {
@@ -5677,7 +6026,9 @@ public inline fun <K> DoubleArray.associateBy(keySelector: (Double) -> K): Map<K
 /**
  * Returns a [Map] containing the elements from the given array indexed by the key
  * returned from [keySelector] function applied to each element.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <K> BooleanArray.associateBy(keySelector: (Boolean) -> K): Map<K, Boolean> {
@@ -5689,7 +6040,9 @@ public inline fun <K> BooleanArray.associateBy(keySelector: (Boolean) -> K): Map
 /**
  * Returns a [Map] containing the elements from the given array indexed by the key
  * returned from [keySelector] function applied to each element.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <K> CharArray.associateBy(keySelector: (Char) -> K): Map<K, Char> {
@@ -5700,7 +6053,9 @@ public inline fun <K> CharArray.associateBy(keySelector: (Char) -> K): Map<K, Ch
 
 /**
  * Returns a [Map] containing the values provided by [valueTransform] and indexed by [keySelector] functions applied to elements of the given array.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <T, K, V> Array<out T>.associateBy(keySelector: (T) -> K, valueTransform: (T) -> V): Map<K, V> {
@@ -5711,7 +6066,9 @@ public inline fun <T, K, V> Array<out T>.associateBy(keySelector: (T) -> K, valu
 
 /**
  * Returns a [Map] containing the values provided by [valueTransform] and indexed by [keySelector] functions applied to elements of the given array.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <K, V> ByteArray.associateBy(keySelector: (Byte) -> K, valueTransform: (Byte) -> V): Map<K, V> {
@@ -5722,7 +6079,9 @@ public inline fun <K, V> ByteArray.associateBy(keySelector: (Byte) -> K, valueTr
 
 /**
  * Returns a [Map] containing the values provided by [valueTransform] and indexed by [keySelector] functions applied to elements of the given array.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <K, V> ShortArray.associateBy(keySelector: (Short) -> K, valueTransform: (Short) -> V): Map<K, V> {
@@ -5733,7 +6092,9 @@ public inline fun <K, V> ShortArray.associateBy(keySelector: (Short) -> K, value
 
 /**
  * Returns a [Map] containing the values provided by [valueTransform] and indexed by [keySelector] functions applied to elements of the given array.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <K, V> IntArray.associateBy(keySelector: (Int) -> K, valueTransform: (Int) -> V): Map<K, V> {
@@ -5744,7 +6105,9 @@ public inline fun <K, V> IntArray.associateBy(keySelector: (Int) -> K, valueTran
 
 /**
  * Returns a [Map] containing the values provided by [valueTransform] and indexed by [keySelector] functions applied to elements of the given array.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <K, V> LongArray.associateBy(keySelector: (Long) -> K, valueTransform: (Long) -> V): Map<K, V> {
@@ -5755,7 +6118,9 @@ public inline fun <K, V> LongArray.associateBy(keySelector: (Long) -> K, valueTr
 
 /**
  * Returns a [Map] containing the values provided by [valueTransform] and indexed by [keySelector] functions applied to elements of the given array.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <K, V> FloatArray.associateBy(keySelector: (Float) -> K, valueTransform: (Float) -> V): Map<K, V> {
@@ -5766,7 +6131,9 @@ public inline fun <K, V> FloatArray.associateBy(keySelector: (Float) -> K, value
 
 /**
  * Returns a [Map] containing the values provided by [valueTransform] and indexed by [keySelector] functions applied to elements of the given array.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <K, V> DoubleArray.associateBy(keySelector: (Double) -> K, valueTransform: (Double) -> V): Map<K, V> {
@@ -5777,7 +6144,9 @@ public inline fun <K, V> DoubleArray.associateBy(keySelector: (Double) -> K, val
 
 /**
  * Returns a [Map] containing the values provided by [valueTransform] and indexed by [keySelector] functions applied to elements of the given array.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <K, V> BooleanArray.associateBy(keySelector: (Boolean) -> K, valueTransform: (Boolean) -> V): Map<K, V> {
@@ -5788,7 +6157,9 @@ public inline fun <K, V> BooleanArray.associateBy(keySelector: (Boolean) -> K, v
 
 /**
  * Returns a [Map] containing the values provided by [valueTransform] and indexed by [keySelector] functions applied to elements of the given array.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
+ * 
  * The returned map preserves the entry iteration order of the original array.
  */
 public inline fun <K, V> CharArray.associateBy(keySelector: (Char) -> K, valueTransform: (Char) -> V): Map<K, V> {
@@ -5801,6 +6172,7 @@ public inline fun <K, V> CharArray.associateBy(keySelector: (Char) -> K, valueTr
  * Populates and returns the [destination] mutable map with key-value pairs,
  * where key is provided by the [keySelector] function applied to each element of the given array
  * and value is the element itself.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
  */
 public inline fun <T, K, M : MutableMap<in K, in T>> Array<out T>.associateByTo(destination: M, keySelector: (T) -> K): M {
@@ -5814,6 +6186,7 @@ public inline fun <T, K, M : MutableMap<in K, in T>> Array<out T>.associateByTo(
  * Populates and returns the [destination] mutable map with key-value pairs,
  * where key is provided by the [keySelector] function applied to each element of the given array
  * and value is the element itself.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
  */
 public inline fun <K, M : MutableMap<in K, in Byte>> ByteArray.associateByTo(destination: M, keySelector: (Byte) -> K): M {
@@ -5827,6 +6200,7 @@ public inline fun <K, M : MutableMap<in K, in Byte>> ByteArray.associateByTo(des
  * Populates and returns the [destination] mutable map with key-value pairs,
  * where key is provided by the [keySelector] function applied to each element of the given array
  * and value is the element itself.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
  */
 public inline fun <K, M : MutableMap<in K, in Short>> ShortArray.associateByTo(destination: M, keySelector: (Short) -> K): M {
@@ -5840,6 +6214,7 @@ public inline fun <K, M : MutableMap<in K, in Short>> ShortArray.associateByTo(d
  * Populates and returns the [destination] mutable map with key-value pairs,
  * where key is provided by the [keySelector] function applied to each element of the given array
  * and value is the element itself.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
  */
 public inline fun <K, M : MutableMap<in K, in Int>> IntArray.associateByTo(destination: M, keySelector: (Int) -> K): M {
@@ -5853,6 +6228,7 @@ public inline fun <K, M : MutableMap<in K, in Int>> IntArray.associateByTo(desti
  * Populates and returns the [destination] mutable map with key-value pairs,
  * where key is provided by the [keySelector] function applied to each element of the given array
  * and value is the element itself.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
  */
 public inline fun <K, M : MutableMap<in K, in Long>> LongArray.associateByTo(destination: M, keySelector: (Long) -> K): M {
@@ -5866,6 +6242,7 @@ public inline fun <K, M : MutableMap<in K, in Long>> LongArray.associateByTo(des
  * Populates and returns the [destination] mutable map with key-value pairs,
  * where key is provided by the [keySelector] function applied to each element of the given array
  * and value is the element itself.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
  */
 public inline fun <K, M : MutableMap<in K, in Float>> FloatArray.associateByTo(destination: M, keySelector: (Float) -> K): M {
@@ -5879,6 +6256,7 @@ public inline fun <K, M : MutableMap<in K, in Float>> FloatArray.associateByTo(d
  * Populates and returns the [destination] mutable map with key-value pairs,
  * where key is provided by the [keySelector] function applied to each element of the given array
  * and value is the element itself.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
  */
 public inline fun <K, M : MutableMap<in K, in Double>> DoubleArray.associateByTo(destination: M, keySelector: (Double) -> K): M {
@@ -5892,6 +6270,7 @@ public inline fun <K, M : MutableMap<in K, in Double>> DoubleArray.associateByTo
  * Populates and returns the [destination] mutable map with key-value pairs,
  * where key is provided by the [keySelector] function applied to each element of the given array
  * and value is the element itself.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
  */
 public inline fun <K, M : MutableMap<in K, in Boolean>> BooleanArray.associateByTo(destination: M, keySelector: (Boolean) -> K): M {
@@ -5905,6 +6284,7 @@ public inline fun <K, M : MutableMap<in K, in Boolean>> BooleanArray.associateBy
  * Populates and returns the [destination] mutable map with key-value pairs,
  * where key is provided by the [keySelector] function applied to each element of the given array
  * and value is the element itself.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
  */
 public inline fun <K, M : MutableMap<in K, in Char>> CharArray.associateByTo(destination: M, keySelector: (Char) -> K): M {
@@ -5918,6 +6298,7 @@ public inline fun <K, M : MutableMap<in K, in Char>> CharArray.associateByTo(des
  * Populates and returns the [destination] mutable map with key-value pairs,
  * where key is provided by the [keySelector] function and
  * and value is provided by the [valueTransform] function applied to elements of the given array.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
  */
 public inline fun <T, K, V, M : MutableMap<in K, in V>> Array<out T>.associateByTo(destination: M, keySelector: (T) -> K, valueTransform: (T) -> V): M {
@@ -5931,6 +6312,7 @@ public inline fun <T, K, V, M : MutableMap<in K, in V>> Array<out T>.associateBy
  * Populates and returns the [destination] mutable map with key-value pairs,
  * where key is provided by the [keySelector] function and
  * and value is provided by the [valueTransform] function applied to elements of the given array.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
  */
 public inline fun <K, V, M : MutableMap<in K, in V>> ByteArray.associateByTo(destination: M, keySelector: (Byte) -> K, valueTransform: (Byte) -> V): M {
@@ -5944,6 +6326,7 @@ public inline fun <K, V, M : MutableMap<in K, in V>> ByteArray.associateByTo(des
  * Populates and returns the [destination] mutable map with key-value pairs,
  * where key is provided by the [keySelector] function and
  * and value is provided by the [valueTransform] function applied to elements of the given array.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
  */
 public inline fun <K, V, M : MutableMap<in K, in V>> ShortArray.associateByTo(destination: M, keySelector: (Short) -> K, valueTransform: (Short) -> V): M {
@@ -5957,6 +6340,7 @@ public inline fun <K, V, M : MutableMap<in K, in V>> ShortArray.associateByTo(de
  * Populates and returns the [destination] mutable map with key-value pairs,
  * where key is provided by the [keySelector] function and
  * and value is provided by the [valueTransform] function applied to elements of the given array.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
  */
 public inline fun <K, V, M : MutableMap<in K, in V>> IntArray.associateByTo(destination: M, keySelector: (Int) -> K, valueTransform: (Int) -> V): M {
@@ -5970,6 +6354,7 @@ public inline fun <K, V, M : MutableMap<in K, in V>> IntArray.associateByTo(dest
  * Populates and returns the [destination] mutable map with key-value pairs,
  * where key is provided by the [keySelector] function and
  * and value is provided by the [valueTransform] function applied to elements of the given array.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
  */
 public inline fun <K, V, M : MutableMap<in K, in V>> LongArray.associateByTo(destination: M, keySelector: (Long) -> K, valueTransform: (Long) -> V): M {
@@ -5983,6 +6368,7 @@ public inline fun <K, V, M : MutableMap<in K, in V>> LongArray.associateByTo(des
  * Populates and returns the [destination] mutable map with key-value pairs,
  * where key is provided by the [keySelector] function and
  * and value is provided by the [valueTransform] function applied to elements of the given array.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
  */
 public inline fun <K, V, M : MutableMap<in K, in V>> FloatArray.associateByTo(destination: M, keySelector: (Float) -> K, valueTransform: (Float) -> V): M {
@@ -5996,6 +6382,7 @@ public inline fun <K, V, M : MutableMap<in K, in V>> FloatArray.associateByTo(de
  * Populates and returns the [destination] mutable map with key-value pairs,
  * where key is provided by the [keySelector] function and
  * and value is provided by the [valueTransform] function applied to elements of the given array.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
  */
 public inline fun <K, V, M : MutableMap<in K, in V>> DoubleArray.associateByTo(destination: M, keySelector: (Double) -> K, valueTransform: (Double) -> V): M {
@@ -6009,6 +6396,7 @@ public inline fun <K, V, M : MutableMap<in K, in V>> DoubleArray.associateByTo(d
  * Populates and returns the [destination] mutable map with key-value pairs,
  * where key is provided by the [keySelector] function and
  * and value is provided by the [valueTransform] function applied to elements of the given array.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
  */
 public inline fun <K, V, M : MutableMap<in K, in V>> BooleanArray.associateByTo(destination: M, keySelector: (Boolean) -> K, valueTransform: (Boolean) -> V): M {
@@ -6022,6 +6410,7 @@ public inline fun <K, V, M : MutableMap<in K, in V>> BooleanArray.associateByTo(
  * Populates and returns the [destination] mutable map with key-value pairs,
  * where key is provided by the [keySelector] function and
  * and value is provided by the [valueTransform] function applied to elements of the given array.
+ * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
  */
 public inline fun <K, V, M : MutableMap<in K, in V>> CharArray.associateByTo(destination: M, keySelector: (Char) -> K, valueTransform: (Char) -> V): M {
@@ -6034,6 +6423,7 @@ public inline fun <K, V, M : MutableMap<in K, in V>> CharArray.associateByTo(des
 /**
  * Populates and returns the [destination] mutable map with key-value pairs
  * provided by [transform] function applied to each element of the given array.
+ * 
  * If any of two pairs would have the same key the last one gets added to the map.
  */
 public inline fun <T, K, V, M : MutableMap<in K, in V>> Array<out T>.associateTo(destination: M, transform: (T) -> Pair<K, V>): M {
@@ -6046,6 +6436,7 @@ public inline fun <T, K, V, M : MutableMap<in K, in V>> Array<out T>.associateTo
 /**
  * Populates and returns the [destination] mutable map with key-value pairs
  * provided by [transform] function applied to each element of the given array.
+ * 
  * If any of two pairs would have the same key the last one gets added to the map.
  */
 public inline fun <K, V, M : MutableMap<in K, in V>> ByteArray.associateTo(destination: M, transform: (Byte) -> Pair<K, V>): M {
@@ -6058,6 +6449,7 @@ public inline fun <K, V, M : MutableMap<in K, in V>> ByteArray.associateTo(desti
 /**
  * Populates and returns the [destination] mutable map with key-value pairs
  * provided by [transform] function applied to each element of the given array.
+ * 
  * If any of two pairs would have the same key the last one gets added to the map.
  */
 public inline fun <K, V, M : MutableMap<in K, in V>> ShortArray.associateTo(destination: M, transform: (Short) -> Pair<K, V>): M {
@@ -6070,6 +6462,7 @@ public inline fun <K, V, M : MutableMap<in K, in V>> ShortArray.associateTo(dest
 /**
  * Populates and returns the [destination] mutable map with key-value pairs
  * provided by [transform] function applied to each element of the given array.
+ * 
  * If any of two pairs would have the same key the last one gets added to the map.
  */
 public inline fun <K, V, M : MutableMap<in K, in V>> IntArray.associateTo(destination: M, transform: (Int) -> Pair<K, V>): M {
@@ -6082,6 +6475,7 @@ public inline fun <K, V, M : MutableMap<in K, in V>> IntArray.associateTo(destin
 /**
  * Populates and returns the [destination] mutable map with key-value pairs
  * provided by [transform] function applied to each element of the given array.
+ * 
  * If any of two pairs would have the same key the last one gets added to the map.
  */
 public inline fun <K, V, M : MutableMap<in K, in V>> LongArray.associateTo(destination: M, transform: (Long) -> Pair<K, V>): M {
@@ -6094,6 +6488,7 @@ public inline fun <K, V, M : MutableMap<in K, in V>> LongArray.associateTo(desti
 /**
  * Populates and returns the [destination] mutable map with key-value pairs
  * provided by [transform] function applied to each element of the given array.
+ * 
  * If any of two pairs would have the same key the last one gets added to the map.
  */
 public inline fun <K, V, M : MutableMap<in K, in V>> FloatArray.associateTo(destination: M, transform: (Float) -> Pair<K, V>): M {
@@ -6106,6 +6501,7 @@ public inline fun <K, V, M : MutableMap<in K, in V>> FloatArray.associateTo(dest
 /**
  * Populates and returns the [destination] mutable map with key-value pairs
  * provided by [transform] function applied to each element of the given array.
+ * 
  * If any of two pairs would have the same key the last one gets added to the map.
  */
 public inline fun <K, V, M : MutableMap<in K, in V>> DoubleArray.associateTo(destination: M, transform: (Double) -> Pair<K, V>): M {
@@ -6118,6 +6514,7 @@ public inline fun <K, V, M : MutableMap<in K, in V>> DoubleArray.associateTo(des
 /**
  * Populates and returns the [destination] mutable map with key-value pairs
  * provided by [transform] function applied to each element of the given array.
+ * 
  * If any of two pairs would have the same key the last one gets added to the map.
  */
 public inline fun <K, V, M : MutableMap<in K, in V>> BooleanArray.associateTo(destination: M, transform: (Boolean) -> Pair<K, V>): M {
@@ -6130,6 +6527,7 @@ public inline fun <K, V, M : MutableMap<in K, in V>> BooleanArray.associateTo(de
 /**
  * Populates and returns the [destination] mutable map with key-value pairs
  * provided by [transform] function applied to each element of the given array.
+ * 
  * If any of two pairs would have the same key the last one gets added to the map.
  */
 public inline fun <K, V, M : MutableMap<in K, in V>> CharArray.associateTo(destination: M, transform: (Char) -> Pair<K, V>): M {
@@ -6472,6 +6870,7 @@ public fun CharArray.toMutableList(): MutableList<Char> {
 
 /**
  * Returns a [Set] of all elements.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public fun <T> Array<out T>.toSet(): Set<T> {
@@ -6484,6 +6883,7 @@ public fun <T> Array<out T>.toSet(): Set<T> {
 
 /**
  * Returns a [Set] of all elements.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public fun ByteArray.toSet(): Set<Byte> {
@@ -6496,6 +6896,7 @@ public fun ByteArray.toSet(): Set<Byte> {
 
 /**
  * Returns a [Set] of all elements.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public fun ShortArray.toSet(): Set<Short> {
@@ -6508,6 +6909,7 @@ public fun ShortArray.toSet(): Set<Short> {
 
 /**
  * Returns a [Set] of all elements.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public fun IntArray.toSet(): Set<Int> {
@@ -6520,6 +6922,7 @@ public fun IntArray.toSet(): Set<Int> {
 
 /**
  * Returns a [Set] of all elements.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public fun LongArray.toSet(): Set<Long> {
@@ -6532,6 +6935,7 @@ public fun LongArray.toSet(): Set<Long> {
 
 /**
  * Returns a [Set] of all elements.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public fun FloatArray.toSet(): Set<Float> {
@@ -6544,6 +6948,7 @@ public fun FloatArray.toSet(): Set<Float> {
 
 /**
  * Returns a [Set] of all elements.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public fun DoubleArray.toSet(): Set<Double> {
@@ -6556,6 +6961,7 @@ public fun DoubleArray.toSet(): Set<Double> {
 
 /**
  * Returns a [Set] of all elements.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public fun BooleanArray.toSet(): Set<Boolean> {
@@ -6568,6 +6974,7 @@ public fun BooleanArray.toSet(): Set<Boolean> {
 
 /**
  * Returns a [Set] of all elements.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public fun CharArray.toSet(): Set<Char> {
@@ -6652,6 +7059,7 @@ public fun CharArray.toSortedSet(): SortedSet<Char> {
 
 /**
  * Returns a [SortedSet] of all elements.
+ * 
  * Elements in the set returned are sorted according to the given [comparator].
  */
 @kotlin.jvm.JvmVersion
@@ -6824,7 +7232,9 @@ public inline fun <R, C : MutableCollection<in R>> CharArray.flatMapTo(destinati
 /**
  * Groups elements of the original array by the key returned by the given [keySelector] function
  * applied to each element and returns a map where each group key is associated with a list of corresponding elements.
+ * 
  * The returned map preserves the entry iteration order of the keys produced from the original array.
+ * 
  * @sample test.collections.CollectionTest.groupBy
  */
 public inline fun <T, K> Array<out T>.groupBy(keySelector: (T) -> K): Map<K, List<T>> {
@@ -6834,7 +7244,9 @@ public inline fun <T, K> Array<out T>.groupBy(keySelector: (T) -> K): Map<K, Lis
 /**
  * Groups elements of the original array by the key returned by the given [keySelector] function
  * applied to each element and returns a map where each group key is associated with a list of corresponding elements.
+ * 
  * The returned map preserves the entry iteration order of the keys produced from the original array.
+ * 
  * @sample test.collections.CollectionTest.groupBy
  */
 public inline fun <K> ByteArray.groupBy(keySelector: (Byte) -> K): Map<K, List<Byte>> {
@@ -6844,7 +7256,9 @@ public inline fun <K> ByteArray.groupBy(keySelector: (Byte) -> K): Map<K, List<B
 /**
  * Groups elements of the original array by the key returned by the given [keySelector] function
  * applied to each element and returns a map where each group key is associated with a list of corresponding elements.
+ * 
  * The returned map preserves the entry iteration order of the keys produced from the original array.
+ * 
  * @sample test.collections.CollectionTest.groupBy
  */
 public inline fun <K> ShortArray.groupBy(keySelector: (Short) -> K): Map<K, List<Short>> {
@@ -6854,7 +7268,9 @@ public inline fun <K> ShortArray.groupBy(keySelector: (Short) -> K): Map<K, List
 /**
  * Groups elements of the original array by the key returned by the given [keySelector] function
  * applied to each element and returns a map where each group key is associated with a list of corresponding elements.
+ * 
  * The returned map preserves the entry iteration order of the keys produced from the original array.
+ * 
  * @sample test.collections.CollectionTest.groupBy
  */
 public inline fun <K> IntArray.groupBy(keySelector: (Int) -> K): Map<K, List<Int>> {
@@ -6864,7 +7280,9 @@ public inline fun <K> IntArray.groupBy(keySelector: (Int) -> K): Map<K, List<Int
 /**
  * Groups elements of the original array by the key returned by the given [keySelector] function
  * applied to each element and returns a map where each group key is associated with a list of corresponding elements.
+ * 
  * The returned map preserves the entry iteration order of the keys produced from the original array.
+ * 
  * @sample test.collections.CollectionTest.groupBy
  */
 public inline fun <K> LongArray.groupBy(keySelector: (Long) -> K): Map<K, List<Long>> {
@@ -6874,7 +7292,9 @@ public inline fun <K> LongArray.groupBy(keySelector: (Long) -> K): Map<K, List<L
 /**
  * Groups elements of the original array by the key returned by the given [keySelector] function
  * applied to each element and returns a map where each group key is associated with a list of corresponding elements.
+ * 
  * The returned map preserves the entry iteration order of the keys produced from the original array.
+ * 
  * @sample test.collections.CollectionTest.groupBy
  */
 public inline fun <K> FloatArray.groupBy(keySelector: (Float) -> K): Map<K, List<Float>> {
@@ -6884,7 +7304,9 @@ public inline fun <K> FloatArray.groupBy(keySelector: (Float) -> K): Map<K, List
 /**
  * Groups elements of the original array by the key returned by the given [keySelector] function
  * applied to each element and returns a map where each group key is associated with a list of corresponding elements.
+ * 
  * The returned map preserves the entry iteration order of the keys produced from the original array.
+ * 
  * @sample test.collections.CollectionTest.groupBy
  */
 public inline fun <K> DoubleArray.groupBy(keySelector: (Double) -> K): Map<K, List<Double>> {
@@ -6894,7 +7316,9 @@ public inline fun <K> DoubleArray.groupBy(keySelector: (Double) -> K): Map<K, Li
 /**
  * Groups elements of the original array by the key returned by the given [keySelector] function
  * applied to each element and returns a map where each group key is associated with a list of corresponding elements.
+ * 
  * The returned map preserves the entry iteration order of the keys produced from the original array.
+ * 
  * @sample test.collections.CollectionTest.groupBy
  */
 public inline fun <K> BooleanArray.groupBy(keySelector: (Boolean) -> K): Map<K, List<Boolean>> {
@@ -6904,7 +7328,9 @@ public inline fun <K> BooleanArray.groupBy(keySelector: (Boolean) -> K): Map<K, 
 /**
  * Groups elements of the original array by the key returned by the given [keySelector] function
  * applied to each element and returns a map where each group key is associated with a list of corresponding elements.
+ * 
  * The returned map preserves the entry iteration order of the keys produced from the original array.
+ * 
  * @sample test.collections.CollectionTest.groupBy
  */
 public inline fun <K> CharArray.groupBy(keySelector: (Char) -> K): Map<K, List<Char>> {
@@ -6915,7 +7341,9 @@ public inline fun <K> CharArray.groupBy(keySelector: (Char) -> K): Map<K, List<C
  * Groups values returned by the [valueTransform] function applied to each element of the original array
  * by the key returned by the given [keySelector] function applied to the element
  * and returns a map where each group key is associated with a list of corresponding values.
+ * 
  * The returned map preserves the entry iteration order of the keys produced from the original array.
+ * 
  * @sample test.collections.CollectionTest.groupByKeysAndValues
  */
 public inline fun <T, K, V> Array<out T>.groupBy(keySelector: (T) -> K, valueTransform: (T) -> V): Map<K, List<V>> {
@@ -6926,7 +7354,9 @@ public inline fun <T, K, V> Array<out T>.groupBy(keySelector: (T) -> K, valueTra
  * Groups values returned by the [valueTransform] function applied to each element of the original array
  * by the key returned by the given [keySelector] function applied to the element
  * and returns a map where each group key is associated with a list of corresponding values.
+ * 
  * The returned map preserves the entry iteration order of the keys produced from the original array.
+ * 
  * @sample test.collections.CollectionTest.groupByKeysAndValues
  */
 public inline fun <K, V> ByteArray.groupBy(keySelector: (Byte) -> K, valueTransform: (Byte) -> V): Map<K, List<V>> {
@@ -6937,7 +7367,9 @@ public inline fun <K, V> ByteArray.groupBy(keySelector: (Byte) -> K, valueTransf
  * Groups values returned by the [valueTransform] function applied to each element of the original array
  * by the key returned by the given [keySelector] function applied to the element
  * and returns a map where each group key is associated with a list of corresponding values.
+ * 
  * The returned map preserves the entry iteration order of the keys produced from the original array.
+ * 
  * @sample test.collections.CollectionTest.groupByKeysAndValues
  */
 public inline fun <K, V> ShortArray.groupBy(keySelector: (Short) -> K, valueTransform: (Short) -> V): Map<K, List<V>> {
@@ -6948,7 +7380,9 @@ public inline fun <K, V> ShortArray.groupBy(keySelector: (Short) -> K, valueTran
  * Groups values returned by the [valueTransform] function applied to each element of the original array
  * by the key returned by the given [keySelector] function applied to the element
  * and returns a map where each group key is associated with a list of corresponding values.
+ * 
  * The returned map preserves the entry iteration order of the keys produced from the original array.
+ * 
  * @sample test.collections.CollectionTest.groupByKeysAndValues
  */
 public inline fun <K, V> IntArray.groupBy(keySelector: (Int) -> K, valueTransform: (Int) -> V): Map<K, List<V>> {
@@ -6959,7 +7393,9 @@ public inline fun <K, V> IntArray.groupBy(keySelector: (Int) -> K, valueTransfor
  * Groups values returned by the [valueTransform] function applied to each element of the original array
  * by the key returned by the given [keySelector] function applied to the element
  * and returns a map where each group key is associated with a list of corresponding values.
+ * 
  * The returned map preserves the entry iteration order of the keys produced from the original array.
+ * 
  * @sample test.collections.CollectionTest.groupByKeysAndValues
  */
 public inline fun <K, V> LongArray.groupBy(keySelector: (Long) -> K, valueTransform: (Long) -> V): Map<K, List<V>> {
@@ -6970,7 +7406,9 @@ public inline fun <K, V> LongArray.groupBy(keySelector: (Long) -> K, valueTransf
  * Groups values returned by the [valueTransform] function applied to each element of the original array
  * by the key returned by the given [keySelector] function applied to the element
  * and returns a map where each group key is associated with a list of corresponding values.
+ * 
  * The returned map preserves the entry iteration order of the keys produced from the original array.
+ * 
  * @sample test.collections.CollectionTest.groupByKeysAndValues
  */
 public inline fun <K, V> FloatArray.groupBy(keySelector: (Float) -> K, valueTransform: (Float) -> V): Map<K, List<V>> {
@@ -6981,7 +7419,9 @@ public inline fun <K, V> FloatArray.groupBy(keySelector: (Float) -> K, valueTran
  * Groups values returned by the [valueTransform] function applied to each element of the original array
  * by the key returned by the given [keySelector] function applied to the element
  * and returns a map where each group key is associated with a list of corresponding values.
+ * 
  * The returned map preserves the entry iteration order of the keys produced from the original array.
+ * 
  * @sample test.collections.CollectionTest.groupByKeysAndValues
  */
 public inline fun <K, V> DoubleArray.groupBy(keySelector: (Double) -> K, valueTransform: (Double) -> V): Map<K, List<V>> {
@@ -6992,7 +7432,9 @@ public inline fun <K, V> DoubleArray.groupBy(keySelector: (Double) -> K, valueTr
  * Groups values returned by the [valueTransform] function applied to each element of the original array
  * by the key returned by the given [keySelector] function applied to the element
  * and returns a map where each group key is associated with a list of corresponding values.
+ * 
  * The returned map preserves the entry iteration order of the keys produced from the original array.
+ * 
  * @sample test.collections.CollectionTest.groupByKeysAndValues
  */
 public inline fun <K, V> BooleanArray.groupBy(keySelector: (Boolean) -> K, valueTransform: (Boolean) -> V): Map<K, List<V>> {
@@ -7003,7 +7445,9 @@ public inline fun <K, V> BooleanArray.groupBy(keySelector: (Boolean) -> K, value
  * Groups values returned by the [valueTransform] function applied to each element of the original array
  * by the key returned by the given [keySelector] function applied to the element
  * and returns a map where each group key is associated with a list of corresponding values.
+ * 
  * The returned map preserves the entry iteration order of the keys produced from the original array.
+ * 
  * @sample test.collections.CollectionTest.groupByKeysAndValues
  */
 public inline fun <K, V> CharArray.groupBy(keySelector: (Char) -> K, valueTransform: (Char) -> V): Map<K, List<V>> {
@@ -7013,7 +7457,9 @@ public inline fun <K, V> CharArray.groupBy(keySelector: (Char) -> K, valueTransf
 /**
  * Groups elements of the original array by the key returned by the given [keySelector] function
  * applied to each element and puts to the [destination] map each group key associated with a list of corresponding elements.
+ * 
  * @return The [destination] map.
+ * 
  * @sample test.collections.CollectionTest.groupBy
  */
 public inline fun <T, K, M : MutableMap<in K, MutableList<T>>> Array<out T>.groupByTo(destination: M, keySelector: (T) -> K): M {
@@ -7028,7 +7474,9 @@ public inline fun <T, K, M : MutableMap<in K, MutableList<T>>> Array<out T>.grou
 /**
  * Groups elements of the original array by the key returned by the given [keySelector] function
  * applied to each element and puts to the [destination] map each group key associated with a list of corresponding elements.
+ * 
  * @return The [destination] map.
+ * 
  * @sample test.collections.CollectionTest.groupBy
  */
 public inline fun <K, M : MutableMap<in K, MutableList<Byte>>> ByteArray.groupByTo(destination: M, keySelector: (Byte) -> K): M {
@@ -7043,7 +7491,9 @@ public inline fun <K, M : MutableMap<in K, MutableList<Byte>>> ByteArray.groupBy
 /**
  * Groups elements of the original array by the key returned by the given [keySelector] function
  * applied to each element and puts to the [destination] map each group key associated with a list of corresponding elements.
+ * 
  * @return The [destination] map.
+ * 
  * @sample test.collections.CollectionTest.groupBy
  */
 public inline fun <K, M : MutableMap<in K, MutableList<Short>>> ShortArray.groupByTo(destination: M, keySelector: (Short) -> K): M {
@@ -7058,7 +7508,9 @@ public inline fun <K, M : MutableMap<in K, MutableList<Short>>> ShortArray.group
 /**
  * Groups elements of the original array by the key returned by the given [keySelector] function
  * applied to each element and puts to the [destination] map each group key associated with a list of corresponding elements.
+ * 
  * @return The [destination] map.
+ * 
  * @sample test.collections.CollectionTest.groupBy
  */
 public inline fun <K, M : MutableMap<in K, MutableList<Int>>> IntArray.groupByTo(destination: M, keySelector: (Int) -> K): M {
@@ -7073,7 +7525,9 @@ public inline fun <K, M : MutableMap<in K, MutableList<Int>>> IntArray.groupByTo
 /**
  * Groups elements of the original array by the key returned by the given [keySelector] function
  * applied to each element and puts to the [destination] map each group key associated with a list of corresponding elements.
+ * 
  * @return The [destination] map.
+ * 
  * @sample test.collections.CollectionTest.groupBy
  */
 public inline fun <K, M : MutableMap<in K, MutableList<Long>>> LongArray.groupByTo(destination: M, keySelector: (Long) -> K): M {
@@ -7088,7 +7542,9 @@ public inline fun <K, M : MutableMap<in K, MutableList<Long>>> LongArray.groupBy
 /**
  * Groups elements of the original array by the key returned by the given [keySelector] function
  * applied to each element and puts to the [destination] map each group key associated with a list of corresponding elements.
+ * 
  * @return The [destination] map.
+ * 
  * @sample test.collections.CollectionTest.groupBy
  */
 public inline fun <K, M : MutableMap<in K, MutableList<Float>>> FloatArray.groupByTo(destination: M, keySelector: (Float) -> K): M {
@@ -7103,7 +7559,9 @@ public inline fun <K, M : MutableMap<in K, MutableList<Float>>> FloatArray.group
 /**
  * Groups elements of the original array by the key returned by the given [keySelector] function
  * applied to each element and puts to the [destination] map each group key associated with a list of corresponding elements.
+ * 
  * @return The [destination] map.
+ * 
  * @sample test.collections.CollectionTest.groupBy
  */
 public inline fun <K, M : MutableMap<in K, MutableList<Double>>> DoubleArray.groupByTo(destination: M, keySelector: (Double) -> K): M {
@@ -7118,7 +7576,9 @@ public inline fun <K, M : MutableMap<in K, MutableList<Double>>> DoubleArray.gro
 /**
  * Groups elements of the original array by the key returned by the given [keySelector] function
  * applied to each element and puts to the [destination] map each group key associated with a list of corresponding elements.
+ * 
  * @return The [destination] map.
+ * 
  * @sample test.collections.CollectionTest.groupBy
  */
 public inline fun <K, M : MutableMap<in K, MutableList<Boolean>>> BooleanArray.groupByTo(destination: M, keySelector: (Boolean) -> K): M {
@@ -7133,7 +7593,9 @@ public inline fun <K, M : MutableMap<in K, MutableList<Boolean>>> BooleanArray.g
 /**
  * Groups elements of the original array by the key returned by the given [keySelector] function
  * applied to each element and puts to the [destination] map each group key associated with a list of corresponding elements.
+ * 
  * @return The [destination] map.
+ * 
  * @sample test.collections.CollectionTest.groupBy
  */
 public inline fun <K, M : MutableMap<in K, MutableList<Char>>> CharArray.groupByTo(destination: M, keySelector: (Char) -> K): M {
@@ -7149,7 +7611,9 @@ public inline fun <K, M : MutableMap<in K, MutableList<Char>>> CharArray.groupBy
  * Groups values returned by the [valueTransform] function applied to each element of the original array
  * by the key returned by the given [keySelector] function applied to the element
  * and puts to the [destination] map each group key associated with a list of corresponding values.
+ * 
  * @return The [destination] map.
+ * 
  * @sample test.collections.CollectionTest.groupByKeysAndValues
  */
 public inline fun <T, K, V, M : MutableMap<in K, MutableList<V>>> Array<out T>.groupByTo(destination: M, keySelector: (T) -> K, valueTransform: (T) -> V): M {
@@ -7165,7 +7629,9 @@ public inline fun <T, K, V, M : MutableMap<in K, MutableList<V>>> Array<out T>.g
  * Groups values returned by the [valueTransform] function applied to each element of the original array
  * by the key returned by the given [keySelector] function applied to the element
  * and puts to the [destination] map each group key associated with a list of corresponding values.
+ * 
  * @return The [destination] map.
+ * 
  * @sample test.collections.CollectionTest.groupByKeysAndValues
  */
 public inline fun <K, V, M : MutableMap<in K, MutableList<V>>> ByteArray.groupByTo(destination: M, keySelector: (Byte) -> K, valueTransform: (Byte) -> V): M {
@@ -7181,7 +7647,9 @@ public inline fun <K, V, M : MutableMap<in K, MutableList<V>>> ByteArray.groupBy
  * Groups values returned by the [valueTransform] function applied to each element of the original array
  * by the key returned by the given [keySelector] function applied to the element
  * and puts to the [destination] map each group key associated with a list of corresponding values.
+ * 
  * @return The [destination] map.
+ * 
  * @sample test.collections.CollectionTest.groupByKeysAndValues
  */
 public inline fun <K, V, M : MutableMap<in K, MutableList<V>>> ShortArray.groupByTo(destination: M, keySelector: (Short) -> K, valueTransform: (Short) -> V): M {
@@ -7197,7 +7665,9 @@ public inline fun <K, V, M : MutableMap<in K, MutableList<V>>> ShortArray.groupB
  * Groups values returned by the [valueTransform] function applied to each element of the original array
  * by the key returned by the given [keySelector] function applied to the element
  * and puts to the [destination] map each group key associated with a list of corresponding values.
+ * 
  * @return The [destination] map.
+ * 
  * @sample test.collections.CollectionTest.groupByKeysAndValues
  */
 public inline fun <K, V, M : MutableMap<in K, MutableList<V>>> IntArray.groupByTo(destination: M, keySelector: (Int) -> K, valueTransform: (Int) -> V): M {
@@ -7213,7 +7683,9 @@ public inline fun <K, V, M : MutableMap<in K, MutableList<V>>> IntArray.groupByT
  * Groups values returned by the [valueTransform] function applied to each element of the original array
  * by the key returned by the given [keySelector] function applied to the element
  * and puts to the [destination] map each group key associated with a list of corresponding values.
+ * 
  * @return The [destination] map.
+ * 
  * @sample test.collections.CollectionTest.groupByKeysAndValues
  */
 public inline fun <K, V, M : MutableMap<in K, MutableList<V>>> LongArray.groupByTo(destination: M, keySelector: (Long) -> K, valueTransform: (Long) -> V): M {
@@ -7229,7 +7701,9 @@ public inline fun <K, V, M : MutableMap<in K, MutableList<V>>> LongArray.groupBy
  * Groups values returned by the [valueTransform] function applied to each element of the original array
  * by the key returned by the given [keySelector] function applied to the element
  * and puts to the [destination] map each group key associated with a list of corresponding values.
+ * 
  * @return The [destination] map.
+ * 
  * @sample test.collections.CollectionTest.groupByKeysAndValues
  */
 public inline fun <K, V, M : MutableMap<in K, MutableList<V>>> FloatArray.groupByTo(destination: M, keySelector: (Float) -> K, valueTransform: (Float) -> V): M {
@@ -7245,7 +7719,9 @@ public inline fun <K, V, M : MutableMap<in K, MutableList<V>>> FloatArray.groupB
  * Groups values returned by the [valueTransform] function applied to each element of the original array
  * by the key returned by the given [keySelector] function applied to the element
  * and puts to the [destination] map each group key associated with a list of corresponding values.
+ * 
  * @return The [destination] map.
+ * 
  * @sample test.collections.CollectionTest.groupByKeysAndValues
  */
 public inline fun <K, V, M : MutableMap<in K, MutableList<V>>> DoubleArray.groupByTo(destination: M, keySelector: (Double) -> K, valueTransform: (Double) -> V): M {
@@ -7261,7 +7737,9 @@ public inline fun <K, V, M : MutableMap<in K, MutableList<V>>> DoubleArray.group
  * Groups values returned by the [valueTransform] function applied to each element of the original array
  * by the key returned by the given [keySelector] function applied to the element
  * and puts to the [destination] map each group key associated with a list of corresponding values.
+ * 
  * @return The [destination] map.
+ * 
  * @sample test.collections.CollectionTest.groupByKeysAndValues
  */
 public inline fun <K, V, M : MutableMap<in K, MutableList<V>>> BooleanArray.groupByTo(destination: M, keySelector: (Boolean) -> K, valueTransform: (Boolean) -> V): M {
@@ -7277,7 +7755,9 @@ public inline fun <K, V, M : MutableMap<in K, MutableList<V>>> BooleanArray.grou
  * Groups values returned by the [valueTransform] function applied to each element of the original array
  * by the key returned by the given [keySelector] function applied to the element
  * and puts to the [destination] map each group key associated with a list of corresponding values.
+ * 
  * @return The [destination] map.
+ * 
  * @sample test.collections.CollectionTest.groupByKeysAndValues
  */
 public inline fun <K, V, M : MutableMap<in K, MutableList<V>>> CharArray.groupByTo(destination: M, keySelector: (Char) -> K, valueTransform: (Char) -> V): M {
@@ -7761,6 +8241,7 @@ public fun CharArray.withIndex(): Iterable<IndexedValue<Char>> {
 
 /**
  * Returns a list containing only distinct elements from the given array.
+ * 
  * The elements in the resulting list are in the same order as they were in the source array.
  */
 public fun <T> Array<out T>.distinct(): List<T> {
@@ -7769,6 +8250,7 @@ public fun <T> Array<out T>.distinct(): List<T> {
 
 /**
  * Returns a list containing only distinct elements from the given array.
+ * 
  * The elements in the resulting list are in the same order as they were in the source array.
  */
 public fun ByteArray.distinct(): List<Byte> {
@@ -7777,6 +8259,7 @@ public fun ByteArray.distinct(): List<Byte> {
 
 /**
  * Returns a list containing only distinct elements from the given array.
+ * 
  * The elements in the resulting list are in the same order as they were in the source array.
  */
 public fun ShortArray.distinct(): List<Short> {
@@ -7785,6 +8268,7 @@ public fun ShortArray.distinct(): List<Short> {
 
 /**
  * Returns a list containing only distinct elements from the given array.
+ * 
  * The elements in the resulting list are in the same order as they were in the source array.
  */
 public fun IntArray.distinct(): List<Int> {
@@ -7793,6 +8277,7 @@ public fun IntArray.distinct(): List<Int> {
 
 /**
  * Returns a list containing only distinct elements from the given array.
+ * 
  * The elements in the resulting list are in the same order as they were in the source array.
  */
 public fun LongArray.distinct(): List<Long> {
@@ -7801,6 +8286,7 @@ public fun LongArray.distinct(): List<Long> {
 
 /**
  * Returns a list containing only distinct elements from the given array.
+ * 
  * The elements in the resulting list are in the same order as they were in the source array.
  */
 public fun FloatArray.distinct(): List<Float> {
@@ -7809,6 +8295,7 @@ public fun FloatArray.distinct(): List<Float> {
 
 /**
  * Returns a list containing only distinct elements from the given array.
+ * 
  * The elements in the resulting list are in the same order as they were in the source array.
  */
 public fun DoubleArray.distinct(): List<Double> {
@@ -7817,6 +8304,7 @@ public fun DoubleArray.distinct(): List<Double> {
 
 /**
  * Returns a list containing only distinct elements from the given array.
+ * 
  * The elements in the resulting list are in the same order as they were in the source array.
  */
 public fun BooleanArray.distinct(): List<Boolean> {
@@ -7825,6 +8313,7 @@ public fun BooleanArray.distinct(): List<Boolean> {
 
 /**
  * Returns a list containing only distinct elements from the given array.
+ * 
  * The elements in the resulting list are in the same order as they were in the source array.
  */
 public fun CharArray.distinct(): List<Char> {
@@ -7834,6 +8323,7 @@ public fun CharArray.distinct(): List<Char> {
 /**
  * Returns a list containing only elements from the given array
  * having distinct keys returned by the given [selector] function.
+ * 
  * The elements in the resulting list are in the same order as they were in the source array.
  */
 public inline fun <T, K> Array<out T>.distinctBy(selector: (T) -> K): List<T> {
@@ -7850,6 +8340,7 @@ public inline fun <T, K> Array<out T>.distinctBy(selector: (T) -> K): List<T> {
 /**
  * Returns a list containing only elements from the given array
  * having distinct keys returned by the given [selector] function.
+ * 
  * The elements in the resulting list are in the same order as they were in the source array.
  */
 public inline fun <K> ByteArray.distinctBy(selector: (Byte) -> K): List<Byte> {
@@ -7866,6 +8357,7 @@ public inline fun <K> ByteArray.distinctBy(selector: (Byte) -> K): List<Byte> {
 /**
  * Returns a list containing only elements from the given array
  * having distinct keys returned by the given [selector] function.
+ * 
  * The elements in the resulting list are in the same order as they were in the source array.
  */
 public inline fun <K> ShortArray.distinctBy(selector: (Short) -> K): List<Short> {
@@ -7882,6 +8374,7 @@ public inline fun <K> ShortArray.distinctBy(selector: (Short) -> K): List<Short>
 /**
  * Returns a list containing only elements from the given array
  * having distinct keys returned by the given [selector] function.
+ * 
  * The elements in the resulting list are in the same order as they were in the source array.
  */
 public inline fun <K> IntArray.distinctBy(selector: (Int) -> K): List<Int> {
@@ -7898,6 +8391,7 @@ public inline fun <K> IntArray.distinctBy(selector: (Int) -> K): List<Int> {
 /**
  * Returns a list containing only elements from the given array
  * having distinct keys returned by the given [selector] function.
+ * 
  * The elements in the resulting list are in the same order as they were in the source array.
  */
 public inline fun <K> LongArray.distinctBy(selector: (Long) -> K): List<Long> {
@@ -7914,6 +8408,7 @@ public inline fun <K> LongArray.distinctBy(selector: (Long) -> K): List<Long> {
 /**
  * Returns a list containing only elements from the given array
  * having distinct keys returned by the given [selector] function.
+ * 
  * The elements in the resulting list are in the same order as they were in the source array.
  */
 public inline fun <K> FloatArray.distinctBy(selector: (Float) -> K): List<Float> {
@@ -7930,6 +8425,7 @@ public inline fun <K> FloatArray.distinctBy(selector: (Float) -> K): List<Float>
 /**
  * Returns a list containing only elements from the given array
  * having distinct keys returned by the given [selector] function.
+ * 
  * The elements in the resulting list are in the same order as they were in the source array.
  */
 public inline fun <K> DoubleArray.distinctBy(selector: (Double) -> K): List<Double> {
@@ -7946,6 +8442,7 @@ public inline fun <K> DoubleArray.distinctBy(selector: (Double) -> K): List<Doub
 /**
  * Returns a list containing only elements from the given array
  * having distinct keys returned by the given [selector] function.
+ * 
  * The elements in the resulting list are in the same order as they were in the source array.
  */
 public inline fun <K> BooleanArray.distinctBy(selector: (Boolean) -> K): List<Boolean> {
@@ -7962,6 +8459,7 @@ public inline fun <K> BooleanArray.distinctBy(selector: (Boolean) -> K): List<Bo
 /**
  * Returns a list containing only elements from the given array
  * having distinct keys returned by the given [selector] function.
+ * 
  * The elements in the resulting list are in the same order as they were in the source array.
  */
 public inline fun <K> CharArray.distinctBy(selector: (Char) -> K): List<Char> {
@@ -7977,6 +8475,7 @@ public inline fun <K> CharArray.distinctBy(selector: (Char) -> K): List<Char> {
 
 /**
  * Returns a set containing all elements that are contained by both this set and the specified collection.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public infix fun <T> Array<out T>.intersect(other: Iterable<T>): Set<T> {
@@ -7987,6 +8486,7 @@ public infix fun <T> Array<out T>.intersect(other: Iterable<T>): Set<T> {
 
 /**
  * Returns a set containing all elements that are contained by both this set and the specified collection.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public infix fun ByteArray.intersect(other: Iterable<Byte>): Set<Byte> {
@@ -7997,6 +8497,7 @@ public infix fun ByteArray.intersect(other: Iterable<Byte>): Set<Byte> {
 
 /**
  * Returns a set containing all elements that are contained by both this set and the specified collection.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public infix fun ShortArray.intersect(other: Iterable<Short>): Set<Short> {
@@ -8007,6 +8508,7 @@ public infix fun ShortArray.intersect(other: Iterable<Short>): Set<Short> {
 
 /**
  * Returns a set containing all elements that are contained by both this set and the specified collection.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public infix fun IntArray.intersect(other: Iterable<Int>): Set<Int> {
@@ -8017,6 +8519,7 @@ public infix fun IntArray.intersect(other: Iterable<Int>): Set<Int> {
 
 /**
  * Returns a set containing all elements that are contained by both this set and the specified collection.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public infix fun LongArray.intersect(other: Iterable<Long>): Set<Long> {
@@ -8027,6 +8530,7 @@ public infix fun LongArray.intersect(other: Iterable<Long>): Set<Long> {
 
 /**
  * Returns a set containing all elements that are contained by both this set and the specified collection.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public infix fun FloatArray.intersect(other: Iterable<Float>): Set<Float> {
@@ -8037,6 +8541,7 @@ public infix fun FloatArray.intersect(other: Iterable<Float>): Set<Float> {
 
 /**
  * Returns a set containing all elements that are contained by both this set and the specified collection.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public infix fun DoubleArray.intersect(other: Iterable<Double>): Set<Double> {
@@ -8047,6 +8552,7 @@ public infix fun DoubleArray.intersect(other: Iterable<Double>): Set<Double> {
 
 /**
  * Returns a set containing all elements that are contained by both this set and the specified collection.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public infix fun BooleanArray.intersect(other: Iterable<Boolean>): Set<Boolean> {
@@ -8057,6 +8563,7 @@ public infix fun BooleanArray.intersect(other: Iterable<Boolean>): Set<Boolean> 
 
 /**
  * Returns a set containing all elements that are contained by both this set and the specified collection.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public infix fun CharArray.intersect(other: Iterable<Char>): Set<Char> {
@@ -8067,6 +8574,7 @@ public infix fun CharArray.intersect(other: Iterable<Char>): Set<Char> {
 
 /**
  * Returns a set containing all elements that are contained by this array and not contained by the specified collection.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public infix fun <T> Array<out T>.subtract(other: Iterable<T>): Set<T> {
@@ -8077,6 +8585,7 @@ public infix fun <T> Array<out T>.subtract(other: Iterable<T>): Set<T> {
 
 /**
  * Returns a set containing all elements that are contained by this array and not contained by the specified collection.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public infix fun ByteArray.subtract(other: Iterable<Byte>): Set<Byte> {
@@ -8087,6 +8596,7 @@ public infix fun ByteArray.subtract(other: Iterable<Byte>): Set<Byte> {
 
 /**
  * Returns a set containing all elements that are contained by this array and not contained by the specified collection.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public infix fun ShortArray.subtract(other: Iterable<Short>): Set<Short> {
@@ -8097,6 +8607,7 @@ public infix fun ShortArray.subtract(other: Iterable<Short>): Set<Short> {
 
 /**
  * Returns a set containing all elements that are contained by this array and not contained by the specified collection.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public infix fun IntArray.subtract(other: Iterable<Int>): Set<Int> {
@@ -8107,6 +8618,7 @@ public infix fun IntArray.subtract(other: Iterable<Int>): Set<Int> {
 
 /**
  * Returns a set containing all elements that are contained by this array and not contained by the specified collection.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public infix fun LongArray.subtract(other: Iterable<Long>): Set<Long> {
@@ -8117,6 +8629,7 @@ public infix fun LongArray.subtract(other: Iterable<Long>): Set<Long> {
 
 /**
  * Returns a set containing all elements that are contained by this array and not contained by the specified collection.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public infix fun FloatArray.subtract(other: Iterable<Float>): Set<Float> {
@@ -8127,6 +8640,7 @@ public infix fun FloatArray.subtract(other: Iterable<Float>): Set<Float> {
 
 /**
  * Returns a set containing all elements that are contained by this array and not contained by the specified collection.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public infix fun DoubleArray.subtract(other: Iterable<Double>): Set<Double> {
@@ -8137,6 +8651,7 @@ public infix fun DoubleArray.subtract(other: Iterable<Double>): Set<Double> {
 
 /**
  * Returns a set containing all elements that are contained by this array and not contained by the specified collection.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public infix fun BooleanArray.subtract(other: Iterable<Boolean>): Set<Boolean> {
@@ -8147,6 +8662,7 @@ public infix fun BooleanArray.subtract(other: Iterable<Boolean>): Set<Boolean> {
 
 /**
  * Returns a set containing all elements that are contained by this array and not contained by the specified collection.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public infix fun CharArray.subtract(other: Iterable<Char>): Set<Char> {
@@ -8157,6 +8673,7 @@ public infix fun CharArray.subtract(other: Iterable<Char>): Set<Char> {
 
 /**
  * Returns a mutable set containing all distinct elements from the given array.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public fun <T> Array<out T>.toMutableSet(): MutableSet<T> {
@@ -8167,6 +8684,7 @@ public fun <T> Array<out T>.toMutableSet(): MutableSet<T> {
 
 /**
  * Returns a mutable set containing all distinct elements from the given array.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public fun ByteArray.toMutableSet(): MutableSet<Byte> {
@@ -8177,6 +8695,7 @@ public fun ByteArray.toMutableSet(): MutableSet<Byte> {
 
 /**
  * Returns a mutable set containing all distinct elements from the given array.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public fun ShortArray.toMutableSet(): MutableSet<Short> {
@@ -8187,6 +8706,7 @@ public fun ShortArray.toMutableSet(): MutableSet<Short> {
 
 /**
  * Returns a mutable set containing all distinct elements from the given array.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public fun IntArray.toMutableSet(): MutableSet<Int> {
@@ -8197,6 +8717,7 @@ public fun IntArray.toMutableSet(): MutableSet<Int> {
 
 /**
  * Returns a mutable set containing all distinct elements from the given array.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public fun LongArray.toMutableSet(): MutableSet<Long> {
@@ -8207,6 +8728,7 @@ public fun LongArray.toMutableSet(): MutableSet<Long> {
 
 /**
  * Returns a mutable set containing all distinct elements from the given array.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public fun FloatArray.toMutableSet(): MutableSet<Float> {
@@ -8217,6 +8739,7 @@ public fun FloatArray.toMutableSet(): MutableSet<Float> {
 
 /**
  * Returns a mutable set containing all distinct elements from the given array.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public fun DoubleArray.toMutableSet(): MutableSet<Double> {
@@ -8227,6 +8750,7 @@ public fun DoubleArray.toMutableSet(): MutableSet<Double> {
 
 /**
  * Returns a mutable set containing all distinct elements from the given array.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public fun BooleanArray.toMutableSet(): MutableSet<Boolean> {
@@ -8237,6 +8761,7 @@ public fun BooleanArray.toMutableSet(): MutableSet<Boolean> {
 
 /**
  * Returns a mutable set containing all distinct elements from the given array.
+ * 
  * The returned set preserves the element iteration order of the original array.
  */
 public fun CharArray.toMutableSet(): MutableSet<Char> {
@@ -8247,6 +8772,7 @@ public fun CharArray.toMutableSet(): MutableSet<Char> {
 
 /**
  * Returns a set containing all distinct elements from both collections.
+ * 
  * The returned set preserves the element iteration order of the original array.
  * Those elements of the [other] collection that are unique are iterated in the end
  * in the order of the [other] collection.
@@ -8259,6 +8785,7 @@ public infix fun <T> Array<out T>.union(other: Iterable<T>): Set<T> {
 
 /**
  * Returns a set containing all distinct elements from both collections.
+ * 
  * The returned set preserves the element iteration order of the original array.
  * Those elements of the [other] collection that are unique are iterated in the end
  * in the order of the [other] collection.
@@ -8271,6 +8798,7 @@ public infix fun ByteArray.union(other: Iterable<Byte>): Set<Byte> {
 
 /**
  * Returns a set containing all distinct elements from both collections.
+ * 
  * The returned set preserves the element iteration order of the original array.
  * Those elements of the [other] collection that are unique are iterated in the end
  * in the order of the [other] collection.
@@ -8283,6 +8811,7 @@ public infix fun ShortArray.union(other: Iterable<Short>): Set<Short> {
 
 /**
  * Returns a set containing all distinct elements from both collections.
+ * 
  * The returned set preserves the element iteration order of the original array.
  * Those elements of the [other] collection that are unique are iterated in the end
  * in the order of the [other] collection.
@@ -8295,6 +8824,7 @@ public infix fun IntArray.union(other: Iterable<Int>): Set<Int> {
 
 /**
  * Returns a set containing all distinct elements from both collections.
+ * 
  * The returned set preserves the element iteration order of the original array.
  * Those elements of the [other] collection that are unique are iterated in the end
  * in the order of the [other] collection.
@@ -8307,6 +8837,7 @@ public infix fun LongArray.union(other: Iterable<Long>): Set<Long> {
 
 /**
  * Returns a set containing all distinct elements from both collections.
+ * 
  * The returned set preserves the element iteration order of the original array.
  * Those elements of the [other] collection that are unique are iterated in the end
  * in the order of the [other] collection.
@@ -8319,6 +8850,7 @@ public infix fun FloatArray.union(other: Iterable<Float>): Set<Float> {
 
 /**
  * Returns a set containing all distinct elements from both collections.
+ * 
  * The returned set preserves the element iteration order of the original array.
  * Those elements of the [other] collection that are unique are iterated in the end
  * in the order of the [other] collection.
@@ -8331,6 +8863,7 @@ public infix fun DoubleArray.union(other: Iterable<Double>): Set<Double> {
 
 /**
  * Returns a set containing all distinct elements from both collections.
+ * 
  * The returned set preserves the element iteration order of the original array.
  * Those elements of the [other] collection that are unique are iterated in the end
  * in the order of the [other] collection.
@@ -8343,6 +8876,7 @@ public infix fun BooleanArray.union(other: Iterable<Boolean>): Set<Boolean> {
 
 /**
  * Returns a set containing all distinct elements from both collections.
+ * 
  * The returned set preserves the element iteration order of the original array.
  * Those elements of the [other] collection that are unique are iterated in the end
  * in the order of the [other] collection.
@@ -11662,6 +12196,7 @@ public inline fun <V> CharArray.zip(other: CharArray, transform: (Char, Char) ->
 
 /**
  * Appends the string from all the elements separated using [separator] and using the given [prefix] and [postfix] if supplied.
+ * 
  * If the collection could be huge, you can specify a non-negative value of [limit], in which case only the first [limit]
  * elements will be appended, followed by the [truncated] string (which defaults to "...").
  */
@@ -11684,6 +12219,7 @@ public fun <T, A : Appendable> Array<out T>.joinTo(buffer: A, separator: CharSeq
 
 /**
  * Appends the string from all the elements separated using [separator] and using the given [prefix] and [postfix] if supplied.
+ * 
  * If the collection could be huge, you can specify a non-negative value of [limit], in which case only the first [limit]
  * elements will be appended, followed by the [truncated] string (which defaults to "...").
  */
@@ -11706,6 +12242,7 @@ public fun <A : Appendable> ByteArray.joinTo(buffer: A, separator: CharSequence 
 
 /**
  * Appends the string from all the elements separated using [separator] and using the given [prefix] and [postfix] if supplied.
+ * 
  * If the collection could be huge, you can specify a non-negative value of [limit], in which case only the first [limit]
  * elements will be appended, followed by the [truncated] string (which defaults to "...").
  */
@@ -11728,6 +12265,7 @@ public fun <A : Appendable> ShortArray.joinTo(buffer: A, separator: CharSequence
 
 /**
  * Appends the string from all the elements separated using [separator] and using the given [prefix] and [postfix] if supplied.
+ * 
  * If the collection could be huge, you can specify a non-negative value of [limit], in which case only the first [limit]
  * elements will be appended, followed by the [truncated] string (which defaults to "...").
  */
@@ -11750,6 +12288,7 @@ public fun <A : Appendable> IntArray.joinTo(buffer: A, separator: CharSequence =
 
 /**
  * Appends the string from all the elements separated using [separator] and using the given [prefix] and [postfix] if supplied.
+ * 
  * If the collection could be huge, you can specify a non-negative value of [limit], in which case only the first [limit]
  * elements will be appended, followed by the [truncated] string (which defaults to "...").
  */
@@ -11772,6 +12311,7 @@ public fun <A : Appendable> LongArray.joinTo(buffer: A, separator: CharSequence 
 
 /**
  * Appends the string from all the elements separated using [separator] and using the given [prefix] and [postfix] if supplied.
+ * 
  * If the collection could be huge, you can specify a non-negative value of [limit], in which case only the first [limit]
  * elements will be appended, followed by the [truncated] string (which defaults to "...").
  */
@@ -11794,6 +12334,7 @@ public fun <A : Appendable> FloatArray.joinTo(buffer: A, separator: CharSequence
 
 /**
  * Appends the string from all the elements separated using [separator] and using the given [prefix] and [postfix] if supplied.
+ * 
  * If the collection could be huge, you can specify a non-negative value of [limit], in which case only the first [limit]
  * elements will be appended, followed by the [truncated] string (which defaults to "...").
  */
@@ -11816,6 +12357,7 @@ public fun <A : Appendable> DoubleArray.joinTo(buffer: A, separator: CharSequenc
 
 /**
  * Appends the string from all the elements separated using [separator] and using the given [prefix] and [postfix] if supplied.
+ * 
  * If the collection could be huge, you can specify a non-negative value of [limit], in which case only the first [limit]
  * elements will be appended, followed by the [truncated] string (which defaults to "...").
  */
@@ -11838,6 +12380,7 @@ public fun <A : Appendable> BooleanArray.joinTo(buffer: A, separator: CharSequen
 
 /**
  * Appends the string from all the elements separated using [separator] and using the given [prefix] and [postfix] if supplied.
+ * 
  * If the collection could be huge, you can specify a non-negative value of [limit], in which case only the first [limit]
  * elements will be appended, followed by the [truncated] string (which defaults to "...").
  */
@@ -11860,6 +12403,7 @@ public fun <A : Appendable> CharArray.joinTo(buffer: A, separator: CharSequence 
 
 /**
  * Creates a string from all the elements separated using [separator] and using the given [prefix] and [postfix] if supplied.
+ * 
  * If the collection could be huge, you can specify a non-negative value of [limit], in which case only the first [limit]
  * elements will be appended, followed by the [truncated] string (which defaults to "...").
  */
@@ -11869,6 +12413,7 @@ public fun <T> Array<out T>.joinToString(separator: CharSequence = ", ", prefix:
 
 /**
  * Creates a string from all the elements separated using [separator] and using the given [prefix] and [postfix] if supplied.
+ * 
  * If the collection could be huge, you can specify a non-negative value of [limit], in which case only the first [limit]
  * elements will be appended, followed by the [truncated] string (which defaults to "...").
  */
@@ -11878,6 +12423,7 @@ public fun ByteArray.joinToString(separator: CharSequence = ", ", prefix: CharSe
 
 /**
  * Creates a string from all the elements separated using [separator] and using the given [prefix] and [postfix] if supplied.
+ * 
  * If the collection could be huge, you can specify a non-negative value of [limit], in which case only the first [limit]
  * elements will be appended, followed by the [truncated] string (which defaults to "...").
  */
@@ -11887,6 +12433,7 @@ public fun ShortArray.joinToString(separator: CharSequence = ", ", prefix: CharS
 
 /**
  * Creates a string from all the elements separated using [separator] and using the given [prefix] and [postfix] if supplied.
+ * 
  * If the collection could be huge, you can specify a non-negative value of [limit], in which case only the first [limit]
  * elements will be appended, followed by the [truncated] string (which defaults to "...").
  */
@@ -11896,6 +12443,7 @@ public fun IntArray.joinToString(separator: CharSequence = ", ", prefix: CharSeq
 
 /**
  * Creates a string from all the elements separated using [separator] and using the given [prefix] and [postfix] if supplied.
+ * 
  * If the collection could be huge, you can specify a non-negative value of [limit], in which case only the first [limit]
  * elements will be appended, followed by the [truncated] string (which defaults to "...").
  */
@@ -11905,6 +12453,7 @@ public fun LongArray.joinToString(separator: CharSequence = ", ", prefix: CharSe
 
 /**
  * Creates a string from all the elements separated using [separator] and using the given [prefix] and [postfix] if supplied.
+ * 
  * If the collection could be huge, you can specify a non-negative value of [limit], in which case only the first [limit]
  * elements will be appended, followed by the [truncated] string (which defaults to "...").
  */
@@ -11914,6 +12463,7 @@ public fun FloatArray.joinToString(separator: CharSequence = ", ", prefix: CharS
 
 /**
  * Creates a string from all the elements separated using [separator] and using the given [prefix] and [postfix] if supplied.
+ * 
  * If the collection could be huge, you can specify a non-negative value of [limit], in which case only the first [limit]
  * elements will be appended, followed by the [truncated] string (which defaults to "...").
  */
@@ -11923,6 +12473,7 @@ public fun DoubleArray.joinToString(separator: CharSequence = ", ", prefix: Char
 
 /**
  * Creates a string from all the elements separated using [separator] and using the given [prefix] and [postfix] if supplied.
+ * 
  * If the collection could be huge, you can specify a non-negative value of [limit], in which case only the first [limit]
  * elements will be appended, followed by the [truncated] string (which defaults to "...").
  */
@@ -11932,6 +12483,7 @@ public fun BooleanArray.joinToString(separator: CharSequence = ", ", prefix: Cha
 
 /**
  * Creates a string from all the elements separated using [separator] and using the given [prefix] and [postfix] if supplied.
+ * 
  * If the collection could be huge, you can specify a non-negative value of [limit], in which case only the first [limit]
  * elements will be appended, followed by the [truncated] string (which defaults to "...").
  */
@@ -12214,7 +12766,9 @@ public fun CharArray.asList(): List<Char> {
 /**
  * Searches the array or the range of the array for the provided [element] using the binary search algorithm.
  * The array is expected to be sorted according to the specified [comparator], otherwise the result is undefined.
+ * 
  * If the array contains multiple elements equal to the specified [element], there is no guarantee which one will be found.
+ * 
  * @return the index of the element, if it is contained in the array within the specified range;
  * otherwise, the inverted insertion point `(-insertion point - 1)`.
  * The insertion point is defined as the index at which the element should be inserted,
@@ -12222,13 +12776,15 @@ public fun CharArray.asList(): List<Char> {
  */
 @kotlin.jvm.JvmVersion
 public fun <T> Array<out T>.binarySearch(element: T, comparator: Comparator<in T>, fromIndex: Int = 0, toIndex: Int = size): Int {
-    return Arrays.binarySearch(this, fromIndex, toIndex, element, comparator)
+    return java.util.Arrays.binarySearch(this, fromIndex, toIndex, element, comparator)
 }
 
 /**
  * Searches the array or the range of the array for the provided [element] using the binary search algorithm.
  * The array is expected to be sorted, otherwise the result is undefined.
+ * 
  * If the array contains multiple elements equal to the specified [element], there is no guarantee which one will be found.
+ * 
  * @return the index of the element, if it is contained in the array within the specified range;
  * otherwise, the inverted insertion point `(-insertion point - 1)`.
  * The insertion point is defined as the index at which the element should be inserted,
@@ -12236,13 +12792,15 @@ public fun <T> Array<out T>.binarySearch(element: T, comparator: Comparator<in T
  */
 @kotlin.jvm.JvmVersion
 public fun <T> Array<out T>.binarySearch(element: T, fromIndex: Int = 0, toIndex: Int = size): Int {
-    return Arrays.binarySearch(this, fromIndex, toIndex, element)
+    return java.util.Arrays.binarySearch(this, fromIndex, toIndex, element)
 }
 
 /**
  * Searches the array or the range of the array for the provided [element] using the binary search algorithm.
  * The array is expected to be sorted, otherwise the result is undefined.
+ * 
  * If the array contains multiple elements equal to the specified [element], there is no guarantee which one will be found.
+ * 
  * @return the index of the element, if it is contained in the array within the specified range;
  * otherwise, the inverted insertion point `(-insertion point - 1)`.
  * The insertion point is defined as the index at which the element should be inserted,
@@ -12250,13 +12808,15 @@ public fun <T> Array<out T>.binarySearch(element: T, fromIndex: Int = 0, toIndex
  */
 @kotlin.jvm.JvmVersion
 public fun ByteArray.binarySearch(element: Byte, fromIndex: Int = 0, toIndex: Int = size): Int {
-    return Arrays.binarySearch(this, fromIndex, toIndex, element)
+    return java.util.Arrays.binarySearch(this, fromIndex, toIndex, element)
 }
 
 /**
  * Searches the array or the range of the array for the provided [element] using the binary search algorithm.
  * The array is expected to be sorted, otherwise the result is undefined.
+ * 
  * If the array contains multiple elements equal to the specified [element], there is no guarantee which one will be found.
+ * 
  * @return the index of the element, if it is contained in the array within the specified range;
  * otherwise, the inverted insertion point `(-insertion point - 1)`.
  * The insertion point is defined as the index at which the element should be inserted,
@@ -12264,13 +12824,15 @@ public fun ByteArray.binarySearch(element: Byte, fromIndex: Int = 0, toIndex: In
  */
 @kotlin.jvm.JvmVersion
 public fun ShortArray.binarySearch(element: Short, fromIndex: Int = 0, toIndex: Int = size): Int {
-    return Arrays.binarySearch(this, fromIndex, toIndex, element)
+    return java.util.Arrays.binarySearch(this, fromIndex, toIndex, element)
 }
 
 /**
  * Searches the array or the range of the array for the provided [element] using the binary search algorithm.
  * The array is expected to be sorted, otherwise the result is undefined.
+ * 
  * If the array contains multiple elements equal to the specified [element], there is no guarantee which one will be found.
+ * 
  * @return the index of the element, if it is contained in the array within the specified range;
  * otherwise, the inverted insertion point `(-insertion point - 1)`.
  * The insertion point is defined as the index at which the element should be inserted,
@@ -12278,13 +12840,15 @@ public fun ShortArray.binarySearch(element: Short, fromIndex: Int = 0, toIndex: 
  */
 @kotlin.jvm.JvmVersion
 public fun IntArray.binarySearch(element: Int, fromIndex: Int = 0, toIndex: Int = size): Int {
-    return Arrays.binarySearch(this, fromIndex, toIndex, element)
+    return java.util.Arrays.binarySearch(this, fromIndex, toIndex, element)
 }
 
 /**
  * Searches the array or the range of the array for the provided [element] using the binary search algorithm.
  * The array is expected to be sorted, otherwise the result is undefined.
+ * 
  * If the array contains multiple elements equal to the specified [element], there is no guarantee which one will be found.
+ * 
  * @return the index of the element, if it is contained in the array within the specified range;
  * otherwise, the inverted insertion point `(-insertion point - 1)`.
  * The insertion point is defined as the index at which the element should be inserted,
@@ -12292,13 +12856,15 @@ public fun IntArray.binarySearch(element: Int, fromIndex: Int = 0, toIndex: Int 
  */
 @kotlin.jvm.JvmVersion
 public fun LongArray.binarySearch(element: Long, fromIndex: Int = 0, toIndex: Int = size): Int {
-    return Arrays.binarySearch(this, fromIndex, toIndex, element)
+    return java.util.Arrays.binarySearch(this, fromIndex, toIndex, element)
 }
 
 /**
  * Searches the array or the range of the array for the provided [element] using the binary search algorithm.
  * The array is expected to be sorted, otherwise the result is undefined.
+ * 
  * If the array contains multiple elements equal to the specified [element], there is no guarantee which one will be found.
+ * 
  * @return the index of the element, if it is contained in the array within the specified range;
  * otherwise, the inverted insertion point `(-insertion point - 1)`.
  * The insertion point is defined as the index at which the element should be inserted,
@@ -12306,13 +12872,15 @@ public fun LongArray.binarySearch(element: Long, fromIndex: Int = 0, toIndex: In
  */
 @kotlin.jvm.JvmVersion
 public fun FloatArray.binarySearch(element: Float, fromIndex: Int = 0, toIndex: Int = size): Int {
-    return Arrays.binarySearch(this, fromIndex, toIndex, element)
+    return java.util.Arrays.binarySearch(this, fromIndex, toIndex, element)
 }
 
 /**
  * Searches the array or the range of the array for the provided [element] using the binary search algorithm.
  * The array is expected to be sorted, otherwise the result is undefined.
+ * 
  * If the array contains multiple elements equal to the specified [element], there is no guarantee which one will be found.
+ * 
  * @return the index of the element, if it is contained in the array within the specified range;
  * otherwise, the inverted insertion point `(-insertion point - 1)`.
  * The insertion point is defined as the index at which the element should be inserted,
@@ -12320,13 +12888,15 @@ public fun FloatArray.binarySearch(element: Float, fromIndex: Int = 0, toIndex: 
  */
 @kotlin.jvm.JvmVersion
 public fun DoubleArray.binarySearch(element: Double, fromIndex: Int = 0, toIndex: Int = size): Int {
-    return Arrays.binarySearch(this, fromIndex, toIndex, element)
+    return java.util.Arrays.binarySearch(this, fromIndex, toIndex, element)
 }
 
 /**
  * Searches the array or the range of the array for the provided [element] using the binary search algorithm.
  * The array is expected to be sorted, otherwise the result is undefined.
+ * 
  * If the array contains multiple elements equal to the specified [element], there is no guarantee which one will be found.
+ * 
  * @return the index of the element, if it is contained in the array within the specified range;
  * otherwise, the inverted insertion point `(-insertion point - 1)`.
  * The insertion point is defined as the index at which the element should be inserted,
@@ -12334,7 +12904,7 @@ public fun DoubleArray.binarySearch(element: Double, fromIndex: Int = 0, toIndex
  */
 @kotlin.jvm.JvmVersion
 public fun CharArray.binarySearch(element: Char, fromIndex: Int = 0, toIndex: Int = size): Int {
-    return Arrays.binarySearch(this, fromIndex, toIndex, element)
+    return java.util.Arrays.binarySearch(this, fromIndex, toIndex, element)
 }
 
 /**
@@ -12343,7 +12913,7 @@ public fun CharArray.binarySearch(element: Char, fromIndex: Int = 0, toIndex: In
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun <T> Array<T>.copyOf(): Array<T> {
-    return Arrays.copyOf(this, size)
+    return java.util.Arrays.copyOf(this, size)
 }
 
 /**
@@ -12352,7 +12922,7 @@ public inline fun <T> Array<T>.copyOf(): Array<T> {
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun ByteArray.copyOf(): ByteArray {
-    return Arrays.copyOf(this, size)
+    return java.util.Arrays.copyOf(this, size)
 }
 
 /**
@@ -12361,7 +12931,7 @@ public inline fun ByteArray.copyOf(): ByteArray {
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun ShortArray.copyOf(): ShortArray {
-    return Arrays.copyOf(this, size)
+    return java.util.Arrays.copyOf(this, size)
 }
 
 /**
@@ -12370,7 +12940,7 @@ public inline fun ShortArray.copyOf(): ShortArray {
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun IntArray.copyOf(): IntArray {
-    return Arrays.copyOf(this, size)
+    return java.util.Arrays.copyOf(this, size)
 }
 
 /**
@@ -12379,7 +12949,7 @@ public inline fun IntArray.copyOf(): IntArray {
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun LongArray.copyOf(): LongArray {
-    return Arrays.copyOf(this, size)
+    return java.util.Arrays.copyOf(this, size)
 }
 
 /**
@@ -12388,7 +12958,7 @@ public inline fun LongArray.copyOf(): LongArray {
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun FloatArray.copyOf(): FloatArray {
-    return Arrays.copyOf(this, size)
+    return java.util.Arrays.copyOf(this, size)
 }
 
 /**
@@ -12397,7 +12967,7 @@ public inline fun FloatArray.copyOf(): FloatArray {
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun DoubleArray.copyOf(): DoubleArray {
-    return Arrays.copyOf(this, size)
+    return java.util.Arrays.copyOf(this, size)
 }
 
 /**
@@ -12406,7 +12976,7 @@ public inline fun DoubleArray.copyOf(): DoubleArray {
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun BooleanArray.copyOf(): BooleanArray {
-    return Arrays.copyOf(this, size)
+    return java.util.Arrays.copyOf(this, size)
 }
 
 /**
@@ -12415,7 +12985,7 @@ public inline fun BooleanArray.copyOf(): BooleanArray {
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun CharArray.copyOf(): CharArray {
-    return Arrays.copyOf(this, size)
+    return java.util.Arrays.copyOf(this, size)
 }
 
 /**
@@ -12424,7 +12994,7 @@ public inline fun CharArray.copyOf(): CharArray {
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun <T> Array<T>.copyOf(newSize: Int): Array<T?> {
-    return Arrays.copyOf(this, newSize)
+    return java.util.Arrays.copyOf(this, newSize)
 }
 
 /**
@@ -12433,7 +13003,7 @@ public inline fun <T> Array<T>.copyOf(newSize: Int): Array<T?> {
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun ByteArray.copyOf(newSize: Int): ByteArray {
-    return Arrays.copyOf(this, newSize)
+    return java.util.Arrays.copyOf(this, newSize)
 }
 
 /**
@@ -12442,7 +13012,7 @@ public inline fun ByteArray.copyOf(newSize: Int): ByteArray {
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun ShortArray.copyOf(newSize: Int): ShortArray {
-    return Arrays.copyOf(this, newSize)
+    return java.util.Arrays.copyOf(this, newSize)
 }
 
 /**
@@ -12451,7 +13021,7 @@ public inline fun ShortArray.copyOf(newSize: Int): ShortArray {
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun IntArray.copyOf(newSize: Int): IntArray {
-    return Arrays.copyOf(this, newSize)
+    return java.util.Arrays.copyOf(this, newSize)
 }
 
 /**
@@ -12460,7 +13030,7 @@ public inline fun IntArray.copyOf(newSize: Int): IntArray {
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun LongArray.copyOf(newSize: Int): LongArray {
-    return Arrays.copyOf(this, newSize)
+    return java.util.Arrays.copyOf(this, newSize)
 }
 
 /**
@@ -12469,7 +13039,7 @@ public inline fun LongArray.copyOf(newSize: Int): LongArray {
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun FloatArray.copyOf(newSize: Int): FloatArray {
-    return Arrays.copyOf(this, newSize)
+    return java.util.Arrays.copyOf(this, newSize)
 }
 
 /**
@@ -12478,7 +13048,7 @@ public inline fun FloatArray.copyOf(newSize: Int): FloatArray {
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun DoubleArray.copyOf(newSize: Int): DoubleArray {
-    return Arrays.copyOf(this, newSize)
+    return java.util.Arrays.copyOf(this, newSize)
 }
 
 /**
@@ -12487,7 +13057,7 @@ public inline fun DoubleArray.copyOf(newSize: Int): DoubleArray {
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun BooleanArray.copyOf(newSize: Int): BooleanArray {
-    return Arrays.copyOf(this, newSize)
+    return java.util.Arrays.copyOf(this, newSize)
 }
 
 /**
@@ -12496,7 +13066,7 @@ public inline fun BooleanArray.copyOf(newSize: Int): BooleanArray {
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun CharArray.copyOf(newSize: Int): CharArray {
-    return Arrays.copyOf(this, newSize)
+    return java.util.Arrays.copyOf(this, newSize)
 }
 
 /**
@@ -12505,7 +13075,7 @@ public inline fun CharArray.copyOf(newSize: Int): CharArray {
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun <T> Array<T>.copyOfRange(fromIndex: Int, toIndex: Int): Array<T> {
-    return Arrays.copyOfRange(this, fromIndex, toIndex)
+    return java.util.Arrays.copyOfRange(this, fromIndex, toIndex)
 }
 
 /**
@@ -12514,7 +13084,7 @@ public inline fun <T> Array<T>.copyOfRange(fromIndex: Int, toIndex: Int): Array<
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun ByteArray.copyOfRange(fromIndex: Int, toIndex: Int): ByteArray {
-    return Arrays.copyOfRange(this, fromIndex, toIndex)
+    return java.util.Arrays.copyOfRange(this, fromIndex, toIndex)
 }
 
 /**
@@ -12523,7 +13093,7 @@ public inline fun ByteArray.copyOfRange(fromIndex: Int, toIndex: Int): ByteArray
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun ShortArray.copyOfRange(fromIndex: Int, toIndex: Int): ShortArray {
-    return Arrays.copyOfRange(this, fromIndex, toIndex)
+    return java.util.Arrays.copyOfRange(this, fromIndex, toIndex)
 }
 
 /**
@@ -12532,7 +13102,7 @@ public inline fun ShortArray.copyOfRange(fromIndex: Int, toIndex: Int): ShortArr
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun IntArray.copyOfRange(fromIndex: Int, toIndex: Int): IntArray {
-    return Arrays.copyOfRange(this, fromIndex, toIndex)
+    return java.util.Arrays.copyOfRange(this, fromIndex, toIndex)
 }
 
 /**
@@ -12541,7 +13111,7 @@ public inline fun IntArray.copyOfRange(fromIndex: Int, toIndex: Int): IntArray {
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun LongArray.copyOfRange(fromIndex: Int, toIndex: Int): LongArray {
-    return Arrays.copyOfRange(this, fromIndex, toIndex)
+    return java.util.Arrays.copyOfRange(this, fromIndex, toIndex)
 }
 
 /**
@@ -12550,7 +13120,7 @@ public inline fun LongArray.copyOfRange(fromIndex: Int, toIndex: Int): LongArray
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun FloatArray.copyOfRange(fromIndex: Int, toIndex: Int): FloatArray {
-    return Arrays.copyOfRange(this, fromIndex, toIndex)
+    return java.util.Arrays.copyOfRange(this, fromIndex, toIndex)
 }
 
 /**
@@ -12559,7 +13129,7 @@ public inline fun FloatArray.copyOfRange(fromIndex: Int, toIndex: Int): FloatArr
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun DoubleArray.copyOfRange(fromIndex: Int, toIndex: Int): DoubleArray {
-    return Arrays.copyOfRange(this, fromIndex, toIndex)
+    return java.util.Arrays.copyOfRange(this, fromIndex, toIndex)
 }
 
 /**
@@ -12568,7 +13138,7 @@ public inline fun DoubleArray.copyOfRange(fromIndex: Int, toIndex: Int): DoubleA
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun BooleanArray.copyOfRange(fromIndex: Int, toIndex: Int): BooleanArray {
-    return Arrays.copyOfRange(this, fromIndex, toIndex)
+    return java.util.Arrays.copyOfRange(this, fromIndex, toIndex)
 }
 
 /**
@@ -12577,7 +13147,7 @@ public inline fun BooleanArray.copyOfRange(fromIndex: Int, toIndex: Int): Boolea
 @kotlin.jvm.JvmVersion
 @kotlin.internal.InlineOnly
 public inline fun CharArray.copyOfRange(fromIndex: Int, toIndex: Int): CharArray {
-    return Arrays.copyOfRange(this, fromIndex, toIndex)
+    return java.util.Arrays.copyOfRange(this, fromIndex, toIndex)
 }
 
 /**
@@ -12585,7 +13155,7 @@ public inline fun CharArray.copyOfRange(fromIndex: Int, toIndex: Int): CharArray
  */
 @kotlin.jvm.JvmVersion
 public fun <T> Array<T>.fill(element: T, fromIndex: Int = 0, toIndex: Int = size): Unit {
-    Arrays.fill(this, fromIndex, toIndex, element)
+    java.util.Arrays.fill(this, fromIndex, toIndex, element)
 }
 
 /**
@@ -12593,7 +13163,7 @@ public fun <T> Array<T>.fill(element: T, fromIndex: Int = 0, toIndex: Int = size
  */
 @kotlin.jvm.JvmVersion
 public fun ByteArray.fill(element: Byte, fromIndex: Int = 0, toIndex: Int = size): Unit {
-    Arrays.fill(this, fromIndex, toIndex, element)
+    java.util.Arrays.fill(this, fromIndex, toIndex, element)
 }
 
 /**
@@ -12601,7 +13171,7 @@ public fun ByteArray.fill(element: Byte, fromIndex: Int = 0, toIndex: Int = size
  */
 @kotlin.jvm.JvmVersion
 public fun ShortArray.fill(element: Short, fromIndex: Int = 0, toIndex: Int = size): Unit {
-    Arrays.fill(this, fromIndex, toIndex, element)
+    java.util.Arrays.fill(this, fromIndex, toIndex, element)
 }
 
 /**
@@ -12609,7 +13179,7 @@ public fun ShortArray.fill(element: Short, fromIndex: Int = 0, toIndex: Int = si
  */
 @kotlin.jvm.JvmVersion
 public fun IntArray.fill(element: Int, fromIndex: Int = 0, toIndex: Int = size): Unit {
-    Arrays.fill(this, fromIndex, toIndex, element)
+    java.util.Arrays.fill(this, fromIndex, toIndex, element)
 }
 
 /**
@@ -12617,7 +13187,7 @@ public fun IntArray.fill(element: Int, fromIndex: Int = 0, toIndex: Int = size):
  */
 @kotlin.jvm.JvmVersion
 public fun LongArray.fill(element: Long, fromIndex: Int = 0, toIndex: Int = size): Unit {
-    Arrays.fill(this, fromIndex, toIndex, element)
+    java.util.Arrays.fill(this, fromIndex, toIndex, element)
 }
 
 /**
@@ -12625,7 +13195,7 @@ public fun LongArray.fill(element: Long, fromIndex: Int = 0, toIndex: Int = size
  */
 @kotlin.jvm.JvmVersion
 public fun FloatArray.fill(element: Float, fromIndex: Int = 0, toIndex: Int = size): Unit {
-    Arrays.fill(this, fromIndex, toIndex, element)
+    java.util.Arrays.fill(this, fromIndex, toIndex, element)
 }
 
 /**
@@ -12633,7 +13203,7 @@ public fun FloatArray.fill(element: Float, fromIndex: Int = 0, toIndex: Int = si
  */
 @kotlin.jvm.JvmVersion
 public fun DoubleArray.fill(element: Double, fromIndex: Int = 0, toIndex: Int = size): Unit {
-    Arrays.fill(this, fromIndex, toIndex, element)
+    java.util.Arrays.fill(this, fromIndex, toIndex, element)
 }
 
 /**
@@ -12641,7 +13211,7 @@ public fun DoubleArray.fill(element: Double, fromIndex: Int = 0, toIndex: Int = 
  */
 @kotlin.jvm.JvmVersion
 public fun BooleanArray.fill(element: Boolean, fromIndex: Int = 0, toIndex: Int = size): Unit {
-    Arrays.fill(this, fromIndex, toIndex, element)
+    java.util.Arrays.fill(this, fromIndex, toIndex, element)
 }
 
 /**
@@ -12649,7 +13219,7 @@ public fun BooleanArray.fill(element: Boolean, fromIndex: Int = 0, toIndex: Int 
  */
 @kotlin.jvm.JvmVersion
 public fun CharArray.fill(element: Char, fromIndex: Int = 0, toIndex: Int = size): Unit {
-    Arrays.fill(this, fromIndex, toIndex, element)
+    java.util.Arrays.fill(this, fromIndex, toIndex, element)
 }
 
 /**
@@ -12676,7 +13246,7 @@ public fun <C : MutableCollection<in R>, R> Array<*>.filterIsInstanceTo(destinat
 @kotlin.jvm.JvmVersion
 public operator fun <T> Array<T>.plus(element: T): Array<T> {
     val index = size
-    val result = Arrays.copyOf(this, index + 1)
+    val result = java.util.Arrays.copyOf(this, index + 1)
     result[index] = element
     return result
 }
@@ -12687,7 +13257,7 @@ public operator fun <T> Array<T>.plus(element: T): Array<T> {
 @kotlin.jvm.JvmVersion
 public operator fun ByteArray.plus(element: Byte): ByteArray {
     val index = size
-    val result = Arrays.copyOf(this, index + 1)
+    val result = java.util.Arrays.copyOf(this, index + 1)
     result[index] = element
     return result
 }
@@ -12698,7 +13268,7 @@ public operator fun ByteArray.plus(element: Byte): ByteArray {
 @kotlin.jvm.JvmVersion
 public operator fun ShortArray.plus(element: Short): ShortArray {
     val index = size
-    val result = Arrays.copyOf(this, index + 1)
+    val result = java.util.Arrays.copyOf(this, index + 1)
     result[index] = element
     return result
 }
@@ -12709,7 +13279,7 @@ public operator fun ShortArray.plus(element: Short): ShortArray {
 @kotlin.jvm.JvmVersion
 public operator fun IntArray.plus(element: Int): IntArray {
     val index = size
-    val result = Arrays.copyOf(this, index + 1)
+    val result = java.util.Arrays.copyOf(this, index + 1)
     result[index] = element
     return result
 }
@@ -12720,7 +13290,7 @@ public operator fun IntArray.plus(element: Int): IntArray {
 @kotlin.jvm.JvmVersion
 public operator fun LongArray.plus(element: Long): LongArray {
     val index = size
-    val result = Arrays.copyOf(this, index + 1)
+    val result = java.util.Arrays.copyOf(this, index + 1)
     result[index] = element
     return result
 }
@@ -12731,7 +13301,7 @@ public operator fun LongArray.plus(element: Long): LongArray {
 @kotlin.jvm.JvmVersion
 public operator fun FloatArray.plus(element: Float): FloatArray {
     val index = size
-    val result = Arrays.copyOf(this, index + 1)
+    val result = java.util.Arrays.copyOf(this, index + 1)
     result[index] = element
     return result
 }
@@ -12742,7 +13312,7 @@ public operator fun FloatArray.plus(element: Float): FloatArray {
 @kotlin.jvm.JvmVersion
 public operator fun DoubleArray.plus(element: Double): DoubleArray {
     val index = size
-    val result = Arrays.copyOf(this, index + 1)
+    val result = java.util.Arrays.copyOf(this, index + 1)
     result[index] = element
     return result
 }
@@ -12753,7 +13323,7 @@ public operator fun DoubleArray.plus(element: Double): DoubleArray {
 @kotlin.jvm.JvmVersion
 public operator fun BooleanArray.plus(element: Boolean): BooleanArray {
     val index = size
-    val result = Arrays.copyOf(this, index + 1)
+    val result = java.util.Arrays.copyOf(this, index + 1)
     result[index] = element
     return result
 }
@@ -12764,7 +13334,7 @@ public operator fun BooleanArray.plus(element: Boolean): BooleanArray {
 @kotlin.jvm.JvmVersion
 public operator fun CharArray.plus(element: Char): CharArray {
     val index = size
-    val result = Arrays.copyOf(this, index + 1)
+    val result = java.util.Arrays.copyOf(this, index + 1)
     result[index] = element
     return result
 }
@@ -12775,7 +13345,7 @@ public operator fun CharArray.plus(element: Char): CharArray {
 @kotlin.jvm.JvmVersion
 public operator fun <T> Array<T>.plus(elements: Collection<T>): Array<T> {
     var index = size
-    val result = Arrays.copyOf(this, index + elements.size)
+    val result = java.util.Arrays.copyOf(this, index + elements.size)
     for (element in elements) result[index++] = element
     return result
 }
@@ -12786,7 +13356,7 @@ public operator fun <T> Array<T>.plus(elements: Collection<T>): Array<T> {
 @kotlin.jvm.JvmVersion
 public operator fun ByteArray.plus(elements: Collection<Byte>): ByteArray {
     var index = size
-    val result = Arrays.copyOf(this, index + elements.size)
+    val result = java.util.Arrays.copyOf(this, index + elements.size)
     for (element in elements) result[index++] = element
     return result
 }
@@ -12797,7 +13367,7 @@ public operator fun ByteArray.plus(elements: Collection<Byte>): ByteArray {
 @kotlin.jvm.JvmVersion
 public operator fun ShortArray.plus(elements: Collection<Short>): ShortArray {
     var index = size
-    val result = Arrays.copyOf(this, index + elements.size)
+    val result = java.util.Arrays.copyOf(this, index + elements.size)
     for (element in elements) result[index++] = element
     return result
 }
@@ -12808,7 +13378,7 @@ public operator fun ShortArray.plus(elements: Collection<Short>): ShortArray {
 @kotlin.jvm.JvmVersion
 public operator fun IntArray.plus(elements: Collection<Int>): IntArray {
     var index = size
-    val result = Arrays.copyOf(this, index + elements.size)
+    val result = java.util.Arrays.copyOf(this, index + elements.size)
     for (element in elements) result[index++] = element
     return result
 }
@@ -12819,7 +13389,7 @@ public operator fun IntArray.plus(elements: Collection<Int>): IntArray {
 @kotlin.jvm.JvmVersion
 public operator fun LongArray.plus(elements: Collection<Long>): LongArray {
     var index = size
-    val result = Arrays.copyOf(this, index + elements.size)
+    val result = java.util.Arrays.copyOf(this, index + elements.size)
     for (element in elements) result[index++] = element
     return result
 }
@@ -12830,7 +13400,7 @@ public operator fun LongArray.plus(elements: Collection<Long>): LongArray {
 @kotlin.jvm.JvmVersion
 public operator fun FloatArray.plus(elements: Collection<Float>): FloatArray {
     var index = size
-    val result = Arrays.copyOf(this, index + elements.size)
+    val result = java.util.Arrays.copyOf(this, index + elements.size)
     for (element in elements) result[index++] = element
     return result
 }
@@ -12841,7 +13411,7 @@ public operator fun FloatArray.plus(elements: Collection<Float>): FloatArray {
 @kotlin.jvm.JvmVersion
 public operator fun DoubleArray.plus(elements: Collection<Double>): DoubleArray {
     var index = size
-    val result = Arrays.copyOf(this, index + elements.size)
+    val result = java.util.Arrays.copyOf(this, index + elements.size)
     for (element in elements) result[index++] = element
     return result
 }
@@ -12852,7 +13422,7 @@ public operator fun DoubleArray.plus(elements: Collection<Double>): DoubleArray 
 @kotlin.jvm.JvmVersion
 public operator fun BooleanArray.plus(elements: Collection<Boolean>): BooleanArray {
     var index = size
-    val result = Arrays.copyOf(this, index + elements.size)
+    val result = java.util.Arrays.copyOf(this, index + elements.size)
     for (element in elements) result[index++] = element
     return result
 }
@@ -12863,7 +13433,7 @@ public operator fun BooleanArray.plus(elements: Collection<Boolean>): BooleanArr
 @kotlin.jvm.JvmVersion
 public operator fun CharArray.plus(elements: Collection<Char>): CharArray {
     var index = size
-    val result = Arrays.copyOf(this, index + elements.size)
+    val result = java.util.Arrays.copyOf(this, index + elements.size)
     for (element in elements) result[index++] = element
     return result
 }
@@ -12875,7 +13445,7 @@ public operator fun CharArray.plus(elements: Collection<Char>): CharArray {
 public operator fun <T> Array<T>.plus(elements: Array<out T>): Array<T> {
     val thisSize = size
     val arraySize = elements.size
-    val result = Arrays.copyOf(this, thisSize + arraySize)
+    val result = java.util.Arrays.copyOf(this, thisSize + arraySize)
     System.arraycopy(elements, 0, result, thisSize, arraySize)
     return result
 }
@@ -12887,7 +13457,7 @@ public operator fun <T> Array<T>.plus(elements: Array<out T>): Array<T> {
 public operator fun ByteArray.plus(elements: ByteArray): ByteArray {
     val thisSize = size
     val arraySize = elements.size
-    val result = Arrays.copyOf(this, thisSize + arraySize)
+    val result = java.util.Arrays.copyOf(this, thisSize + arraySize)
     System.arraycopy(elements, 0, result, thisSize, arraySize)
     return result
 }
@@ -12899,7 +13469,7 @@ public operator fun ByteArray.plus(elements: ByteArray): ByteArray {
 public operator fun ShortArray.plus(elements: ShortArray): ShortArray {
     val thisSize = size
     val arraySize = elements.size
-    val result = Arrays.copyOf(this, thisSize + arraySize)
+    val result = java.util.Arrays.copyOf(this, thisSize + arraySize)
     System.arraycopy(elements, 0, result, thisSize, arraySize)
     return result
 }
@@ -12911,7 +13481,7 @@ public operator fun ShortArray.plus(elements: ShortArray): ShortArray {
 public operator fun IntArray.plus(elements: IntArray): IntArray {
     val thisSize = size
     val arraySize = elements.size
-    val result = Arrays.copyOf(this, thisSize + arraySize)
+    val result = java.util.Arrays.copyOf(this, thisSize + arraySize)
     System.arraycopy(elements, 0, result, thisSize, arraySize)
     return result
 }
@@ -12923,7 +13493,7 @@ public operator fun IntArray.plus(elements: IntArray): IntArray {
 public operator fun LongArray.plus(elements: LongArray): LongArray {
     val thisSize = size
     val arraySize = elements.size
-    val result = Arrays.copyOf(this, thisSize + arraySize)
+    val result = java.util.Arrays.copyOf(this, thisSize + arraySize)
     System.arraycopy(elements, 0, result, thisSize, arraySize)
     return result
 }
@@ -12935,7 +13505,7 @@ public operator fun LongArray.plus(elements: LongArray): LongArray {
 public operator fun FloatArray.plus(elements: FloatArray): FloatArray {
     val thisSize = size
     val arraySize = elements.size
-    val result = Arrays.copyOf(this, thisSize + arraySize)
+    val result = java.util.Arrays.copyOf(this, thisSize + arraySize)
     System.arraycopy(elements, 0, result, thisSize, arraySize)
     return result
 }
@@ -12947,7 +13517,7 @@ public operator fun FloatArray.plus(elements: FloatArray): FloatArray {
 public operator fun DoubleArray.plus(elements: DoubleArray): DoubleArray {
     val thisSize = size
     val arraySize = elements.size
-    val result = Arrays.copyOf(this, thisSize + arraySize)
+    val result = java.util.Arrays.copyOf(this, thisSize + arraySize)
     System.arraycopy(elements, 0, result, thisSize, arraySize)
     return result
 }
@@ -12959,7 +13529,7 @@ public operator fun DoubleArray.plus(elements: DoubleArray): DoubleArray {
 public operator fun BooleanArray.plus(elements: BooleanArray): BooleanArray {
     val thisSize = size
     val arraySize = elements.size
-    val result = Arrays.copyOf(this, thisSize + arraySize)
+    val result = java.util.Arrays.copyOf(this, thisSize + arraySize)
     System.arraycopy(elements, 0, result, thisSize, arraySize)
     return result
 }
@@ -12971,7 +13541,7 @@ public operator fun BooleanArray.plus(elements: BooleanArray): BooleanArray {
 public operator fun CharArray.plus(elements: CharArray): CharArray {
     val thisSize = size
     val arraySize = elements.size
-    val result = Arrays.copyOf(this, thisSize + arraySize)
+    val result = java.util.Arrays.copyOf(this, thisSize + arraySize)
     System.arraycopy(elements, 0, result, thisSize, arraySize)
     return result
 }
@@ -12990,7 +13560,7 @@ public inline fun <T> Array<T>.plusElement(element: T): Array<T> {
  */
 @kotlin.jvm.JvmVersion
 public fun <T> Array<out T>.sort(): Unit {
-    if (size > 1) Arrays.sort(this)
+    if (size > 1) java.util.Arrays.sort(this)
 }
 
 /**
@@ -12998,7 +13568,7 @@ public fun <T> Array<out T>.sort(): Unit {
  */
 @kotlin.jvm.JvmVersion
 public fun ByteArray.sort(): Unit {
-    if (size > 1) Arrays.sort(this)
+    if (size > 1) java.util.Arrays.sort(this)
 }
 
 /**
@@ -13006,7 +13576,7 @@ public fun ByteArray.sort(): Unit {
  */
 @kotlin.jvm.JvmVersion
 public fun ShortArray.sort(): Unit {
-    if (size > 1) Arrays.sort(this)
+    if (size > 1) java.util.Arrays.sort(this)
 }
 
 /**
@@ -13014,7 +13584,7 @@ public fun ShortArray.sort(): Unit {
  */
 @kotlin.jvm.JvmVersion
 public fun IntArray.sort(): Unit {
-    if (size > 1) Arrays.sort(this)
+    if (size > 1) java.util.Arrays.sort(this)
 }
 
 /**
@@ -13022,7 +13592,7 @@ public fun IntArray.sort(): Unit {
  */
 @kotlin.jvm.JvmVersion
 public fun LongArray.sort(): Unit {
-    if (size > 1) Arrays.sort(this)
+    if (size > 1) java.util.Arrays.sort(this)
 }
 
 /**
@@ -13030,7 +13600,7 @@ public fun LongArray.sort(): Unit {
  */
 @kotlin.jvm.JvmVersion
 public fun FloatArray.sort(): Unit {
-    if (size > 1) Arrays.sort(this)
+    if (size > 1) java.util.Arrays.sort(this)
 }
 
 /**
@@ -13038,7 +13608,7 @@ public fun FloatArray.sort(): Unit {
  */
 @kotlin.jvm.JvmVersion
 public fun DoubleArray.sort(): Unit {
-    if (size > 1) Arrays.sort(this)
+    if (size > 1) java.util.Arrays.sort(this)
 }
 
 /**
@@ -13046,7 +13616,7 @@ public fun DoubleArray.sort(): Unit {
  */
 @kotlin.jvm.JvmVersion
 public fun CharArray.sort(): Unit {
-    if (size > 1) Arrays.sort(this)
+    if (size > 1) java.util.Arrays.sort(this)
 }
 
 /**
@@ -13054,7 +13624,7 @@ public fun CharArray.sort(): Unit {
  */
 @kotlin.jvm.JvmVersion
 public fun <T> Array<out T>.sort(fromIndex: Int = 0, toIndex: Int = size): Unit {
-    Arrays.sort(this, fromIndex, toIndex)
+    java.util.Arrays.sort(this, fromIndex, toIndex)
 }
 
 /**
@@ -13062,7 +13632,7 @@ public fun <T> Array<out T>.sort(fromIndex: Int = 0, toIndex: Int = size): Unit 
  */
 @kotlin.jvm.JvmVersion
 public fun ByteArray.sort(fromIndex: Int = 0, toIndex: Int = size): Unit {
-    Arrays.sort(this, fromIndex, toIndex)
+    java.util.Arrays.sort(this, fromIndex, toIndex)
 }
 
 /**
@@ -13070,7 +13640,7 @@ public fun ByteArray.sort(fromIndex: Int = 0, toIndex: Int = size): Unit {
  */
 @kotlin.jvm.JvmVersion
 public fun ShortArray.sort(fromIndex: Int = 0, toIndex: Int = size): Unit {
-    Arrays.sort(this, fromIndex, toIndex)
+    java.util.Arrays.sort(this, fromIndex, toIndex)
 }
 
 /**
@@ -13078,7 +13648,7 @@ public fun ShortArray.sort(fromIndex: Int = 0, toIndex: Int = size): Unit {
  */
 @kotlin.jvm.JvmVersion
 public fun IntArray.sort(fromIndex: Int = 0, toIndex: Int = size): Unit {
-    Arrays.sort(this, fromIndex, toIndex)
+    java.util.Arrays.sort(this, fromIndex, toIndex)
 }
 
 /**
@@ -13086,7 +13656,7 @@ public fun IntArray.sort(fromIndex: Int = 0, toIndex: Int = size): Unit {
  */
 @kotlin.jvm.JvmVersion
 public fun LongArray.sort(fromIndex: Int = 0, toIndex: Int = size): Unit {
-    Arrays.sort(this, fromIndex, toIndex)
+    java.util.Arrays.sort(this, fromIndex, toIndex)
 }
 
 /**
@@ -13094,7 +13664,7 @@ public fun LongArray.sort(fromIndex: Int = 0, toIndex: Int = size): Unit {
  */
 @kotlin.jvm.JvmVersion
 public fun FloatArray.sort(fromIndex: Int = 0, toIndex: Int = size): Unit {
-    Arrays.sort(this, fromIndex, toIndex)
+    java.util.Arrays.sort(this, fromIndex, toIndex)
 }
 
 /**
@@ -13102,7 +13672,7 @@ public fun FloatArray.sort(fromIndex: Int = 0, toIndex: Int = size): Unit {
  */
 @kotlin.jvm.JvmVersion
 public fun DoubleArray.sort(fromIndex: Int = 0, toIndex: Int = size): Unit {
-    Arrays.sort(this, fromIndex, toIndex)
+    java.util.Arrays.sort(this, fromIndex, toIndex)
 }
 
 /**
@@ -13110,7 +13680,7 @@ public fun DoubleArray.sort(fromIndex: Int = 0, toIndex: Int = size): Unit {
  */
 @kotlin.jvm.JvmVersion
 public fun CharArray.sort(fromIndex: Int = 0, toIndex: Int = size): Unit {
-    Arrays.sort(this, fromIndex, toIndex)
+    java.util.Arrays.sort(this, fromIndex, toIndex)
 }
 
 /**
@@ -13118,7 +13688,7 @@ public fun CharArray.sort(fromIndex: Int = 0, toIndex: Int = size): Unit {
  */
 @kotlin.jvm.JvmVersion
 public fun <T> Array<out T>.sortWith(comparator: Comparator<in T>): Unit {
-    if (size > 1) Arrays.sort(this, comparator)
+    if (size > 1) java.util.Arrays.sort(this, comparator)
 }
 
 /**
@@ -13126,7 +13696,7 @@ public fun <T> Array<out T>.sortWith(comparator: Comparator<in T>): Unit {
  */
 @kotlin.jvm.JvmVersion
 public fun <T> Array<out T>.sortWith(comparator: Comparator<in T>, fromIndex: Int = 0, toIndex: Int = size): Unit {
-    Arrays.sort(this, fromIndex, toIndex, comparator)
+    java.util.Arrays.sort(this, fromIndex, toIndex, comparator)
 }
 
 /**

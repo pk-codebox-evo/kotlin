@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.idea.decompiler.navigation;
 import com.intellij.testFramework.TestDataPath;
 import org.jetbrains.kotlin.test.JUnit3RunnerWithInners;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
+import org.jetbrains.kotlin.test.TargetBackend;
 import org.jetbrains.kotlin.test.TestMetadata;
 import org.junit.runner.RunWith;
 
@@ -34,7 +35,7 @@ public class NavigateToLibrarySourceTestGenerated extends AbstractNavigateToLibr
     @RunWith(JUnit3RunnerWithInners.class)
     public static class Usercode extends AbstractNavigateToLibrarySourceTest {
         public void testAllFilesPresentInUsercode() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/decompiler/navigation/usercode"), Pattern.compile("^(.+)\\.kt$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/decompiler/navigation/usercode"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
         }
 
         @TestMetadata("ClassObject.kt")
@@ -112,6 +113,12 @@ public class NavigateToLibrarySourceTestGenerated extends AbstractNavigateToLibr
         @TestMetadata("SameNameInDifferentSources.kt")
         public void testSameNameInDifferentSources() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("idea/testData/decompiler/navigation/usercode/SameNameInDifferentSources.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("TypeAlias.kt")
+        public void testTypeAlias() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/decompiler/navigation/usercode/TypeAlias.kt");
             doTest(fileName);
         }
 
@@ -127,7 +134,7 @@ public class NavigateToLibrarySourceTestGenerated extends AbstractNavigateToLibr
     @RunWith(JUnit3RunnerWithInners.class)
     public static class UsercodeWithJSModule extends AbstractNavigateToLibrarySourceTest {
         public void testAllFilesPresentInUsercodeWithJSModule() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/decompiler/navigation/usercode"), Pattern.compile("^(.+)\\.kt$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/decompiler/navigation/usercode"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
         }
 
         @TestMetadata("ClassObject.kt")
@@ -205,6 +212,12 @@ public class NavigateToLibrarySourceTestGenerated extends AbstractNavigateToLibr
         @TestMetadata("SameNameInDifferentSources.kt")
         public void testSameNameInDifferentSources() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("idea/testData/decompiler/navigation/usercode/SameNameInDifferentSources.kt");
+            doWithJSModuleTest(fileName);
+        }
+
+        @TestMetadata("TypeAlias.kt")
+        public void testTypeAlias() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/decompiler/navigation/usercode/TypeAlias.kt");
             doWithJSModuleTest(fileName);
         }
 

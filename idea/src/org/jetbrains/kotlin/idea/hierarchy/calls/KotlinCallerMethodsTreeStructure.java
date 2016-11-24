@@ -37,7 +37,7 @@ import gnu.trove.TObjectHashingStrategy;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.asJava.LightClassUtil;
 import org.jetbrains.kotlin.idea.caches.resolve.ResolutionUtils;
-import org.jetbrains.kotlin.idea.hierarchy.HierarchyUtils;
+import org.jetbrains.kotlin.idea.hierarchy.HierarchyUtilsKt;
 import org.jetbrains.kotlin.idea.references.KtReference;
 import org.jetbrains.kotlin.idea.references.ReferenceUtilKt;
 import org.jetbrains.kotlin.idea.search.usagesSearch.UtilsKt;
@@ -127,7 +127,7 @@ public class KotlinCallerMethodsTreeStructure extends KotlinCallTreeStructure {
         return (javaCallers != null) ? ArrayUtil.mergeArrays(javaCallers, callers) : callers;
     }
 
-    private void processPsiMethodCallers(
+    private static void processPsiMethodCallers(
             Iterable<PsiMethod> lightMethods,
             HierarchyNodeDescriptor descriptor,
             Map<PsiElement, HierarchyNodeDescriptor> methodToDescriptorMap,
@@ -161,10 +161,10 @@ public class KotlinCallerMethodsTreeStructure extends KotlinCallTreeStructure {
         for (PsiMethod superMethod: methodsToFind) {
             ContainerUtil.addAll(references, MethodReferencesSearch.search(superMethod, searchScope, true));
         }
-        ContainerUtil.process(references, defaultQueryProcessor(descriptor, methodToDescriptorMap, kotlinOnly));
+        ContainerUtil.process(references, defaultQueryProcessor(descriptor, methodToDescriptorMap, kotlinOnly, false));
     }
 
-    private void processKtClassOrObjectCallers(
+    private static void processKtClassOrObjectCallers(
             final KtClassOrObject classOrObject,
             HierarchyNodeDescriptor descriptor,
             Map<PsiElement, HierarchyNodeDescriptor> methodToDescriptorMap,
@@ -177,20 +177,21 @@ public class KotlinCallerMethodsTreeStructure extends KotlinCallTreeStructure {
                         return UtilsKt.isConstructorUsage(reference, classOrObject);
                     }
                 },
-                defaultQueryProcessor(descriptor, methodToDescriptorMap, false)
+                defaultQueryProcessor(descriptor, methodToDescriptorMap, false, false)
         );
         ReferencesSearch.search(classOrObject, searchScope, false).forEach(processor);
     }
 
-    private Processor<PsiReference> defaultQueryProcessor(
+    static Processor<PsiReference> defaultQueryProcessor(
             final HierarchyNodeDescriptor descriptor,
             final Map<PsiElement, HierarchyNodeDescriptor> methodToDescriptorMap,
-            boolean kotlinOnly
+            boolean kotlinOnly,
+            final boolean wrapAsLightElements
     ) {
         return new CalleeReferenceProcessor(kotlinOnly) {
             @Override
             protected void onAccept(@NotNull PsiReference ref, @NotNull PsiElement element) {
-                addNodeDescriptorForElement(ref, element, methodToDescriptorMap, descriptor);
+                addNodeDescriptorForElement(ref, element, methodToDescriptorMap, descriptor, wrapAsLightElements);
             }
         };
     }
@@ -234,7 +235,7 @@ public class KotlinCallerMethodsTreeStructure extends KotlinCallTreeStructure {
             PsiElement refElement = ref.getElement();
             if (PsiTreeUtil.getParentOfType(refElement, KtImportDirective.class, true) != null) return true;
 
-            PsiElement element = HierarchyUtils.getCallHierarchyElement(refElement);
+            PsiElement element = HierarchyUtilsKt.getCallHierarchyElement(refElement);
 
             if (kotlinOnly && !(element instanceof KtNamedDeclaration)) return true;
 
@@ -242,7 +243,7 @@ public class KotlinCallerMethodsTreeStructure extends KotlinCallTreeStructure {
             if (element instanceof KtProperty) {
                 KtProperty property = (KtProperty) element;
                 if (PsiTreeUtil.isAncestor(property.getInitializer(), refElement, false)) {
-                    element = HierarchyUtils.getCallHierarchyElement(element.getParent());
+                    element = HierarchyUtilsKt.getCallHierarchyElement(element.getParent());
                 }
             }
 

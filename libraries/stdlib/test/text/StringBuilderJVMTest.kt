@@ -1,11 +1,18 @@
+@file:kotlin.jvm.JvmVersion
 package test.text
 
-import kotlin.*
 import kotlin.test.*
-import org.junit.Test as test
+import org.junit.Test
 
 class StringBuilderJVMTest() {
-    @test fun getAndSetChar() {
+
+    @Test fun stringBuildWithInitialCapacity() {
+        val s = buildString(123) {
+            assertEquals(123, capacity())
+        }
+    }
+
+    @Test fun getAndSetChar() {
         val sb = StringBuilder("abc")
         sb[1] = 'z'
 

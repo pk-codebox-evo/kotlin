@@ -33,7 +33,7 @@ object CoroutineSuspendCallChecker : CallChecker {
         val dispatchReceiverOwner = (resolvedCall.dispatchReceiver as? CoroutineReceiverValue)?.declarationDescriptor ?: return
         val callElement = resolvedCall.call.callElement as KtExpression
 
-        if (!InlineUtil.checkNonLocalReturnUsage(dispatchReceiverOwner, callElement, context.trace)) {
+        if (!InlineUtil.checkNonLocalReturnUsage(dispatchReceiverOwner, callElement, context.resolutionContext)) {
             context.trace.report(Errors.NON_LOCAL_SUSPENSION_POINT.on(reportOn))
         }
     }
@@ -43,7 +43,7 @@ object BuilderFunctionsCallChecker : CallChecker {
     override fun check(resolvedCall: ResolvedCall<*>, reportOn: PsiElement, context: CallCheckerContext) {
         val descriptor = resolvedCall.candidateDescriptor as? FunctionDescriptor ?: return
         if (descriptor.valueParameters.any { it.isCoroutine } &&
-            !context.languageFeatureSettings.supportsFeature(LanguageFeature.Coroutines)) {
+            !context.languageVersionSettings.supportsFeature(LanguageFeature.Coroutines)) {
             context.trace.report(Errors.UNSUPPORTED_FEATURE.on(reportOn, LanguageFeature.Coroutines))
         }
     }

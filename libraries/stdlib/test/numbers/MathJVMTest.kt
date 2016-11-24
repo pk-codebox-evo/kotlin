@@ -1,13 +1,14 @@
+@file:kotlin.jvm.JvmVersion
 package test.numbers
 
 import java.math.BigInteger
 import java.math.BigDecimal
 
 import kotlin.test.*
-import org.junit.Test as test
+import org.junit.Test
 
 class MathTest {
-    @test fun testBigInteger() {
+    @Test fun testBigInteger() {
         val a = BigInteger("2")
         val b = BigInteger("3")
 
@@ -20,7 +21,7 @@ class MathTest {
         assertEquals(BigInteger("-2"), (-a).remainder(b))
     }
 
-    @test fun testBigDecimal() {
+    @Test fun testBigDecimal() {
         val a = BigDecimal("2")
         val b = BigDecimal("3")
 

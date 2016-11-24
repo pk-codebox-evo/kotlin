@@ -29,6 +29,7 @@ fun createKotlinJavascriptPackageFragmentProvider(
         storageManager: StorageManager,
         module: ModuleDescriptor,
         packageFqNames: Set<FqName>,
+        configuration: DeserializationConfiguration,
         loadResource: (String) -> InputStream?
 ): PackageFragmentProvider {
     val packageFragments = packageFqNames.map { fqName ->
@@ -37,23 +38,21 @@ fun createKotlinJavascriptPackageFragmentProvider(
     val provider = PackageFragmentProviderImpl(packageFragments)
 
     val notFoundClasses = NotFoundClasses(storageManager, module)
-    val localClassResolver = LocalClassifierResolverImpl()
 
     val components = DeserializationComponents(
             storageManager,
             module,
+            configuration,
             DeserializedClassDataFinder(provider),
             AnnotationAndConstantLoaderImpl(module, notFoundClasses, JsSerializerProtocol),
             provider,
-            localClassResolver,
+            LocalClassifierTypeSettings.Default,
             ErrorReporter.DO_NOTHING,
             LookupTracker.DO_NOTHING,
             DynamicTypeDeserializer,
-            ClassDescriptorFactory.EMPTY,
+            emptyList(),
             notFoundClasses
     )
-
-    localClassResolver.setDeserializationComponents(components)
 
     for (packageFragment in packageFragments) {
         packageFragment.components = components

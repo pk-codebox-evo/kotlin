@@ -5,6 +5,8 @@ class Controller {
         result++
         x.resume("OK")
     }
+
+    // INTERCEPT_RESUME_PLACEHOLDER
 }
 
 
@@ -16,7 +18,7 @@ fun box(): String {
 
     for (i in 1..3) {
         builder {
-            if (suspendHere() != "OK") throw java.lang.RuntimeException("fail 1")
+            if (suspendHere() != "OK") throw RuntimeException("fail 1")
         }
     }
 

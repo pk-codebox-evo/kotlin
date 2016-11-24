@@ -28,11 +28,9 @@ import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
 import org.jetbrains.kotlin.idea.core.ShortenReferences
+import org.jetbrains.kotlin.idea.core.setType
 import org.jetbrains.kotlin.idea.util.IdeDescriptorRenderers
 import org.jetbrains.kotlin.idea.util.application.runWriteAction
-import org.jetbrains.kotlin.idea.util.approximateWithResolvableType
-import org.jetbrains.kotlin.idea.util.getResolutionScope
-import org.jetbrains.kotlin.idea.util.isResolvableInScope
 import org.jetbrains.kotlin.idea.util.getResolutionScope
 import org.jetbrains.kotlin.idea.util.getResolvableApproximations
 import org.jetbrains.kotlin.psi.*
@@ -51,29 +49,6 @@ class SpecifyTypeExplicitlyIntention :
         SelfTargetingRangeIntention<KtCallableDeclaration>(KtCallableDeclaration::class.java, "Specify type explicitly"),
         LowPriorityAction {
 
-    fun dangerousFlexibleTypeOrNull(
-            declaration: KtCallableDeclaration, publicAPIOnly: Boolean, reportPlatformArguments: Boolean
-    ): KotlinType? {
-        when (declaration) {
-            is KtFunction -> if (declaration.isLocal || declaration.hasDeclaredReturnType()) return null
-            is KtProperty -> if (declaration.isLocal || declaration.typeReference != null) return null
-            else -> return null
-        }
-
-        if (declaration.containingClassOrObject?.isLocal() ?: false) return null
-
-        val callable = declaration.resolveToDescriptorIfAny() as? CallableDescriptor ?: return null
-        if (publicAPIOnly && !callable.visibility.isPublicAPI) return null
-        val type = callable.returnType ?: return null
-        if (reportPlatformArguments) {
-            if (!type.isFlexibleRecursive()) return null
-        }
-        else {
-            if (!type.isFlexible()) return null
-        }
-        return type
-    }
-
     override fun applicabilityRange(element: KtCallableDeclaration): TextRange? {
         if (element.containingFile is KtCodeFragment) return null
         if (element is KtFunctionLiteral) return null // TODO: should KtFunctionLiteral be KtCallableDeclaration at all?
@@ -86,7 +61,7 @@ class SpecifyTypeExplicitlyIntention :
 
         text = if (element is KtFunction) "Specify return type explicitly" else "Specify type explicitly"
 
-        val initializer = (element as? KtWithExpressionInitializer)?.initializer
+        val initializer = (element as? KtDeclarationWithInitializer)?.initializer
         return if (initializer != null) {
             TextRange(element.startOffset, initializer.startOffset - 1)
         }
@@ -101,18 +76,37 @@ class SpecifyTypeExplicitlyIntention :
     }
 
     companion object {
-
-        private val PropertyDescriptor.getterType: KotlinType?
-            get() = getter?.returnType?.let { if (it.isError) null else it }
-
         private val PropertyDescriptor.setterType: KotlinType?
             get() = setter?.valueParameters?.firstOrNull()?.type?.let { if (it.isError) null else it }
+
+        fun dangerousFlexibleTypeOrNull(
+                declaration: KtCallableDeclaration, publicAPIOnly: Boolean, reportPlatformArguments: Boolean
+        ): KotlinType? {
+            when (declaration) {
+                is KtFunction -> if (declaration.isLocal || declaration.hasDeclaredReturnType()) return null
+                is KtProperty -> if (declaration.isLocal || declaration.typeReference != null) return null
+                else -> return null
+            }
+
+            if (declaration.containingClassOrObject?.isLocal() ?: false) return null
+
+            val callable = declaration.resolveToDescriptorIfAny() as? CallableDescriptor ?: return null
+            if (publicAPIOnly && !callable.visibility.isPublicAPI) return null
+            val type = callable.returnType ?: return null
+            if (reportPlatformArguments) {
+                if (!type.isFlexibleRecursive()) return null
+            }
+            else {
+                if (!type.isFlexible()) return null
+            }
+            return type
+        }
 
         fun getTypeForDeclaration(declaration: KtCallableDeclaration): KotlinType {
             val descriptor = declaration.analyze()[BindingContext.DECLARATION_TO_DESCRIPTOR, declaration]
             val type = (descriptor as? CallableDescriptor)?.returnType
             if (type != null && type.isError && descriptor is PropertyDescriptor) {
-                return descriptor.getterType ?: descriptor.setterType ?: ErrorUtils.createErrorType("null type")
+                return descriptor.setterType ?: ErrorUtils.createErrorType("null type")
             }
             return type ?: ErrorUtils.createErrorType("null type")
         }

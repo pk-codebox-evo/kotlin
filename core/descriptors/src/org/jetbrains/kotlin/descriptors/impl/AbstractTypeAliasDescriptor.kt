@@ -21,9 +21,11 @@ import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
+import org.jetbrains.kotlin.resolve.scopes.MemberScope
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.SimpleType
 import org.jetbrains.kotlin.types.TypeConstructor
+import org.jetbrains.kotlin.types.TypeUtils
 
 abstract class AbstractTypeAliasDescriptor(
         containingDeclaration: DeclarationDescriptor,
@@ -45,20 +47,23 @@ abstract class AbstractTypeAliasDescriptor(
             visitor.visitTypeAliasDescriptor(this, data)
 
     override fun isInner(): Boolean =
-            containingDeclaration !is PackageFragmentDescriptor
+            // NB: it's ok to use underlyingType here, since referenced inner type aliases also capture type parameters.
+            // Using expandedType looks "proper", but in fact will cause a recursion in expandedType resolution,
+            // which will silently produce wrong result.
+            TypeUtils.contains(underlyingType) {
+                !it.isError && run {
+                    val constructorDescriptor = it.constructor.declarationDescriptor
+                    constructorDescriptor is TypeParameterDescriptor &&
+                    constructorDescriptor.containingDeclaration != this@AbstractTypeAliasDescriptor
+                }
+            }
 
     override fun getDeclaredTypeParameters(): List<TypeParameterDescriptor> =
             declaredTypeParametersImpl
 
-    override val classDescriptor: ClassDescriptor?
-        get() = if (expandedType.isError) null else expandedType.constructor.declarationDescriptor as? ClassDescriptor
-
     override fun getModality() = Modality.FINAL
 
     override fun getVisibility() = visibilityImpl
-
-    override fun getDefaultType(): SimpleType =
-            TODO("typealias getDefaultType")
 
     override fun getTypeConstructor(): TypeConstructor =
             typeConstructor
@@ -66,6 +71,9 @@ abstract class AbstractTypeAliasDescriptor(
     override fun toString(): String = "typealias ${name.asString()}"
 
     protected abstract fun getTypeConstructorTypeParameters(): List<TypeParameterDescriptor>
+
+    protected fun computeDefaultType(): SimpleType =
+            TypeUtils.makeUnsubstitutedType(this, classDescriptor?.unsubstitutedMemberScope ?: MemberScope.Empty)
 
     private val typeConstructor = object : TypeConstructor {
         override fun getDeclarationDescriptor(): TypeAliasDescriptor =
@@ -86,10 +94,6 @@ abstract class AbstractTypeAliasDescriptor(
         override fun getBuiltIns(): KotlinBuiltIns =
                 declarationDescriptor.builtIns
 
-        override val annotations: Annotations
-            get() = declarationDescriptor.annotations
-
         override fun toString(): String = "[typealias ${declarationDescriptor.name.asString()}]"
     }
-
 }

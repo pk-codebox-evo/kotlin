@@ -16,46 +16,46 @@
 
 package org.jetbrains.kotlin.asJava
 
-import com.intellij.openapi.progress.ProcessCanceledException
-import com.intellij.openapi.util.Comparing
 import com.intellij.psi.*
 import com.intellij.psi.impl.java.stubs.PsiClassStub
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.stubs.PsiFileStub
 import com.intellij.psi.stubs.StubElement
 import com.intellij.psi.util.PsiTreeUtil
-import com.intellij.util.SmartList
+import org.jetbrains.kotlin.asJava.classes.KtLightClass
+import org.jetbrains.kotlin.asJava.elements.*
+import org.jetbrains.kotlin.asJava.finder.JavaElementFinder
 import org.jetbrains.kotlin.fileClasses.javaFileFacadeFqName
 import org.jetbrains.kotlin.load.java.JvmAbi
-import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.getNonStrictParentOfType
 
 object LightClassUtil {
 
-    fun findClass(fqn: FqName, stub: StubElement<*>): PsiClass? {
-        if (stub is PsiClassStub<*> && Comparing.equal(fqn.asString(), stub.qualifiedName)) {
+    fun findClass(stub: StubElement<*>, predicate: (PsiClassStub<*>) -> Boolean): PsiClass? {
+        if (stub is PsiClassStub<*> && predicate(stub)) {
             return stub.getPsi()
         }
 
         if (stub is PsiClassStub<*> || stub is PsiFileStub<*>) {
             for (child in stub.childrenStubs) {
-                val answer = findClass(fqn, child)
+                val answer = findClass(child, predicate)
                 if (answer != null) return answer
             }
         }
-
         return null
-    }/*package*/
+    }
 
     fun getLightClassAccessorMethod(accessor: KtPropertyAccessor): PsiMethod? =
             getLightClassAccessorMethods(accessor).firstOrNull()
 
     fun getLightClassAccessorMethods(accessor: KtPropertyAccessor): List<PsiMethod> {
         val property = accessor.getNonStrictParentOfType<KtProperty>() ?: return emptyList()
-        val wrappers = getPsiMethodWrappers(property, true)
-        return wrappers.filter { wrapper -> (accessor.isGetter && !JvmAbi.isSetterName(wrapper.name)) ||
-                                            (accessor.isSetter && JvmAbi.isSetterName(wrapper.name)) }
+        val wrappers = getPsiMethodWrappers(property)
+        return wrappers.filter { wrapper ->
+            (accessor.isGetter && !JvmAbi.isSetterName(wrapper.name)) ||
+            (accessor.isSetter && JvmAbi.isSetterName(wrapper.name))
+        }.toList()
     }
 
     fun getLightFieldForCompanionObject(companionObject: KtClassOrObject): PsiField? {
@@ -120,36 +120,16 @@ object LightClassUtil {
     }
 
     fun getLightClassMethods(function: KtFunction): List<PsiMethod> {
-        return getPsiMethodWrappers(function, true)
+        return getPsiMethodWrappers(function).toList()
     }
 
     private fun getPsiMethodWrapper(declaration: KtDeclaration): PsiMethod? {
-        return getPsiMethodWrappers(declaration, false).firstOrNull()
+        return getPsiMethodWrappers(declaration).firstOrNull()
     }
 
-    private fun getPsiMethodWrappers(declaration: KtDeclaration, collectAll: Boolean): List<PsiMethod> {
-        val psiClass = getWrappingClass(declaration) ?: return emptyList()
-
-        val methods = SmartList<PsiMethod>()
-        for (method in psiClass.methods.asList()) {
-            try {
-                if (method is KtLightMethod && method.kotlinOrigin === declaration) {
-                    methods.add(method)
-                    if (!collectAll) {
-                        return methods
-                    }
-                }
-            }
-            catch (e: ProcessCanceledException) {
-                throw e
-            }
-            catch (e: Throwable) {
-                throw IllegalStateException(
-                        "Error while wrapping declaration " + declaration.name + "Context\n:" + method, e)
-            }
-        }
-
-        return methods
+    private fun getPsiMethodWrappers(declaration: KtDeclaration): Sequence<PsiMethod> {
+        return getWrappingClasses(declaration).flatMap { it.methods.asSequence() }
+                .filter { method -> method is KtLightMethod && method.kotlinOrigin === declaration }
     }
 
     private fun getWrappingClass(declaration: KtDeclaration): PsiClass? {
@@ -185,6 +165,15 @@ object LightClassUtil {
         return null
     }
 
+    private fun getWrappingClasses(declaration: KtDeclaration): Sequence<PsiClass> {
+        val wrapperClass = getWrappingClass(declaration) ?: return emptySequence()
+        val wrapperClassOrigin = (wrapperClass as KtLightClass).kotlinOrigin
+        if (wrapperClassOrigin is KtObjectDeclaration && wrapperClassOrigin.isCompanion() && wrapperClass.parent is PsiClass) {
+            return sequenceOf(wrapperClass, wrapperClass.parent as PsiClass)
+        }
+        return sequenceOf(wrapperClass)
+    }
+
     fun canGenerateLightClass(declaration: KtDeclaration): Boolean {
         //noinspection unchecked
         return PsiTreeUtil.getParentOfType(declaration, KtFunction::class.java, KtProperty::class.java) == null
@@ -197,8 +186,10 @@ object LightClassUtil {
         var setterWrapper = specialSetter
         val additionalAccessors = arrayListOf<PsiMethod>()
 
-        for (wrapper in getPsiMethodWrappers(ktDeclaration, true)) {
-            if (JvmAbi.isSetterName(wrapper.name)) {
+        for (wrapper in getPsiMethodWrappers(ktDeclaration)) {
+            if (wrapper !is KtLightMethod) continue
+
+            if (wrapper.isSetter) {
                 if (setterWrapper == null || setterWrapper === specialSetter) {
                     setterWrapper = wrapper
                 }
@@ -207,7 +198,7 @@ object LightClassUtil {
                 }
             }
             else {
-                if (getterWrapper == null || getterWrapper == specialGetter) {
+                if (getterWrapper == null || getterWrapper === specialGetter) {
                     getterWrapper = wrapper
                 }
                 else {

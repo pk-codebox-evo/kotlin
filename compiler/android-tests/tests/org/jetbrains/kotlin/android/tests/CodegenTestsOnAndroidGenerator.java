@@ -25,6 +25,7 @@ import org.jetbrains.kotlin.backend.common.output.OutputFileCollection;
 import org.jetbrains.kotlin.cli.common.output.outputUtils.OutputUtilsKt;
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles;
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment;
+import org.jetbrains.kotlin.codegen.AbstractAdditionalCoroutineBlackBoxCodegenTest;
 import org.jetbrains.kotlin.codegen.CodegenTestFiles;
 import org.jetbrains.kotlin.codegen.GenerationUtils;
 import org.jetbrains.kotlin.codegen.forTestCompile.ForTestCompileRuntime;
@@ -35,10 +36,7 @@ import org.jetbrains.kotlin.idea.KotlinFileType;
 import org.jetbrains.kotlin.load.java.JvmAbi;
 import org.jetbrains.kotlin.name.FqName;
 import org.jetbrains.kotlin.psi.KtFile;
-import org.jetbrains.kotlin.test.ConfigurationKind;
-import org.jetbrains.kotlin.test.InTextDirectivesUtils;
-import org.jetbrains.kotlin.test.KotlinTestUtils;
-import org.jetbrains.kotlin.test.TestJdkKind;
+import org.jetbrains.kotlin.test.*;
 import org.jetbrains.kotlin.test.testFramework.KtUsefulTestCase;
 import org.jetbrains.kotlin.utils.Printer;
 import org.junit.Assert;
@@ -155,7 +153,7 @@ public class CodegenTestsOnAndroidGenerator extends KtUsefulTestCase {
         }
 
         private KotlinCoreEnvironment createEnvironment(boolean isFullJdkAndRuntime) {
-            ConfigurationKind configurationKind = isFullJdkAndRuntime ? ConfigurationKind.ALL : ConfigurationKind.JDK_ONLY;
+            ConfigurationKind configurationKind = isFullJdkAndRuntime ? ConfigurationKind.ALL : ConfigurationKind.NO_KOTLIN_REFLECT;
             TestJdkKind testJdkKind = isFullJdkAndRuntime ? TestJdkKind.FULL_JDK : TestJdkKind.MOCK_JDK;
             CompilerConfiguration configuration =
                     KotlinTestUtils.newConfiguration(configurationKind, testJdkKind, KotlinTestUtils.getAnnotationsJar());
@@ -243,6 +241,10 @@ public class CodegenTestsOnAndroidGenerator extends KtUsefulTestCase {
             else {
                 String fullFileText = FileUtil.loadFile(file, true);
 
+                if (!InTextDirectivesUtils.isPassingTarget(TargetBackend.JVM, file)) {
+                    continue;
+                }
+
                 //TODO: support multifile facades
                 //TODO: support multifile facades hierarchies
                 if (hasBoxMethod(fullFileText)) {
@@ -251,17 +253,46 @@ public class CodegenTestsOnAndroidGenerator extends KtUsefulTestCase {
                                               InTextDirectivesUtils.isDirectiveDefined(fullFileText, "WITH_REFLECT") ? holderFull : holderMock;
                     filesHolder = fullFileText.contains("+JVM.INHERIT_MULTIFILE_PARTS") ? holderInheritMFP : filesHolder;
 
-                    FqName classWithBoxMethod = AndroidTestGeneratorKt.genFiles(file, fullFileText, filesHolder);
-                    if (classWithBoxMethod == null)
-                        continue;
+                    if (!generateTest(file.getName(), file.getPath(), fullFileText, printer, filesHolder)) continue;
 
-                    String generatedTestName = generateTestName(file.getName());
-                    generateTestMethod(printer, generatedTestName, classWithBoxMethod.asString(), StringUtil.escapeStringCharacters(file.getPath()));
+                    if (fullFileText.contains(AbstractAdditionalCoroutineBlackBoxCodegenTest.INTERCEPT_RESUME_PLACEHOLDER)) {
+                        int counter = 1;
+                        for (String replacement : AbstractAdditionalCoroutineBlackBoxCodegenTest.ALL_REPLACEMENTS) {
+                            String testFileName = file.getName().replace(".kt", "_" + counter + ".kt");
+                            String filePath = file.getPath().replace(".kt", "_" + counter + ".kt");
+                            generateTest(
+                                    testFileName,
+                                    filePath,
+                                    fullFileText.replace(
+                                            AbstractAdditionalCoroutineBlackBoxCodegenTest.INTERCEPT_RESUME_PLACEHOLDER, replacement
+                                    ),
+                                    printer,
+                                    filesHolder
+                            );
+
+                            counter++;
+                        }
+                    }
+
                 }
             }
         }
     }
 
+    private boolean generateTest(
+            @NotNull String testFileName,
+            @NotNull String filePath,
+            @NotNull String fullFileText,
+            @NotNull Printer printer,
+            @NotNull FilesWriter filesHolder
+    ) {
+        FqName classWithBoxMethod = AndroidTestGeneratorKt.genFiles(testFileName, filePath, fullFileText, filesHolder);
+        if (classWithBoxMethod == null) return false;
+
+        String generatedTestName = generateTestName(testFileName);
+        generateTestMethod(printer, generatedTestName, classWithBoxMethod.asString(), StringUtil.escapeStringCharacters(filePath));
+        return true;
+    }
 
 
     private static boolean hasBoxMethod(String text) {

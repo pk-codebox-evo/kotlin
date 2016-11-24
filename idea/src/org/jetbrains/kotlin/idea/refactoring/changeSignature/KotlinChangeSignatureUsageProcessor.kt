@@ -35,7 +35,7 @@ import com.intellij.refactoring.util.TextOccurrencesUtil
 import com.intellij.usageView.UsageInfo
 import com.intellij.util.containers.HashSet
 import com.intellij.util.containers.MultiMap
-import org.jetbrains.kotlin.asJava.KtLightMethod
+import org.jetbrains.kotlin.asJava.elements.KtLightMethod
 import org.jetbrains.kotlin.asJava.namedUnwrappedElement
 import org.jetbrains.kotlin.asJava.toLightMethods
 import org.jetbrains.kotlin.asJava.unwrapped
@@ -71,6 +71,7 @@ import org.jetbrains.kotlin.resolve.scopes.receivers.ImplicitReceiver
 import org.jetbrains.kotlin.resolve.source.getPsi
 import org.jetbrains.kotlin.util.OperatorNameConventions
 import org.jetbrains.kotlin.utils.addToStdlib.firstIsInstanceOrNull
+import org.jetbrains.kotlin.utils.addToStdlib.singletonOrEmptyList
 import java.util.*
 
 class KotlinChangeSignatureUsageProcessor : ChangeSignatureUsageProcessor {
@@ -293,8 +294,8 @@ class KotlinChangeSignatureUsageProcessor : ChangeSignatureUsageProcessor {
         if (isDataClass) {
             (functionPsi as KtPrimaryConstructor).valueParameters.firstOrNull()?.let {
                 ReferencesSearch.search(it).mapNotNullTo(result) {
-                    val destructuringDeclaration = it.element as? KtDestructuringDeclaration ?: return@mapNotNullTo null
-                    KotlinComponentUsageInDestructuring(destructuringDeclaration)
+                    val destructuringEntry = it.element as? KtDestructuringDeclarationEntry ?: return@mapNotNullTo null
+                    KotlinComponentUsageInDestructuring(destructuringEntry)
                 }
             }
         }
@@ -534,13 +535,16 @@ class KotlinChangeSignatureUsageProcessor : ChangeSignatureUsageProcessor {
                 callableScope.getAllAccessibleFunctions(newName)
             else
                 callableScope.getAllAccessibleVariables(newName)
+            val newTypes = info.newParameters.map { it.currentTypeInfo.type }
             for (conflict in conflicts) {
                 if (conflict === oldDescriptor) continue
 
                 val conflictElement = DescriptorToSourceUtils.descriptorToDeclaration(conflict)
                 if (conflictElement === info.method) continue
 
-                if (conflict.valueParameters.map { it.type } == oldDescriptor.valueParameters.map { it.type }) {
+                val candidateTypes = conflict.extensionReceiverParameter?.type.singletonOrEmptyList() + conflict.valueParameters.map { it.type }
+
+                if (candidateTypes == newTypes) {
                     result.putValue(conflictElement, "Function already exists: '" + DescriptorRenderer.SHORT_NAMES_IN_TYPES.render(conflict) + "'")
                     break
                 }
@@ -843,7 +847,7 @@ class KotlinChangeSignatureUsageProcessor : ChangeSignatureUsageProcessor {
         }
 
         if (beforeMethodChange) {
-            if (method !is PsiMethod || initializedOriginalDescriptor) return true
+            if (method !is PsiMethod || initializedOriginalDescriptor) return false
 
             val descriptorWrapper = usages.firstIsInstanceOrNull<OriginalJavaMethodDescriptorWrapper>()
             if (descriptorWrapper == null || descriptorWrapper.originalJavaMethodDescriptor != null) return true
@@ -915,7 +919,7 @@ class KotlinChangeSignatureUsageProcessor : ChangeSignatureUsageProcessor {
                     baseFunction = baseFunction.createPrimaryConstructorIfAbsent()
                 }
                 val resolutionFacade = baseFunction.getResolutionFacade()
-                val baseFunctionDescriptor = resolutionFacade.resolveToDescriptor(baseFunction) as FunctionDescriptor
+                val baseFunctionDescriptor = baseFunction.resolveToDescriptor() as FunctionDescriptor
                 val methodDescriptor = KotlinChangeSignatureData(baseFunctionDescriptor, baseFunction, listOf(baseFunctionDescriptor))
 
                 val dummyClass = JavaPsiFacade.getElementFactory(method.project).createClass("Dummy")

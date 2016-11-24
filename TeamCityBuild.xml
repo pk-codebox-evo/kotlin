@@ -11,16 +11,14 @@
     <property name="plugin.xml" value="idea/src/META-INF/plugin.xml"/>
     <property name="plugin.xml.bk" value="${version_substitute_dir}/plugin.xml.bk"/>
     <property name="plugin.xml.versioned" value="${plugin.xml}.versioned"/>
+    <property name="plugin.xml.version.number" value="${build.number}"/>
 
     <property name="compiler.version.java" value="compiler/cli/cli-common/src/org/jetbrains/kotlin/cli/common/KotlinVersion.java"/>
     <property name="compiler.version.java.bk" value="${version_substitute_dir}/KotlinVersion.java.bk"/>
     <property name="compiler.version.java.versioned" value="${compiler.version.java}.versioned"/>
+    <property name="compiler.version.number" value="${build.number}"/>
 
     <property name="plugin.zip" value="${artifact.output.path}/kotlin-plugin-${build.number}.zip"/>
-    <property name="bare.plugin.zip" value="${artifact.output.path}/kotlin-bare-plugin-${build.number}.zip"/>
-
-    <property name="kotlin.bare.plugin.xml" value="jps-plugin/bare-plugin/src/META-INF/plugin.xml"/>
-    <property name="kotlin.bare.plugin.xml.bk" value="${version_substitute_dir}/kotlin.bare.plugin.xml.bk"/>
 
     <macrodef name="echoprop">
         <attribute name="prop"/>
@@ -75,37 +73,36 @@
         </sequential>
     </macrodef>
 
-    <target name="writeVersionToTemplateFiles">
+    <target name="writeCompilerVersionToTemplateFile">
         <mkdir dir="${version_substitute_dir}"/>
 
         <substituteVersionInFile
-                target.file="${plugin.xml}"
-                target.file.bk="${plugin.xml.bk}"
-                target.file.versioned="${plugin.xml.versioned}"
-                test.string="&lt;version&gt;@snapshot@&lt;/version&gt;"/>
+            target.file="${compiler.version.java}"
+            target.file.bk="${compiler.version.java.bk}"
+            target.file.versioned="${compiler.version.java.versioned}"
+            test.string="public static final String VERSION = &quot;@snapshot@&quot;;"
+            version="${compiler.version.number}"/>
+    </target>
+
+    <target name="writePluginVersionToTemplateFile">
+        <mkdir dir="${version_substitute_dir}"/>
 
         <substituteVersionInFile
-                target.file="${compiler.version.java}"
-                target.file.bk="${compiler.version.java.bk}"
-                target.file.versioned="${compiler.version.java.versioned}"
-                test.string="public static final String VERSION = &quot;@snapshot@&quot;;"/>
-
-        <substituteVersionInFile
-                target.file="${kotlin.bare.plugin.xml}"
-                target.file.bk="${kotlin.bare.plugin.xml.bk}"
-                test.string="&lt;version&gt;@snapshot@&lt;/version&gt;"/>
-
-        </target>
+            target.file="${plugin.xml}"
+            target.file.bk="${plugin.xml.bk}"
+            target.file.versioned="${plugin.xml.versioned}"
+            test.string="&lt;version&gt;@snapshot@&lt;/version&gt;"
+            version="${plugin.xml.version.number}"/>
+    </target>
 
     <target name="revertTemplateFiles">
         <copy file="${plugin.xml.bk}" tofile="${plugin.xml}" overwrite="true"/>
         <copy file="${compiler.version.java.bk}" tofile="${compiler.version.java}" overwrite="true"/>
-        <copy file="${kotlin.bare.plugin.xml.bk}" tofile="${kotlin.bare.plugin.xml}" overwrite="true"/>
 
         <delete dir="${version_substitute_dir}" quiet="true"/>
     </target>
 
-    <target name="pre_build" depends="writeVersionToTemplateFiles, cleanupArtifacts"/>
+    <target name="pre_build" depends="writeCompilerVersionToTemplateFile, writePluginVersionToTemplateFile, cleanupArtifacts"/>
 
     <target name="zipArtifacts">
         <macrodef name="zipPlugin">
@@ -125,7 +122,6 @@
         </macrodef>
 
         <zipPlugin filename="${plugin.zip}" dir="Kotlin"/>
-        <zipPlugin filename="${bare.plugin.zip}" dir="BareKotlin"/>
     </target>
 
     <macrodef name="print-statistic">
@@ -154,10 +150,8 @@
 
         <print-file-size-statistic path="${kotlin-home}/lib" file-name="kotlin-jslib.jar"/>
         <print-file-size-statistic path="${js.stdlib.output.dir}" file-name="kotlin.js"/>
-        <print-file-size-statistic path="${js.stdlib.output.dir}" file-name="builtins.js"/>
-        <print-file-size-statistic path="${js.stdlib.output.dir}" file-name="builtins.meta.js"/>
-        <print-file-size-statistic path="${js.stdlib.output.dir}" file-name="stdlib.js"/>
-        <print-file-size-statistic path="${js.stdlib.output.dir}" file-name="stdlib.meta.js"/>
+        <print-file-size-statistic path="${js.stdlib.output.dir}" file-name="${compiled.stdlib.meta.js}"/>
+        <print-file-size-statistic path="${js.stdlib.output.dir}" file-name="${compiled.stdlib.js}"/>
     </target>
 
     <target name="post_build" depends="zipArtifacts, revertTemplateFiles, printStatistics, remove_internal_artifacts, dont_remove_internal_artifacts"/>
@@ -170,14 +164,16 @@
 
     <condition property="need.remove.artifacts" value="true">
         <and>
-            <matches pattern="rr/.*" string="${teamcity.build.branch}"/>
+            <matches pattern="rri?/.*" string="${teamcity.build.branch}"/>
             <not>
-                <matches pattern="rr/internal/.*" string="${teamcity.build.branch}"/>
+                <matches pattern="rri?/internal/.*" string="${teamcity.build.branch}"/>
             </not>
         </and>
     </condition>
 
-    <target name="remove_internal_artifacts" description="Remove internal artifacts for rr/* branches, but store them for rr/internal/*" if="need.remove.artifacts">
+    <target name="remove_internal_artifacts"
+            description="Remove internal artifacts for rri?/* branches, but store them for rri?/internal/*"
+            if="need.remove.artifacts">
         <echo message="Remove internal artifacts" />
 
         <delete failonerror="false" verbose="true">

@@ -180,7 +180,7 @@ fun LexicalScope.addImportingScopes(importScopes: List<ImportingScope>): Lexical
     val lastLexicalScope = parentsWithSelf.last { it is LexicalScope }
     val firstImporting = lastLexicalScope.parent as ImportingScope
     val newFirstImporting = chainImportingScopes(importScopes, firstImporting)
-    return LexicalScopeWrapper(this, newFirstImporting!!)
+    return replaceImportingScopes(newFirstImporting)
 }
 
 fun LexicalScope.addImportingScope(importScope: ImportingScope): LexicalScope
@@ -199,6 +199,11 @@ fun LexicalScope.replaceImportingScopes(importingScopeChain: ImportingScope?): L
         return LexicalScopeWrapper(this.delegate, newImportingScopeChain)
     }
     return LexicalScopeWrapper(this, newImportingScopeChain)
+}
+
+fun LexicalScope.addImplicitReceiver(newReceiver: ReceiverParameterDescriptor?): LexicalScope {
+    if (newReceiver == null) return this
+    return LexicalScopeImpl(parent, ownerDescriptor, isOwnerDescriptorAccessibleByLabel, newReceiver, kind)
 }
 
 private class LexicalScopeWrapper(val delegate: LexicalScope, val newImportingScopeChain: ImportingScope): LexicalScope by delegate {

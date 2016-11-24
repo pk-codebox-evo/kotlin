@@ -20,8 +20,6 @@
 
 package kotlin.collections
 
-import java.util.*
-
 
 /** Returns the array if it's not `null`, or an empty array otherwise. */
 public inline fun <reified T> Array<out T>?.orEmpty(): Array<out T> = this ?: arrayOf<T>()
@@ -30,7 +28,7 @@ public inline fun <reified T> Array<out T>?.orEmpty(): Array<out T> = this ?: ar
 /**
  * Returns a single list of all elements from all arrays in the given array.
  */
-public fun <T> Array<Array<out T>>.flatten(): List<T> {
+public fun <T> Array<out Array<out T>>.flatten(): List<T> {
     val result = ArrayList<T>(sumBy { it.size })
     for (element in this) {
         result.addAll(element)

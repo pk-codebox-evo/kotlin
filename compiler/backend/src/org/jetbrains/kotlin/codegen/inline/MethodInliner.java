@@ -219,6 +219,12 @@ public class MethodInliner {
                     int valueParamShift = Math.max(getNextLocalIndex(), markerShift);//NB: don't inline cause it changes
                     putStackValuesIntoLocals(info.getInvokeParamsWithoutCaptured(), valueParamShift, this, desc);
 
+                    if (invokeCall.lambdaInfo.getFunctionDescriptor().getValueParameters().isEmpty()) {
+                        // There won't be no parameters processing and line call can be left without actual instructions.
+                        // Note: if function is called on the line with other instructions like 1 + foo(), 'nop' will still be generated.
+                        visitInsn(Opcodes.NOP);
+                    }
+
                     addInlineMarker(this, true);
                     Parameters lambdaParameters = info.addAllParameters(nodeRemapper);
 
@@ -340,8 +346,8 @@ public class MethodInliner {
 
     @NotNull
     private MethodNode prepareNode(@NotNull MethodNode node, int finallyDeepShift) {
-        final int capturedParamsSize = parameters.getCapturedArgsSizeOnStack();
-        final int realParametersSize = parameters.getRealArgsSizeOnStack();
+        final int capturedParamsSize = parameters.getCapturedParametersSizeOnStack();
+        final int realParametersSize = parameters.getRealParametersSizeOnStack();
         Type[] types = Type.getArgumentTypes(node.desc);
         Type returnType = Type.getReturnType(node.desc);
 

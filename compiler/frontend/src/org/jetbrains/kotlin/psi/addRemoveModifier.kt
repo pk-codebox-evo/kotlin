@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
+ * Copyright 2010-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@ import com.intellij.psi.PsiComment
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiWhiteSpace
 import org.jetbrains.kotlin.lexer.KtModifierKeywordToken
-import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.lexer.KtTokens.*
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.siblings
@@ -85,12 +84,12 @@ internal fun addModifier(modifierList: KtModifierList, modifier: KtModifierKeywo
             return newModifierOrder > order
         }
 
-        val lastChild = modifierList.getLastChild()
+        val lastChild = modifierList.lastChild
         val anchor = lastChild?.siblings(forward = false)?.firstOrNull(::placeAfter)
         modifierList.addAfter(newModifier, anchor)
 
         if (anchor == lastChild) { // add line break if needed, otherwise visibility keyword may appear on previous line
-            val whiteSpace = modifierList.getNextSibling() as? PsiWhiteSpace
+            val whiteSpace = modifierList.nextSibling as? PsiWhiteSpace
             if (whiteSpace != null && whiteSpace.text.contains('\n')) {
                 modifierList.addAfter(whiteSpace, anchor)
                 whiteSpace.delete()
@@ -122,4 +121,5 @@ private val MODIFIERS_TO_REPLACE = mapOf(
 private val MODIFIERS_ORDER = listOf(PUBLIC_KEYWORD, PROTECTED_KEYWORD, PRIVATE_KEYWORD, INTERNAL_KEYWORD,
                                      FINAL_KEYWORD, OPEN_KEYWORD, ABSTRACT_KEYWORD,
                                      OVERRIDE_KEYWORD,
-                                     INNER_KEYWORD, ENUM_KEYWORD, COMPANION_KEYWORD, INFIX_KEYWORD, OPERATOR_KEYWORD)
+                                     INNER_KEYWORD,
+                                     ENUM_KEYWORD, COMPANION_KEYWORD, INFIX_KEYWORD, OPERATOR_KEYWORD, DATA_KEYWORD)

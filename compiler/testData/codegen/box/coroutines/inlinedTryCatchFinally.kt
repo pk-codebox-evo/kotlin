@@ -2,7 +2,7 @@
 var globalResult = ""
 var wasCalled = false
 class Controller {
-    val postponedActions = java.util.ArrayList<() -> Unit>()
+    val postponedActions = mutableListOf<() -> Unit>()
 
     suspend fun suspendWithValue(v: String, x: Continuation<String>) {
         postponedActions.add {
@@ -27,6 +27,8 @@ class Controller {
             postponedActions.removeAt(0)
         }
     }
+
+    // INTERCEPT_RESUME_PLACEHOLDER
 }
 
 fun builder(expectException: Boolean = false, coroutine c: Controller.() -> Continuation<Unit>) {
@@ -62,14 +64,14 @@ fun commonThrow(t: Throwable) {
 inline fun tryCatch(t: () -> String, onException: (Exception) -> String) =
         try {
             t()
-        } catch (e: java.lang.RuntimeException) {
+        } catch (e: RuntimeException) {
             onException(e)
         }
 
 inline fun tryCatchFinally(t: () -> String, onException: (Exception) -> String, f: () -> Unit) =
         try {
             t()
-        } catch (e: java.lang.RuntimeException) {
+        } catch (e: RuntimeException) {
             onException(e)
         } finally {
             f()

@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.checkers;
 import com.intellij.testFramework.TestDataPath;
 import org.jetbrains.kotlin.test.JUnit3RunnerWithInners;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
+import org.jetbrains.kotlin.test.TargetBackend;
 import org.jetbrains.kotlin.test.TestMetadata;
 import org.junit.runner.RunWith;
 
@@ -32,7 +33,13 @@ import java.util.regex.Pattern;
 @RunWith(JUnit3RunnerWithInners.class)
 public class DiagnosticsWithJava8TestGenerated extends AbstractDiagnosticsWithFullJdkTest {
     public void testAllFilesPresentInTestsWithJava8() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/diagnostics/testsWithJava8"), Pattern.compile("^(.+)\\.kt$"), true);
+        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/diagnostics/testsWithJava8"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
+    }
+
+    @TestMetadata("samWithConsumer.kt")
+    public void testSamWithConsumer() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/diagnostics/testsWithJava8/samWithConsumer.kt");
+        doTest(fileName);
     }
 
     @TestMetadata("compiler/testData/diagnostics/testsWithJava8/annotations")
@@ -40,7 +47,7 @@ public class DiagnosticsWithJava8TestGenerated extends AbstractDiagnosticsWithFu
     @RunWith(JUnit3RunnerWithInners.class)
     public static class Annotations extends AbstractDiagnosticsWithFullJdkTest {
         public void testAllFilesPresentInAnnotations() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/diagnostics/testsWithJava8/annotations"), Pattern.compile("^(.+)\\.kt$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/diagnostics/testsWithJava8/annotations"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
         }
 
         @TestMetadata("deprecatedRepeatable.kt")
@@ -73,7 +80,7 @@ public class DiagnosticsWithJava8TestGenerated extends AbstractDiagnosticsWithFu
     @RunWith(JUnit3RunnerWithInners.class)
     public static class DuplicateJvmSignature extends AbstractDiagnosticsWithFullJdkTest {
         public void testAllFilesPresentInDuplicateJvmSignature() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/diagnostics/testsWithJava8/duplicateJvmSignature"), Pattern.compile("^(.+)\\.kt$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/diagnostics/testsWithJava8/duplicateJvmSignature"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
         }
 
         @TestMetadata("compiler/testData/diagnostics/testsWithJava8/duplicateJvmSignature/statics")
@@ -81,7 +88,7 @@ public class DiagnosticsWithJava8TestGenerated extends AbstractDiagnosticsWithFu
         @RunWith(JUnit3RunnerWithInners.class)
         public static class Statics extends AbstractDiagnosticsWithFullJdkTest {
             public void testAllFilesPresentInStatics() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/diagnostics/testsWithJava8/duplicateJvmSignature/statics"), Pattern.compile("^(.+)\\.kt$"), true);
+                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/diagnostics/testsWithJava8/duplicateJvmSignature/statics"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
             }
 
             @TestMetadata("jjk.kt")
@@ -98,12 +105,27 @@ public class DiagnosticsWithJava8TestGenerated extends AbstractDiagnosticsWithFu
         }
     }
 
+    @TestMetadata("compiler/testData/diagnostics/testsWithJava8/specialBuiltIns")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class SpecialBuiltIns extends AbstractDiagnosticsWithFullJdkTest {
+        public void testAllFilesPresentInSpecialBuiltIns() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/diagnostics/testsWithJava8/specialBuiltIns"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("hashtableInheritance.kt")
+        public void testHashtableInheritance() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/diagnostics/testsWithJava8/specialBuiltIns/hashtableInheritance.kt");
+            doTest(fileName);
+        }
+    }
+
     @TestMetadata("compiler/testData/diagnostics/testsWithJava8/statics")
     @TestDataPath("$PROJECT_ROOT")
     @RunWith(JUnit3RunnerWithInners.class)
     public static class Statics extends AbstractDiagnosticsWithFullJdkTest {
         public void testAllFilesPresentInStatics() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/diagnostics/testsWithJava8/statics"), Pattern.compile("^(.+)\\.kt$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/diagnostics/testsWithJava8/statics"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
         }
 
         @TestMetadata("inheritanceStaticMethodFromInterface.kt")
@@ -118,7 +140,7 @@ public class DiagnosticsWithJava8TestGenerated extends AbstractDiagnosticsWithFu
     @RunWith(JUnit3RunnerWithInners.class)
     public static class TargetedBuiltIns extends AbstractDiagnosticsWithFullJdkTest {
         public void testAllFilesPresentInTargetedBuiltIns() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/diagnostics/testsWithJava8/targetedBuiltIns"), Pattern.compile("^(.+)\\.kt$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/diagnostics/testsWithJava8/targetedBuiltIns"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
         }
 
         @TestMetadata("blackListed.kt")
@@ -136,6 +158,12 @@ public class DiagnosticsWithJava8TestGenerated extends AbstractDiagnosticsWithFu
         @TestMetadata("forEachRemainingNullability.kt")
         public void testForEachRemainingNullability() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/diagnostics/testsWithJava8/targetedBuiltIns/forEachRemainingNullability.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("getOrDefault.kt")
+        public void testGetOrDefault() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/diagnostics/testsWithJava8/targetedBuiltIns/getOrDefault.kt");
             doTest(fileName);
         }
 

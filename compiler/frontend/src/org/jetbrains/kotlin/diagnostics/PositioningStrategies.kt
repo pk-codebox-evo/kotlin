@@ -160,6 +160,9 @@ object PositioningStrategies {
                 is KtObjectDeclaration -> {
                     return DECLARATION_NAME.mark(element)
                 }
+                is KtClassInitializer -> {
+                    return markRange(element.initKeyword.textRange)
+                }
             }
             return super.mark(element)
         }
@@ -200,6 +203,8 @@ object PositioningStrategies {
     @JvmField val OVERRIDE_MODIFIER: PositioningStrategy<KtModifierListOwner> = modifierSetPosition(KtTokens.OVERRIDE_KEYWORD)
 
     @JvmField val PRIVATE_MODIFIER: PositioningStrategy<KtModifierListOwner> = modifierSetPosition(KtTokens.PRIVATE_KEYWORD)
+
+    @JvmField val LATEINIT_MODIFIER: PositioningStrategy<KtModifierListOwner> = modifierSetPosition(KtTokens.LATEINIT_KEYWORD)
 
     @JvmField val VARIANCE_MODIFIER: PositioningStrategy<KtModifierListOwner> = modifierSetPosition(KtTokens.IN_KEYWORD, KtTokens.OUT_KEYWORD)
 
@@ -477,4 +482,14 @@ object PositioningStrategies {
         }
     }
 
+    @JvmField val RETURN_WITH_LABEL: PositioningStrategy<KtReturnExpression> = object: PositioningStrategy<KtReturnExpression>() {
+        override fun mark(element: KtReturnExpression): List<TextRange> {
+            val labeledExpression = element.labeledExpression
+            if (labeledExpression != null) {
+                return markRange(element, labeledExpression)
+            }
+
+            return markElement(element.returnKeyword)
+        }
+    }
 }

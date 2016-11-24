@@ -34,6 +34,7 @@ import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.psiUtil.parentsWithSelf
 import org.jetbrains.kotlin.types.expressions.OperatorConventions.*
 import org.jetbrains.kotlin.utils.addToStdlib.singletonOrEmptyList
+import java.lang.IllegalArgumentException
 import java.util.*
 
 class Converter private constructor(
@@ -66,7 +67,7 @@ class Converter private constructor(
 
     companion object {
         fun create(elementToConvert: PsiElement, settings: ConverterSettings, services: JavaToKotlinConverterServices,
-                          inConversionScope: (PsiElement) -> Boolean, usageProcessingsCollector: (UsageProcessing) -> Unit): Converter {
+                   inConversionScope: (PsiElement) -> Boolean, usageProcessingsCollector: (UsageProcessing) -> Unit): Converter {
             return Converter(elementToConvert, settings, inConversionScope,
                              services, CommonState(usageProcessingsCollector), PersonalState(null))
         }
@@ -140,7 +141,7 @@ class Converter private constructor(
         commonState.postUnfoldActions.forEach { it() }
     }
 
-    fun<TResult : Element> deferredElement(generator: (CodeConverter) -> TResult): DeferredElement<TResult> {
+    fun <TResult : Element> deferredElement(generator: (CodeConverter) -> TResult): DeferredElement<TResult> {
         val element = DeferredElement(generator, personalState)
         commonState.deferredElements.add(element)
         return element
@@ -174,7 +175,7 @@ class Converter private constructor(
         val implementsTypes = convertToNotNullableTypes(psiClass.implementsListTypes)
         val name = psiClass.declarationIdentifier()
 
-        return when {
+        val converted = when {
             psiClass.isInterface -> {
                 val classBody = ClassBodyConverter(psiClass, ClassKind.INTERFACE, this).convertBody()
                 Interface(name, annotations, modifiers, typeParameters, extendsTypes, implementsTypes, classBody)
@@ -207,6 +208,18 @@ class Converter private constructor(
                 }
             }
         }.assignPrototype(psiClass)
+
+        if (converted.body.primaryConstructorSignature == null)
+            addPostUnfoldDeferredElementsAction {
+                val primaryConstructor = converted.body.primaryConstructor
+                if (primaryConstructor != null) {
+                    if (primaryConstructor.initializer.isEmpty)
+                        converted.prototypes = converted.prototypes!! + primaryConstructor.prototypes!!
+                    else
+                        primaryConstructor.initializer.assignPrototypesFrom(primaryConstructor, CommentsAndSpacesInheritance.NO_SPACES)
+                }
+            }
+        return converted
     }
 
     fun needOpenModifier(psiClass: PsiClass): Boolean {
@@ -276,7 +289,7 @@ class Converter private constructor(
                 } +
                 otherMethods.map { method -> createParameter(convertType(method.returnType), method) }
 
-        val parameterList = ParameterList(parameters).assignNoPrototype()
+        val parameterList = ParameterList.withNoPrototype(parameters)
         val constructorSignature = if (parameterList.parameters.isNotEmpty())
             PrimaryConstructorSignature(Annotations.Empty, Modifiers.Empty, parameterList).assignNoPrototype()
         else
@@ -284,7 +297,7 @@ class Converter private constructor(
 
         // to convert fields and nested types - they are not allowed in Kotlin but we convert them and let user refactor code
         var classBody = ClassBodyConverter(psiClass, ClassKind.ANNOTATION_CLASS, this).convertBody()
-        classBody = ClassBody(constructorSignature, classBody.baseClassParams, classBody.members,
+        classBody = ClassBody(null, constructorSignature, classBody.baseClassParams, classBody.members,
                               classBody.companionObjectMembers, classBody.lBrace, classBody.rBrace, classBody.classKind)
 
         return Class(psiClass.declarationIdentifier(),
@@ -310,14 +323,17 @@ class Converter private constructor(
         //TODO: annotations from getter/setter?
         val annotations = field?.let { convertAnnotations(it) } ?: Annotations.Empty
 
-        val modifiers = propertyInfo.modifiers
+        val modifiers = (propertyInfo.modifiers + (field?.let{ specialModifiersCase(field) } ?: Modifiers.Empty))
 
         val name = propertyInfo.identifier
         if (field is PsiEnumConstant) {
             assert(getMethod == null && setMethod == null)
             val argumentList = field.argumentList
-            val params = deferredElement { codeConverter ->
-                ExpressionList(codeConverter.convertExpressions(argumentList?.expressions ?: arrayOf<PsiExpression>())).assignPrototype(argumentList)
+            val params = if (argumentList != null && argumentList.expressions.isNotEmpty()) {
+                deferredElement { codeConverter -> codeConverter.convertArgumentList(argumentList) }
+            }
+            else {
+                null
             }
             val body = field.initializingClass?.let { convertAnonymousClassBody(it) }
             return EnumConstant(name, annotations, modifiers, params, body)
@@ -347,15 +363,18 @@ class Converter private constructor(
             if (propertyInfo.needExplicitGetter) {
                 if (getMethod != null) {
                     val method = convertMethod(getMethod, null, null, null, classKind)!!
-                    getter = PropertyAccessor(AccessorKind.GETTER, method.annotations, Modifiers.Empty, method.parameterList, method.body)
+                    if (method.modifiers.contains(Modifier.EXTERNAL))
+                        getter = PropertyAccessor(AccessorKind.GETTER, method.annotations, Modifiers(listOf(Modifier.EXTERNAL)).assignNoPrototype(), null, null)
+                    else
+                        getter = PropertyAccessor(AccessorKind.GETTER, method.annotations, Modifiers.Empty, method.parameterList, method.body)
                     getter.assignPrototype(getMethod, CommentsAndSpacesInheritance.NO_SPACES)
                 }
                 else if (propertyInfo.modifiers.contains(Modifier.OVERRIDE) && !(propertyInfo.superInfo?.isAbstract() ?: false)) {
                     val superExpression = SuperExpression(Identifier.Empty).assignNoPrototype()
-                    val superAccess = QualifiedExpression(superExpression, propertyInfo.identifier).assignNoPrototype()
+                    val superAccess = QualifiedExpression(superExpression, propertyInfo.identifier, null).assignNoPrototype()
                     val returnStatement = ReturnStatement(superAccess).assignNoPrototype()
-                    val body = Block(listOf(returnStatement), LBrace().assignNoPrototype(), RBrace().assignNoPrototype()).assignNoPrototype()
-                    val parameterList = ParameterList(emptyList()).assignNoPrototype()
+                    val body = Block.of(returnStatement).assignNoPrototype()
+                    val parameterList = ParameterList.withNoPrototype(emptyList())
                     getter = PropertyAccessor(AccessorKind.GETTER, Annotations.Empty, Modifiers.Empty, parameterList, deferredElement { body })
                     getter.assignNoPrototype()
                 }
@@ -369,28 +388,32 @@ class Converter private constructor(
             if (propertyInfo.needExplicitSetter) {
                 val accessorModifiers = Modifiers(propertyInfo.specialSetterAccess.singletonOrEmptyList()).assignNoPrototype()
                 if (setMethod != null && !propertyInfo.isSetMethodBodyFieldAccess) {
-                    val method = setMethod.let { convertMethod(it, null, null, null, classKind)!! }
-                    val convertedParameter = method.parameterList!!.parameters.single() as FunctionParameter
-                    val parameterAnnotations = convertedParameter.annotations
-                    val parameterList = if (method.body != null || !parameterAnnotations.isEmpty) {
-                        val parameter = FunctionParameter(convertedParameter.identifier, null, FunctionParameter.VarValModifier.None, parameterAnnotations, Modifiers.Empty)
-                                .assignPrototypesFrom(convertedParameter, CommentsAndSpacesInheritance.NO_SPACES)
-                        ParameterList(listOf(parameter)).assignNoPrototype()
-                    }
+                    val method = convertMethod(setMethod, null, null, null, classKind)!!
+                    if (method.modifiers.contains(Modifier.EXTERNAL))
+                        setter = PropertyAccessor(AccessorKind.SETTER, method.annotations, accessorModifiers.with(Modifier.EXTERNAL), null, null)
                     else {
-                        null
+                        val convertedParameter = method.parameterList!!.parameters.single() as FunctionParameter
+                        val parameterAnnotations = convertedParameter.annotations
+                        val parameterList = if (method.body != null || !parameterAnnotations.isEmpty) {
+                            val parameter = FunctionParameter(convertedParameter.identifier, null, FunctionParameter.VarValModifier.None, parameterAnnotations, Modifiers.Empty)
+                                    .assignPrototypesFrom(convertedParameter, CommentsAndSpacesInheritance.NO_SPACES)
+                            ParameterList.withNoPrototype(listOf(parameter))
+                        }
+                        else {
+                            null
+                        }
+                        setter = PropertyAccessor(AccessorKind.SETTER, method.annotations, accessorModifiers, parameterList, method.body)
                     }
-                    setter = PropertyAccessor(AccessorKind.SETTER, method.annotations, accessorModifiers, parameterList, method.body)
                     setter.assignPrototype(setMethod, CommentsAndSpacesInheritance.NO_SPACES)
                 }
                 else if (propertyInfo.modifiers.contains(Modifier.OVERRIDE) && !(propertyInfo.superInfo?.isAbstract() ?: false)) {
                     val superExpression = SuperExpression(Identifier.Empty).assignNoPrototype()
-                    val superAccess = QualifiedExpression(superExpression, propertyInfo.identifier).assignNoPrototype()
-                    val valueIdentifier = Identifier("value", false).assignNoPrototype()
+                    val superAccess = QualifiedExpression(superExpression, propertyInfo.identifier, null).assignNoPrototype()
+                    val valueIdentifier = Identifier.withNoPrototype("value", isNullable = false)
                     val assignment = AssignmentExpression(superAccess, valueIdentifier, Operator.EQ).assignNoPrototype()
-                    val body = Block(listOf(assignment), LBrace().assignNoPrototype(), RBrace().assignNoPrototype()).assignNoPrototype()
+                    val body = Block.of(assignment).assignNoPrototype()
                     val parameter = FunctionParameter(valueIdentifier, propertyType, FunctionParameter.VarValModifier.None, Annotations.Empty, Modifiers.Empty).assignNoPrototype()
-                    val parameterList = ParameterList(listOf(parameter)).assignNoPrototype()
+                    val parameterList = ParameterList.withNoPrototype(listOf(parameter))
                     setter = PropertyAccessor(AccessorKind.SETTER, Annotations.Empty, accessorModifiers, parameterList, deferredElement { body })
                     setter.assignNoPrototype()
                 }
@@ -418,6 +441,22 @@ class Converter private constructor(
                     .map { PrototypeInfo(it, if (it == placementElement) CommentsAndSpacesInheritance.LINE_BREAKS else CommentsAndSpacesInheritance.NO_SPACES) }
             return property.assignPrototypes(*prototypes.toTypedArray())
         }
+    }
+
+
+    private fun specialModifiersCase(field: PsiField): Modifiers {
+        val javaSerializableInterface = JavaPsiFacade.getInstance(project).findClass(CommonClassNames.JAVA_IO_SERIALIZABLE, field.resolveScope)
+        val output = mutableListOf<Modifier>()
+        if (javaSerializableInterface != null &&
+            field.name == "serialVersionUID" &&
+            field.hasModifierProperty(PsiModifier.FINAL) &&
+            field.hasModifierProperty(PsiModifier.STATIC) &&
+            field.containingClass?.isInheritor(javaSerializableInterface, false) ?: false
+        ) {
+            output.add(Modifier.CONST)
+        }
+
+        return Modifiers(output)
     }
 
     private fun combinedNullability(vararg psiElements: PsiElement?): Nullability {
@@ -533,7 +572,7 @@ class Converter private constructor(
 
             if (settings.openByDefault) {
                 val isEffectivelyFinal = method.hasModifierProperty(PsiModifier.FINAL) ||
-                        containingClass != null && (containingClass.hasModifierProperty(PsiModifier.FINAL) || containingClass.isEnum)
+                                         containingClass != null && (containingClass.hasModifierProperty(PsiModifier.FINAL) || containingClass.isEnum)
                 if (!isEffectivelyFinal && !modifiers.contains(Modifier.ABSTRACT) && !modifiers.isPrivate) {
                     modifiers = modifiers.with(Modifier.OPEN)
                 }
@@ -553,14 +592,14 @@ class Converter private constructor(
 
         if (PsiMethodUtil.isMainMethod(method)) {
             function.annotations += Annotations(
-                    listOf(Annotation(Identifier("JvmStatic").assignNoPrototype(),
+                    listOf(Annotation(Identifier.withNoPrototype("JvmStatic"),
                                       listOf(),
                                       newLineAfter = false).assignNoPrototype())).assignNoPrototype()
         }
 
         if (function.parameterList!!.parameters.any { it is FunctionParameter && it.defaultValue != null } && !function.modifiers.isPrivate) {
             function.annotations += Annotations(
-                    listOf(Annotation(Identifier("JvmOverloads").assignNoPrototype(),
+                    listOf(Annotation(Identifier.withNoPrototype("JvmOverloads"),
                                       listOf(),
                                       newLineAfter = false).assignNoPrototype())).assignNoPrototype()
         }
@@ -607,9 +646,9 @@ class Converter private constructor(
         if (!isInOpenClass) return false
         if (modifiers.contains(Modifier.OVERRIDE) || modifiers.contains(Modifier.ABSTRACT)) return false
         if (settings.openByDefault) {
-           return !method.hasModifierProperty(PsiModifier.FINAL)
-                  && !method.hasModifierProperty(PsiModifier.PRIVATE)
-                  && !method.hasModifierProperty(PsiModifier.STATIC)
+            return !method.hasModifierProperty(PsiModifier.FINAL)
+                   && !method.hasModifierProperty(PsiModifier.PRIVATE)
+                   && !method.hasModifierProperty(PsiModifier.STATIC)
         }
         else {
             return referenceSearcher.hasOverrides(method)
@@ -633,7 +672,7 @@ class Converter private constructor(
                 result = Identifier.toKotlin(codeRefElement.referenceName!!) + "." + result
                 qualifier = codeRefElement.qualifier
             }
-            return ReferenceElement(Identifier(result).assignNoPrototype(), typeArgs).assignPrototype(element)
+            return ReferenceElement(Identifier.withNoPrototype(result), typeArgs).assignPrototype(element, CommentsAndSpacesInheritance.NO_SPACES)
         }
         else {
             if (!hasExternalQualifier) {
@@ -641,22 +680,22 @@ class Converter private constructor(
                 if (targetClass != null) {
                     val identifier = constructNestedClassReferenceIdentifier(targetClass, specialContext ?: element)
                     if (identifier != null) {
-                        return ReferenceElement(identifier, typeArgs).assignPrototype(element)
+                        return ReferenceElement(identifier, typeArgs).assignPrototype(element, CommentsAndSpacesInheritance.NO_SPACES)
                     }
                 }
             }
 
-            return ReferenceElement(Identifier(element.referenceName!!).assignNoPrototype(), typeArgs).assignPrototype(element)
+            return ReferenceElement(Identifier.withNoPrototype(element.referenceName!!), typeArgs).assignPrototype(element, CommentsAndSpacesInheritance.NO_SPACES)
         }
     }
 
     private fun constructNestedClassReferenceIdentifier(psiClass: PsiClass, context: PsiElement): Identifier? {
         val outerClass = psiClass.containingClass
         if (outerClass != null
-                && !PsiTreeUtil.isAncestor(outerClass, context, true)
-                && !psiClass.isImported(context.containingFile as PsiJavaFile)) {
+            && !PsiTreeUtil.isAncestor(outerClass, context, true)
+            && !psiClass.isImported(context.containingFile as PsiJavaFile)) {
             val qualifier = constructNestedClassReferenceIdentifier(outerClass, context)?.name ?: outerClass.name!!
-            return Identifier(Identifier.toKotlin(qualifier) + "." + Identifier.toKotlin(psiClass.name!!)).assignNoPrototype()
+            return Identifier.withNoPrototype(Identifier.toKotlin(qualifier) + "." + Identifier.toKotlin(psiClass.name!!))
         }
         return null
     }
@@ -702,6 +741,9 @@ class Converter private constructor(
             if (needOpenModifier(owner, isMethodInOpenClass, modifiers)) {
                 modifiers = modifiers.with(Modifier.OPEN)
             }
+
+            if (owner.hasModifierProperty(PsiModifier.NATIVE))
+                modifiers = modifiers.with(Modifier.EXTERNAL)
 
             modifiers = modifiers.adaptForContainingClassVisibility(owner.containingClass).adaptProtectedVisibility(owner)
         }
@@ -782,7 +824,7 @@ class Converter private constructor(
             val convertedType = typeConverter.convertType(types[index], Nullability.NotNull)
             null to deferredElement<Expression> { ClassLiteralExpression(convertedType.assignPrototype(refElements[index])) }
         }
-        val annotation = Annotation(Identifier("Throws").assignNoPrototype(), arguments, newLineAfter = true)
+        val annotation = Annotation(Identifier.withNoPrototype("Throws"), arguments, newLineAfter = true)
         return Annotations(listOf(annotation.assignPrototype(throwsList))).assignPrototype(throwsList)
     }
 

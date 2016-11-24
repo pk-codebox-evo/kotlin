@@ -19,7 +19,7 @@ package org.jetbrains.kotlin.resolve.calls
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.builtins.getReturnTypeFromFunctionType
 import org.jetbrains.kotlin.builtins.isFunctionType
-import org.jetbrains.kotlin.config.LanguageFeatureSettings
+import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.coroutines.controllerTypeIfCoroutine
 import org.jetbrains.kotlin.coroutines.resolveCoroutineHandleResultCallIfNeeded
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
@@ -29,6 +29,7 @@ import org.jetbrains.kotlin.resolve.BindingContext.CONSTRAINT_SYSTEM_COMPLETER
 import org.jetbrains.kotlin.resolve.calls.callResolverUtil.ResolveArgumentsMode.RESOLVE_FUNCTION_ARGUMENTS
 import org.jetbrains.kotlin.resolve.calls.callResolverUtil.getEffectiveExpectedType
 import org.jetbrains.kotlin.resolve.calls.callResolverUtil.isInvokeCallOnVariable
+import org.jetbrains.kotlin.resolve.calls.callUtil.isCallableReference
 import org.jetbrains.kotlin.resolve.calls.callUtil.isFakeElement
 import org.jetbrains.kotlin.resolve.calls.checkers.CallChecker
 import org.jetbrains.kotlin.resolve.calls.checkers.CallCheckerContext
@@ -62,7 +63,7 @@ class CallCompleter(
         private val callCheckers: Iterable<CallChecker>,
         private val builtIns: KotlinBuiltIns,
         private val fakeCallResolver: FakeCallResolver,
-        private val languageFeatureSettings: LanguageFeatureSettings
+        private val languageVersionSettings: LanguageVersionSettings
 ) {
     fun <D : CallableDescriptor> completeCall(
             context: BasicCallResolutionContext,
@@ -93,9 +94,11 @@ class CallCompleter(
                     if (calleeExpression != null && !calleeExpression.isFakeElement) calleeExpression
                     else resolvedCall.call.callElement
 
-            val callCheckerContext = CallCheckerContext(context, languageFeatureSettings)
-            for (callChecker in callCheckers) {
-                callChecker.check(resolvedCall, reportOn, callCheckerContext)
+            if (context.trace.wantsDiagnostics()) {
+                val callCheckerContext = CallCheckerContext(context, languageVersionSettings)
+                for (callChecker in callCheckers) {
+                    callChecker.check(resolvedCall, reportOn, callCheckerContext)
+                }
             }
 
             resolveHandleResultCallForCoroutineLambdaExpressions(context, resolvedCall)
@@ -175,10 +178,10 @@ class CallCompleter(
         val returnType = candidateDescriptor.returnType
 
         val expectedReturnType =
-                if (isResolvingCallableReference(call)) {
+                if (call.isCallableReference()) {
                     // TODO: compute generic type argument for R in the kotlin.Function<R> supertype (KT-12963)
                     // TODO: also add constraints for parameter types (KT-12964)
-                    if (!TypeUtils.noExpectedType(expectedType) && expectedType.isFunctionType) getReturnTypeFromFunctionType(expectedType)
+                    if (!TypeUtils.noExpectedType(expectedType) && expectedType.isFunctionType) expectedType.getReturnTypeFromFunctionType()
                     else TypeUtils.NO_EXPECTED_TYPE
                 }
                 else expectedType
@@ -239,11 +242,6 @@ class CallCompleter(
         setConstraintSystem(system)
 
         setResultingSubstitutor(system.resultingSubstitutor)
-    }
-
-    private fun isResolvingCallableReference(call: Call): Boolean {
-        val callElement = call.callElement
-        return (callElement.parent as? KtCallableReferenceExpression)?.callableReference == callElement
     }
 
     private fun <D : CallableDescriptor> MutableResolvedCall<D>.updateResolutionStatusFromConstraintSystem(

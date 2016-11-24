@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
+ * Copyright 2010-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,18 +17,15 @@
 package org.jetbrains.kotlin.idea.decompiler.textBuilder
 
 import com.intellij.openapi.vfs.VirtualFile
-import org.jetbrains.kotlin.asJava.OldPackageFacadeClassUtils
-import org.jetbrains.kotlin.descriptors.CallableMemberDescriptor
-import org.jetbrains.kotlin.descriptors.ClassDescriptor
-import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
-import org.jetbrains.kotlin.descriptors.ModuleDescriptor
+import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.fileClasses.OldPackageFacadeClassUtils
 import org.jetbrains.kotlin.idea.test.KotlinLightCodeInsightFixtureTestCase
 import org.jetbrains.kotlin.incremental.components.NoLookupLocation
 import org.jetbrains.kotlin.load.kotlin.VirtualFileFinder
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.resolve.MemberComparator
-import org.jetbrains.kotlin.resolve.descriptorUtil.module
 import org.jetbrains.kotlin.resolve.descriptorUtil.resolveTopLevelClass
 import org.junit.Assert
 
@@ -46,7 +43,7 @@ abstract class TextConsistencyBaseTest : KotlinLightCodeInsightFixtureTestCase()
 
     protected abstract fun getModuleDescriptor(): ModuleDescriptor
 
-    protected abstract fun isFromFacade(descriptor: CallableMemberDescriptor, facadeFqName: FqName): Boolean
+    protected abstract fun isFromFacade(descriptor: MemberDescriptor, facadeFqName: FqName): Boolean
 
     fun testConsistency() {
         getPackages().forEach { doTestPackage(it) }
@@ -79,10 +76,8 @@ abstract class TextConsistencyBaseTest : KotlinLightCodeInsightFixtureTestCase()
 
         override fun resolveDeclarationsInFacade(facadeFqName: FqName): List<DeclarationDescriptor> =
                 module.getPackage(facadeFqName.parent()).memberScope.getContributedDescriptors().filter {
-                    it is CallableMemberDescriptor &&
-                    it.module != module.builtIns.builtInsModule &&
-                    isFromFacade(it, facadeFqName)
+                    (it is MemberDescriptor && it !is ClassDescriptor && isFromFacade(it, facadeFqName)) &&
+                    !KotlinBuiltIns.isBuiltIn(it)
                 }.sortedWith(MemberComparator.INSTANCE)
     }
 }
-

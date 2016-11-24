@@ -29,36 +29,36 @@ fun createBuiltInPackageFragmentProvider(
         storageManager: StorageManager,
         module: ModuleDescriptor,
         packageFqNames: Set<FqName>,
-        classDescriptorFactory: ClassDescriptorFactory,
+        classDescriptorFactories: Iterable<ClassDescriptorFactory>,
         platformDependentDeclarationFilter: PlatformDependentDeclarationFilter,
         additionalClassPartsProvider: AdditionalClassPartsProvider = AdditionalClassPartsProvider.None,
         loadResource: (String) -> InputStream?
 ): PackageFragmentProvider {
     val packageFragments = packageFqNames.map { fqName ->
-        BuiltInsPackageFragment(fqName, storageManager, module, loadResource)
+        val resourcePath = BuiltInSerializerProtocol.getBuiltInsFilePath(fqName)
+        val inputStream = loadResource(resourcePath) ?: throw IllegalStateException("Resource not found in classpath: $resourcePath")
+        BuiltInsPackageFragment(fqName, storageManager, module, inputStream)
     }
     val provider = PackageFragmentProviderImpl(packageFragments)
 
     val notFoundClasses = NotFoundClasses(storageManager, module)
-    val localClassResolver = LocalClassifierResolverImpl()
 
     val components = DeserializationComponents(
             storageManager,
             module,
+            DeserializationConfiguration.Default,
             DeserializedClassDataFinder(provider),
             AnnotationAndConstantLoaderImpl(module, notFoundClasses, BuiltInSerializerProtocol),
             provider,
-            localClassResolver,
+            LocalClassifierTypeSettings.Default,
             ErrorReporter.DO_NOTHING,
             LookupTracker.DO_NOTHING,
             FlexibleTypeDeserializer.ThrowException,
-            classDescriptorFactory,
+            classDescriptorFactories,
             notFoundClasses,
             additionalClassPartsProvider = additionalClassPartsProvider,
             platformDependentDeclarationFilter = platformDependentDeclarationFilter
     )
-
-    localClassResolver.setDeserializationComponents(components)
 
     for (packageFragment in packageFragments) {
         packageFragment.components = components

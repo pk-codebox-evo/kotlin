@@ -25,7 +25,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiElement
-import org.jetbrains.kotlin.asJava.KtLightClass
+import org.jetbrains.kotlin.asJava.classes.KtLightClass
 import org.jetbrains.kotlin.idea.KotlinIconProvider
 import org.jetbrains.kotlin.psi.KtClassBody
 import org.jetbrains.kotlin.psi.KtClassOrObject
@@ -91,6 +91,7 @@ class KotlinSelectInProjectViewProvider(private val project: Project) : Selectab
 
     // should be called before ClassesTreeStructureProvider
     override fun getTopLevelElement(element: PsiElement): PsiElement? {
+        if (!element.isValid) return null
         val file = element.containingFile as? KtFile ?: return null
 
         val virtualFile = file.virtualFile
@@ -100,7 +101,7 @@ class KotlinSelectInProjectViewProvider(private val project: Project) : Selectab
 
         if (current is KtFile) {
             val declaration = current.declarations.singleOrNull()
-            val nameWithoutExtension = if (virtualFile != null) virtualFile.nameWithoutExtension else file.name
+            val nameWithoutExtension = virtualFile?.nameWithoutExtension ?: file.name
             if (declaration is KtClassOrObject && nameWithoutExtension == declaration.name) {
                 current = declaration
             }

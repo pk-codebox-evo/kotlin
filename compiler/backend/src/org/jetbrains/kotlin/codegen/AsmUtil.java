@@ -38,6 +38,7 @@ import org.jetbrains.kotlin.load.java.JavaVisibilities;
 import org.jetbrains.kotlin.load.java.JvmAnnotationNames;
 import org.jetbrains.kotlin.name.FqName;
 import org.jetbrains.kotlin.protobuf.MessageLite;
+import org.jetbrains.kotlin.renderer.DescriptorRenderer;
 import org.jetbrains.kotlin.resolve.DeprecationUtilKt;
 import org.jetbrains.kotlin.resolve.DescriptorUtils;
 import org.jetbrains.kotlin.resolve.annotations.AnnotationUtilKt;
@@ -91,6 +92,7 @@ public class AsmUtil {
             .put(JavaVisibilities.PACKAGE_VISIBILITY, NO_FLAG_PACKAGE_PRIVATE)
             .build();
 
+    public static final String RECEIVER_NAME = "$receiver";
     public static final String CAPTURED_RECEIVER_FIELD = "receiver$0";
     public static final String CAPTURED_THIS_FIELD = "this$0";
 
@@ -177,7 +179,7 @@ public class AsmUtil {
     public static boolean isStaticMethod(OwnerKind kind, CallableMemberDescriptor functionDescriptor) {
         return isStaticKind(kind) ||
                KotlinTypeMapper.isStaticAccessor(functionDescriptor) ||
-               AnnotationUtilKt.isPlatformStaticInObjectOrClass(functionDescriptor);
+               CodegenUtilKt.isJvmStaticInObjectOrClass(functionDescriptor);
     }
 
     public static boolean isStaticKind(OwnerKind kind) {
@@ -197,7 +199,7 @@ public class AsmUtil {
             flags |= Opcodes.ACC_NATIVE;
         }
 
-        if (AnnotationUtilKt.isPlatformStaticInCompanionObject(functionDescriptor)) {
+        if (CodegenUtilKt.isJvmStaticInCompanionObject(functionDescriptor)) {
             // Native method will be a member of the class, the companion object method will be delegated to it
             flags &= ~Opcodes.ACC_NATIVE;
         }
@@ -226,31 +228,27 @@ public class AsmUtil {
         return flags;
     }
 
-    private static int getCommonCallableFlags(FunctionDescriptor functionDescriptor) {
+    public static int getCommonCallableFlags(FunctionDescriptor functionDescriptor) {
         int flags = getVisibilityAccessFlag(functionDescriptor);
         flags |= getVarargsFlag(functionDescriptor);
         flags |= getDeprecatedAccessFlag(functionDescriptor);
-        if (DeprecationUtilKt.isHiddenInResolution(functionDescriptor)
+        if (DeprecationUtilKt.isDeprecatedHidden(functionDescriptor)
             || functionDescriptor instanceof PropertyAccessorDescriptor
-               && DeprecationUtilKt.isHiddenInResolution(((PropertyAccessorDescriptor) functionDescriptor).getCorrespondingProperty())) {
+               && DeprecationUtilKt.isDeprecatedHidden(((PropertyAccessorDescriptor) functionDescriptor).getCorrespondingProperty())) {
             flags |= ACC_SYNTHETIC;
         }
         return flags;
     }
 
-    //TODO: move mapping logic to front-end java
     public static int getVisibilityAccessFlag(@NotNull MemberDescriptor descriptor) {
         Integer specialCase = specialCaseVisibility(descriptor);
         if (specialCase != null) {
             return specialCase;
         }
-        return getDefaultVisibilityFlag(descriptor.getVisibility());
-    }
-
-    public static int getDefaultVisibilityFlag(@NotNull Visibility visibility) {
+        Visibility visibility = descriptor.getVisibility();
         Integer defaultMapping = visibilityToAccessFlag.get(visibility);
         if (defaultMapping == null) {
-            throw new IllegalStateException(visibility + " is not a valid visibility in backend");
+            throw new IllegalStateException(visibility + " is not a valid visibility in backend for " + DescriptorRenderer.DEBUG_TEXT.render(descriptor));
         }
         return defaultMapping;
     }
@@ -526,7 +524,7 @@ public class AsmUtil {
         mv.visitInsn(L2I);
     }
 
-    static void genInvertBoolean(InstructionAdapter v) {
+    public static void genInvertBoolean(InstructionAdapter v) {
         v.iconst(1);
         v.xor(Type.INT_TYPE);
     }
@@ -638,7 +636,7 @@ public class AsmUtil {
     ) {
         KotlinType type = parameter.getReturnType();
         if (type == null || isNullableType(type)) return;
-        
+
         int index = frameMap.getIndex(parameter);
         Type asmType = typeMapper.mapType(type);
         if (asmType.getSort() == Type.OBJECT || asmType.getSort() == Type.ARRAY) {
@@ -828,17 +826,6 @@ public class AsmUtil {
     @NotNull
     public static String internalNameByFqNameWithoutInnerClasses(@NotNull FqName fqName) {
         return JvmClassName.byFqNameWithoutInnerClasses(fqName).getInternalName();
-    }
-
-    @NotNull
-    public static String getSimpleInternalName(@NotNull String internalName) {
-        int lastSlash = internalName.lastIndexOf('/');
-        if (lastSlash >= 0) {
-            return internalName.substring(lastSlash + 1);
-        }
-        else {
-            return internalName;
-        }
     }
 
     public static void putJavaLangClassInstance(@NotNull InstructionAdapter v, @NotNull Type type) {

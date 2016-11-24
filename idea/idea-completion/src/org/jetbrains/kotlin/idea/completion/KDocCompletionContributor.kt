@@ -26,8 +26,8 @@ import com.intellij.util.ProcessingContext
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.idea.core.ExpectedInfo
-import org.jetbrains.kotlin.idea.kdoc.getParamDescriptors
 import org.jetbrains.kotlin.idea.kdoc.getKDocLinkResolutionScope
+import org.jetbrains.kotlin.idea.kdoc.getParamDescriptors
 import org.jetbrains.kotlin.idea.util.CallType
 import org.jetbrains.kotlin.idea.util.substituteExtensionIfCallable
 import org.jetbrains.kotlin.kdoc.lexer.KDocTokens
@@ -80,7 +80,7 @@ class KDocNameCompletionSession(
         val position = parameters.position.getParentOfType<KDocName>(false) ?: return
         val declaration = position.getContainingDoc().getOwner() ?: return
         val kdocLink = position.getStrictParentOfType<KDocLink>()!!
-        val declarationDescriptor = bindingContext[BindingContext.DECLARATION_TO_DESCRIPTOR, declaration]!!
+        val declarationDescriptor = bindingContext[BindingContext.DECLARATION_TO_DESCRIPTOR, declaration] ?: return
         if (kdocLink.getTagIfSubject()?.knownTag == KDocKnownTag.PARAM) {
             addParamCompletions(position, declarationDescriptor)
         } else {
@@ -116,7 +116,7 @@ class KDocNameCompletionSession(
             return true
         }
 
-        scope.collectDescriptorsFiltered(nameFilter = descriptorNameFilter).filter(::isApplicable).forEach {
+        scope.collectDescriptorsFiltered(nameFilter = descriptorNameFilter.toNameFilter()).filter(::isApplicable).forEach {
             val element = basicLookupElementFactory.createLookupElement(it, parametersAndTypeGrayed = true)
             collector.addElement(object: LookupElementDecorator<LookupElement>(element) {
                 override fun handleInsert(context: InsertionContext?) {

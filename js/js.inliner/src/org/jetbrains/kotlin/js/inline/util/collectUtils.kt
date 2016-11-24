@@ -20,8 +20,9 @@ import com.google.dart.compiler.backend.js.ast.*
 import com.google.dart.compiler.backend.js.ast.metadata.staticRef
 
 import org.jetbrains.kotlin.js.inline.util.collectors.InstanceCollector
-import org.jetbrains.kotlin.js.inline.util.collectors.PropertyCollector
-import org.jetbrains.kotlin.js.translate.expression.*
+import org.jetbrains.kotlin.js.translate.expression.InlineMetadata
+import org.jetbrains.kotlin.js.translate.utils.JsAstUtils
+import org.jetbrains.kotlin.js.translate.utils.name
 import java.util.*
 
 fun collectFunctionReferencesInside(scope: JsNode): List<JsName> =
@@ -127,27 +128,71 @@ fun JsFunction.collectFreeVariables() = collectUsedNames(body) - collectDefinedN
 
 fun JsFunction.collectLocalVariables() = collectDefinedNames(body) + parameters.map { it.name }
 
-fun collectJsProperties(scope: JsNode): IdentityHashMap<JsName, JsExpression> {
-    val collector = PropertyCollector()
-    collector.accept(scope)
-    return collector.properties
-}
+fun collectNamedFunctions(scope: JsNode) = collectNamedFunctionsAndMetadata(scope).mapValues { it.value.first }
 
-fun collectNamedFunctions(scope: JsNode): IdentityHashMap<JsName, JsFunction> {
-    val namedFunctions = IdentityHashMap<JsName, JsFunction>()
+fun collectNamedFunctionsOrMetadata(scope: JsNode) = collectNamedFunctionsAndMetadata(scope).mapValues { it.value.second }
 
-    for ((name, value) in collectJsProperties(scope)) {
-        val function: JsFunction? = when (value) {
-            is JsFunction -> value
-            else -> InlineMetadata.decompose(value)?.function
+fun collectNamedFunctionsAndMetadata(scope: JsNode): Map<JsName, Pair<JsFunction, JsExpression>> {
+    val namedFunctions = mutableMapOf<JsName, Pair<JsFunction, JsExpression>>()
+
+    scope.accept(object : RecursiveJsVisitor() {
+        override fun visitBinaryExpression(x: JsBinaryOperation) {
+            val assignment = JsAstUtils.decomposeAssignment(x)
+            if (assignment != null) {
+                val (left, right) = assignment
+                if (left is JsNameRef) {
+                    val name = left.name
+                    val function = extractFunction(right)
+                    if (function != null && name != null) {
+                        namedFunctions[name] = Pair(function, right)
+                    }
+                }
+            }
+            super.visitBinaryExpression(x)
         }
 
-        if (function != null) {
-            namedFunctions[name] = function
+        override fun visit(x: JsVars.JsVar) {
+            val initializer = x.initExpression
+            val name = x.name
+            if (initializer != null && name != null) {
+                val function = extractFunction(initializer)
+                if (function != null) {
+                    namedFunctions[name] = Pair(function, initializer)
+                }
+            }
+            super.visit(x)
         }
-    }
+
+        override fun visitFunction(x: JsFunction) {
+            val name = x.name
+            if (name != null) {
+                namedFunctions[name] = Pair(x, x)
+            }
+            super.visitFunction(x)
+        }
+
+        private fun extractFunction(expression: JsExpression) = when (expression) {
+            is JsFunction -> expression
+            else -> InlineMetadata.decompose(expression)?.function
+        }
+    })
 
     return namedFunctions
+}
+
+fun collectAccessors(scope: JsNode): Map<String, JsFunction> {
+    val accessors = hashMapOf<String, JsFunction>()
+
+    scope.accept(object : RecursiveJsVisitor() {
+        override fun visitInvocation(invocation: JsInvocation) {
+            InlineMetadata.decompose(invocation)?.let {
+                accessors[it.tag.value] = it.function
+            }
+            super.visitInvocation(invocation)
+        }
+    })
+
+    return accessors
 }
 
 fun <T : JsNode> collectInstances(klass: Class<T>, scope: JsNode): List<T> {
@@ -155,4 +200,110 @@ fun <T : JsNode> collectInstances(klass: Class<T>, scope: JsNode): List<T> {
         accept(scope)
         collected
     }
+}
+
+fun JsNode.collectBreakContinueTargets(): Map<JsContinue, JsStatement> {
+    val targets = mutableMapOf<JsContinue, JsStatement>()
+
+    accept(object : RecursiveJsVisitor() {
+        var defaultBreakTarget: JsStatement? = null
+        var breakTargets = mutableMapOf<JsName, JsStatement?>()
+        var defaultContinueTarget: JsStatement? = null
+        var continueTargets = mutableMapOf<JsName, JsStatement?>()
+
+        override fun visitLabel(x: JsLabel) {
+            val inner = x.statement
+            when (inner) {
+                is JsDoWhile -> handleLoop(inner, inner.body, x.name)
+
+                is JsWhile -> handleLoop(inner, inner.body, x.name)
+
+                is JsFor -> handleLoop(inner, inner.body, x.name)
+
+                is JsSwitch -> handleSwitch(inner, x.name)
+
+                else -> {
+                    withBreakAndContinue(x.name, x.statement, null) {
+                        accept(inner)
+                    }
+                }
+            }
+        }
+
+        override fun visitWhile(x: JsWhile) = handleLoop(x, x.body, null)
+
+        override fun visitDoWhile(x: JsDoWhile) = handleLoop(x, x.body, null)
+
+        override fun visitFor(x: JsFor) = handleLoop(x, x.body, null)
+
+        override fun visit(x: JsSwitch) = handleSwitch(x, null)
+
+        private fun handleSwitch(statement: JsSwitch, label: JsName?) {
+            withBreakAndContinue(label, statement) {
+                statement.cases.forEach { accept(it) }
+            }
+        }
+
+        private fun handleLoop(loop: JsStatement, body: JsStatement, label: JsName?) {
+            withBreakAndContinue(label, loop, loop) {
+                body.accept(this)
+            }
+        }
+
+        override fun visitBreak(x: JsBreak) {
+            val targetLabel = x.label?.name
+            targets[x] = if (targetLabel == null) {
+                defaultBreakTarget!!
+            }
+            else {
+                breakTargets[targetLabel]!!
+            }
+        }
+
+        override fun visitContinue(x: JsContinue) {
+            val targetLabel = x.label?.name
+            targets[x] = if (targetLabel == null) {
+                defaultContinueTarget!!
+            }
+            else {
+                continueTargets[targetLabel]!!
+            }
+        }
+
+        private fun withBreakAndContinue(
+                label: JsName?,
+                breakTargetStatement: JsStatement,
+                continueTargetStatement: JsStatement? = null,
+                action: () -> Unit
+        ) {
+            val oldDefaultBreakTarget = defaultBreakTarget
+            val oldDefaultContinueTarget = defaultContinueTarget
+            val (oldBreakTarget, oldContinueTarget) = if (label != null) {
+                Pair(breakTargets[label], continueTargets[label])
+            }
+            else {
+                Pair(null, null)
+            }
+
+            defaultBreakTarget = breakTargetStatement
+            if (label != null) {
+                breakTargets[label] = breakTargetStatement
+                continueTargets[label] = continueTargetStatement
+            }
+            if (continueTargetStatement != null) {
+                defaultContinueTarget = continueTargetStatement
+            }
+
+            action()
+
+            defaultBreakTarget = oldDefaultBreakTarget
+            defaultContinueTarget = oldDefaultContinueTarget
+            if (label != null) {
+                breakTargets[label] = oldBreakTarget
+                continueTargets[label] = oldContinueTarget
+            }
+        }
+    })
+
+    return targets
 }

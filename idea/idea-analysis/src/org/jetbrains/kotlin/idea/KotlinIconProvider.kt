@@ -23,8 +23,8 @@ import com.intellij.openapi.util.text.StringUtil
 import com.intellij.psi.PsiElement
 import com.intellij.ui.RowIcon
 import com.intellij.util.PlatformIcons
-import org.jetbrains.kotlin.asJava.KtLightClassForExplicitDeclaration
-import org.jetbrains.kotlin.asJava.KtLightClassForFacade
+import org.jetbrains.kotlin.asJava.classes.KtLightClassForFacade
+import org.jetbrains.kotlin.asJava.classes.KtLightClassForSourceDeclaration
 import org.jetbrains.kotlin.idea.caches.resolve.KtLightClassForDecompiledDeclaration
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
@@ -40,7 +40,7 @@ class KotlinIconProvider : IconProvider(), DumbAware {
         }
 
         val result = psiElement.getBaseIcon()
-        if (flags and Iconable.ICON_FLAG_VISIBILITY > 0 && result != null && psiElement is KtModifierListOwner) {
+        if (flags and Iconable.ICON_FLAG_VISIBILITY > 0 && result != null && (psiElement is KtModifierListOwner && psiElement !is KtClassInitializer)) {
             val list = psiElement.modifierList
             return createRowIcon(result, getVisibilityIcon(list))
         }
@@ -90,7 +90,7 @@ class KotlinIconProvider : IconProvider(), DumbAware {
                 //TODO (light classes for decompiled files): correct presentation
                 if (origin != null) origin.getBaseIcon() else KotlinIcons.CLASS
             }
-            is KtLightClassForExplicitDeclaration -> navigationElement.getBaseIcon()
+            is KtLightClassForSourceDeclaration -> navigationElement.getBaseIcon()
             is KtNamedFunction -> when {
                 receiverTypeReference != null -> KotlinIcons.EXTENSION_FUNCTION
                 getStrictParentOfType<KtNamedDeclaration>() is KtClass ->
@@ -114,6 +114,7 @@ class KotlinIconProvider : IconProvider(), DumbAware {
                     KotlinIcons.PARAMETER
             }
             is KtProperty -> if (isVar) KotlinIcons.FIELD_VAR else KotlinIcons.FIELD_VAL
+            is KtClassInitializer -> KotlinIcons.CLASS_INITIALIZER
             else -> null
         }
     }

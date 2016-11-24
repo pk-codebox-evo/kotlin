@@ -144,19 +144,25 @@ abstract class DescriptorRenderer {
             modifiers = DescriptorRendererModifier.ALL
         }
 
-        fun getClassKindPrefix(klass: ClassDescriptor): String {
-            if (klass.isCompanionObject) {
-                return "companion object"
-            }
-            return when (klass.kind) {
-                ClassKind.CLASS -> "class"
-                ClassKind.INTERFACE -> "interface"
-                ClassKind.ENUM_CLASS -> "enum class"
-                ClassKind.OBJECT -> "object"
-                ClassKind.ANNOTATION_CLASS -> "annotation class"
-                ClassKind.ENUM_ENTRY -> "enum entry"
-            }
-        }
+        fun getClassifierKindPrefix(classifier: ClassifierDescriptorWithTypeParameters): String =
+                when (classifier) {
+                    is TypeAliasDescriptor ->
+                        "typealias"
+                    is ClassDescriptor ->
+                        if (classifier.isCompanionObject) {
+                            "companion object"
+                        }
+                        else when (classifier.kind) {
+                            ClassKind.CLASS -> "class"
+                            ClassKind.INTERFACE -> "interface"
+                            ClassKind.ENUM_CLASS -> "enum class"
+                            ClassKind.OBJECT -> "object"
+                            ClassKind.ANNOTATION_CLASS -> "annotation class"
+                            ClassKind.ENUM_ENTRY -> "enum entry"
+                        }
+                    else ->
+                        throw AssertionError("Unexpected classifier: $classifier")
+                }
     }
 }
 
@@ -178,6 +184,7 @@ interface DescriptorRendererOptions {
     var textFormat: RenderingFormat
     var excludedAnnotationClasses: Set<FqName>
     var excludedTypeAnnotationClasses: Set<FqName>
+    var includeAnnotationArguments: Boolean
     var includePropertyConstant: Boolean
     var parameterNameRenderingPolicy: ParameterNameRenderingPolicy
     var withoutTypeParameters: Boolean
@@ -190,6 +197,10 @@ interface DescriptorRendererOptions {
     var renderAccessors: Boolean
     var renderDefaultAnnotationArguments: Boolean
     var alwaysRenderModifiers: Boolean
+    var renderConstructorKeyword: Boolean
+    var renderUnabbreviatedType: Boolean
+    var includeAdditionalModifiers: Boolean
+    var parameterNamesInFunctionalTypes: Boolean
 }
 
 object ExcludedTypeAnnotations {
@@ -218,7 +229,8 @@ object ExcludedTypeAnnotations {
 
     val internalAnnotationsForResolve = setOf(
             FqName("kotlin.internal.NoInfer"),
-            FqName("kotlin.internal.Exact"))
+            FqName("kotlin.internal.Exact")
+    )
 }
 
 enum class RenderingFormat {

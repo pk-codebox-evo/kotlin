@@ -22,8 +22,6 @@ import com.intellij.openapi.diagnostic.Attachment
 import com.intellij.openapi.util.Key
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
-import com.intellij.psi.PsiManager
-import com.intellij.psi.impl.PsiModificationTrackerImpl
 import com.intellij.util.ExceptionUtil
 import org.jetbrains.kotlin.idea.actions.internal.KotlinInternalMode
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
@@ -84,7 +82,7 @@ fun getFunctionForExtractedFragment(
     }
 
     fun generateFunction(): ExtractionResult? {
-        val originalFile = breakpointFile as KtFile
+        val originalFile = codeFragment.getContextContainingFile() ?: return null
 
         val newDebugExpressions = addDebugExpressionIntoTmpFileForExtractFunction(originalFile, codeFragment, breakpointLine)
         if (newDebugExpressions.isEmpty()) return null
@@ -126,6 +124,7 @@ fun addDebugExpressionIntoTmpFileForExtractFunction(originalFile: KtFile, codeFr
 
     val tmpFile = originalFile.copy() as KtFile
     tmpFile.suppressDiagnosticsInDebugMode = true
+    tmpFile.analysisContext = originalFile.analysisContext
 
     val contextElement = getExpressionToAddDebugExpressionBefore(tmpFile, codeFragment.getOriginalContext(), line) ?: return emptyList()
 
@@ -161,7 +160,7 @@ private fun KtCodeFragment.markSmartCasts() {
     val factory = KtPsiFactory(project)
 
     getContentElement()?.forEachDescendantOfType<KtExpression> { expression ->
-        val smartCast = bindingContext.get(SMARTCAST, expression) ?: bindingContext.get(IMPLICIT_RECEIVER_SMARTCAST, expression)
+        val smartCast = bindingContext.get(SMARTCAST, expression)?.defaultType
         if (smartCast != null) {
             val smartCastedExpression = factory.createExpressionByPattern(
                     "($0 as ${DescriptorRenderer.FQ_NAMES_IN_TYPES.renderType(smartCast)})",
@@ -214,7 +213,7 @@ private fun getExpressionToAddDebugExpressionBefore(tmpFile: KtFile, contextElem
 
     fun shouldStop(el: PsiElement?, p: PsiElement?) = p is KtBlockExpression || el is KtDeclaration || el is KtFile
 
-    var elementAt = tmpFile.findContextElement()
+    val elementAt = tmpFile.findContextElement()
 
     var parent = elementAt?.parent
     if (shouldStop(elementAt, parent)) {
@@ -328,10 +327,7 @@ private fun findElementBefore(contextElement: PsiElement): PsiElement? {
         contextElement is KtDeclarationWithBody && contextElement.hasBlockBody() -> {
             val block = contextElement.bodyExpression as KtBlockExpression
             val last = block.statements.lastOrNull()
-            if (last is KtReturnExpression)
-                last
-            else
-                block.rBrace
+            last as? KtReturnExpression ?: block.rBrace
         }
         contextElement is KtWhenEntry -> {
             val entryExpression = contextElement.expression

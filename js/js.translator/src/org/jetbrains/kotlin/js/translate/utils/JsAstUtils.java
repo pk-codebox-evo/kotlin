@@ -28,19 +28,16 @@ import org.jetbrains.kotlin.js.translate.context.TranslationContext;
 import org.jetbrains.kotlin.types.expressions.OperatorConventions;
 import org.jetbrains.kotlin.util.OperatorNameConventions;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
 public final class JsAstUtils {
     private static final JsNameRef DEFINE_PROPERTY = pureFqn("defineProperty", null);
-    public static final JsNameRef CREATE_OBJECT = pureFqn("create", null);
+    private static final JsNameRef CREATE_OBJECT = pureFqn("create", null);
 
     private static final JsNameRef VALUE = new JsNameRef("value");
     private static final JsPropertyInitializer WRITABLE = new JsPropertyInitializer(pureFqn("writable", null), JsLiteral.TRUE);
     private static final JsPropertyInitializer ENUMERABLE = new JsPropertyInitializer(pureFqn("enumerable", null), JsLiteral.TRUE);
-
-    public static final String LENDS_JS_DOC_TAG = "lends";
 
     static {
         JsNameRef globalObjectReference = new JsNameRef("Object");
@@ -56,8 +53,9 @@ public final class JsAstUtils {
         assert (jsNode instanceof JsExpression) || (jsNode instanceof JsStatement)
                 : "Unexpected node of type: " + jsNode.getClass().toString();
         if (jsNode instanceof JsExpression) {
-            JsExpressionStatement statement = new JsExpressionStatement((JsExpression) jsNode);
-            if (jsNode instanceof JsNullLiteral) {
+            JsExpression expression = (JsExpression) jsNode;
+            JsExpressionStatement statement = new JsExpressionStatement(expression);
+            if (expression instanceof JsNullLiteral || MetadataProperties.getSynthetic(expression)) {
                 MetadataProperties.setSynthetic(statement, true);
             }
             return statement;
@@ -172,24 +170,6 @@ public final class JsAstUtils {
         return invokeKotlinFunction(Namer.PRIMITIVE_COMPARE_TO, left, right);
     }
 
-    @NotNull
-    private static JsExpression rangeTo(@NotNull String rangeClassName, @NotNull JsExpression rangeStart, @NotNull JsExpression rangeEnd) {
-        JsNameRef expr = pureFqn(rangeClassName, Namer.kotlinObject());
-        JsNew numberRangeConstructorInvocation = new JsNew(expr);
-        setArguments(numberRangeConstructorInvocation, rangeStart, rangeEnd);
-        return numberRangeConstructorInvocation;
-    }
-
-    @NotNull
-    public static JsExpression numberRangeTo(@NotNull JsExpression rangeStart, @NotNull JsExpression rangeEnd) {
-        return rangeTo(Namer.NUMBER_RANGE, rangeStart, rangeEnd);
-    }
-
-    @NotNull
-    public static JsExpression charRangeTo(@NotNull JsExpression rangeStart, @NotNull JsExpression rangeEnd) {
-        return rangeTo(Namer.CHAR_RANGE, rangeStart, rangeEnd);
-    }
-
     public static JsExpression newLong(long value, @NotNull TranslationContext context) {
         if (value < Integer.MIN_VALUE || value > Integer.MAX_VALUE) {
             int low = (int) value;
@@ -224,22 +204,12 @@ public final class JsAstUtils {
     }
 
     @NotNull
-    public static JsExpression equalsForObject(@NotNull JsExpression left, @NotNull JsExpression right) {
-        return invokeMethod(left, Namer.EQUALS_METHOD_NAME, right);
-    }
-
-    @NotNull
     public static JsExpression compareForObject(@NotNull JsExpression left, @NotNull JsExpression right) {
         return invokeMethod(left, Namer.COMPARE_TO_METHOD_NAME, right);
     }
 
     @NotNull
-    public static JsPrefixOperation negated(@NotNull JsExpression expression) {
-        return new JsPrefixOperation(JsUnaryOperator.NOT, expression);
-    }
-
-    @NotNull
-    public static JsExpression negatedOptimized(@NotNull JsExpression expression) {
+    public static JsExpression notOptimized(@NotNull JsExpression expression) {
         if (expression instanceof JsUnaryOperation) {
             JsUnaryOperation unary = (JsUnaryOperation) expression;
             if (unary.getOperator() == JsUnaryOperator.NOT) return unary.getArg();
@@ -248,9 +218,9 @@ public final class JsAstUtils {
             JsBinaryOperation binary = (JsBinaryOperation) expression;
             switch (binary.getOperator()) {
                 case AND:
-                    return or(negatedOptimized(binary.getArg1()), negatedOptimized(binary.getArg2()));
+                    return or(notOptimized(binary.getArg1()), notOptimized(binary.getArg2()));
                 case OR:
-                    return and(negatedOptimized(binary.getArg1()), negatedOptimized(binary.getArg2()));
+                    return and(notOptimized(binary.getArg1()), notOptimized(binary.getArg2()));
                 case EQ:
                     return new JsBinaryOperation(JsBinaryOperator.NEQ, binary.getArg1(), binary.getArg2());
                 case NEQ:
@@ -272,7 +242,7 @@ public final class JsAstUtils {
             }
         }
 
-        return negated(expression);
+        return not(expression);
     }
 
     @NotNull
@@ -285,7 +255,7 @@ public final class JsAstUtils {
         return new JsBinaryOperation(JsBinaryOperator.OR, op1, op2);
     }
 
-    public static void setQualifier(@NotNull JsExpression selector, @Nullable JsExpression receiver) {
+    private static void setQualifier(@NotNull JsExpression selector, @Nullable JsExpression receiver) {
         assert (selector instanceof JsInvocation || selector instanceof JsNameRef);
         if (selector instanceof JsInvocation) {
             setQualifier(((JsInvocation) selector).getQualifier(), receiver);
@@ -337,6 +307,11 @@ public final class JsAstUtils {
     @NotNull
     public static JsBinaryOperation assignment(@NotNull JsExpression left, @NotNull JsExpression right) {
         return new JsBinaryOperation(JsBinaryOperator.ASG, left, right);
+    }
+
+    @NotNull
+    public static JsStatement assignmentToThisField(@NotNull String fieldName, @NotNull JsExpression right) {
+        return assignment(new JsNameRef(fieldName, JsLiteral.THIS), right).makeStmt();
     }
 
     public static JsStatement asSyntheticStatement(@NotNull JsExpression expression) {
@@ -411,16 +386,6 @@ public final class JsAstUtils {
         return new JsVars(new JsVars.JsVar(name, expr));
     }
 
-    public static void setArguments(@NotNull HasArguments invocation, @NotNull List<JsExpression> newArgs) {
-        List<JsExpression> arguments = invocation.getArguments();
-        assert arguments.isEmpty() : "Arguments already set.";
-        arguments.addAll(newArgs);
-    }
-
-    public static void setArguments(@NotNull HasArguments invocation, JsExpression... arguments) {
-        setArguments(invocation, Arrays.asList(arguments));
-    }
-
     public static void setParameters(@NotNull JsFunction function, @NotNull List<JsParameter> newParams) {
         List<JsParameter> parameters = function.getParameters();
         assert parameters.isEmpty() : "Arguments already set.";
@@ -460,11 +425,12 @@ public final class JsAstUtils {
 
     @NotNull
     public static JsInvocation defineProperty(
+            @NotNull JsExpression receiver,
             @NotNull String name,
-            @NotNull JsObjectLiteral value,
-            @NotNull TranslationContext context
+            @NotNull JsExpression value,
+            @NotNull JsProgram program
     ) {
-        return new JsInvocation(DEFINE_PROPERTY, JsLiteral.THIS, context.program().getStringLiteral(name), value);
+        return new JsInvocation(DEFINE_PROPERTY.deepCopy(), receiver, program.getStringLiteral(name), value);
     }
 
     @NotNull
@@ -543,5 +509,22 @@ public final class JsAstUtils {
 
         JsUnaryOperation unary = (JsUnaryOperation) expression;
         return unary.getOperator() == JsUnaryOperator.VOID;
+    }
+
+    @NotNull
+    public static JsStatement defineGetter(
+            @NotNull JsProgram program,
+            @NotNull JsExpression receiver,
+            @NotNull String name,
+            @NotNull JsExpression body
+    ) {
+        JsObjectLiteral propertyLiteral = new JsObjectLiteral(true);
+        propertyLiteral.getPropertyInitializers().add(new JsPropertyInitializer(new JsNameRef("get"), body));
+        return defineProperty(receiver, name, propertyLiteral, program).makeStmt();
+    }
+
+    @NotNull
+    public static JsExpression prototypeOf(@NotNull JsExpression expression) {
+        return pureFqn("prototype", expression);
     }
 }

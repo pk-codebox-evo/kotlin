@@ -39,7 +39,7 @@ import org.jetbrains.kotlin.types.expressions.isWithoutValueArguments
 import org.jetbrains.kotlin.utils.addIfNotNull
 import org.jetbrains.kotlin.utils.addToStdlib.check
 
-class QualifiedExpressionResolver(val classifierUsageCheckers: Iterable<ClassifierUsageChecker>) {
+class QualifiedExpressionResolver {
     fun resolvePackageHeader(
             packageDirective: KtPackageDirective,
             module: ModuleDescriptor,
@@ -158,7 +158,7 @@ class QualifiedExpressionResolver(val classifierUsageCheckers: Iterable<Classifi
             importDirective: KtImportDirective,
             moduleDescriptor: ModuleDescriptor,
             trace: BindingTrace,
-            aliasImportNames: Collection<FqName>,
+            excludedImportNames: Collection<FqName>,
             packageFragmentForVisibilityCheck: PackageFragmentDescriptor?
     ): ImportingScope? { // null if some error happened
         val importedReference = importDirective.importedReference ?: return null
@@ -182,7 +182,7 @@ class QualifiedExpressionResolver(val classifierUsageCheckers: Iterable<Classifi
                 return null
             }
 
-            return AllUnderImportScope(packageOrClassDescriptor, aliasImportNames)
+            return AllUnderImportScope(packageOrClassDescriptor, excludedImportNames)
         }
         else {
             return processSingleImport(moduleDescriptor, trace, importDirective, path, lastPart, packageFragmentForCheck)
@@ -376,9 +376,7 @@ class QualifiedExpressionResolver(val classifierUsageCheckers: Iterable<Classifi
             }
         }
 
-        val classifierDescriptor = scopeForFirstPart?.let {
-            it.findClassifier(firstPart.name, firstPart.location)
-        }
+        val classifierDescriptor = scopeForFirstPart?.findClassifier(firstPart.name, firstPart.location)
 
         if (classifierDescriptor != null) {
             storeResult(trace, firstPart.expression, classifierDescriptor, shouldBeVisibleFrom, position)
@@ -577,8 +575,8 @@ class QualifiedExpressionResolver(val classifierUsageCheckers: Iterable<Classifi
             trace: BindingTrace,
             position: QualifierPosition
     ) {
-        path.foldRight(packageView) { qualifierPart, currentView ->
-            storeResult(trace, qualifierPart.expression, currentView, shouldBeVisibleFrom = null, position = position)
+        path.foldRight(packageView) { (name, expression), currentView ->
+            storeResult(trace, expression, currentView, shouldBeVisibleFrom = null, position = position)
             currentView.containingDeclaration
             ?: error("Containing Declaration must be not null for package with fqName: ${currentView.fqName}, " +
                      "path: ${path.joinToString()}, packageView fqName: ${packageView.fqName}")
@@ -626,12 +624,6 @@ class QualifiedExpressionResolver(val classifierUsageCheckers: Iterable<Classifi
 
         trace.record(BindingContext.REFERENCE_TARGET, referenceExpression, descriptor)
 
-        if (descriptor is ClassifierDescriptor) {
-            for (checker in classifierUsageCheckers) {
-                checker.check(descriptor, trace, referenceExpression)
-            }
-        }
-
         if (descriptor is DeclarationDescriptorWithVisibility) {
             val fromToCheck =
                 if (shouldBeVisibleFrom is PackageFragmentDescriptor && shouldBeVisibleFrom.source == SourceElement.NO_SOURCE && referenceExpression.containingFile !is DummyHolder) {
@@ -654,6 +646,10 @@ class QualifiedExpressionResolver(val classifierUsageCheckers: Iterable<Classifi
                     is PackageViewDescriptor -> PackageQualifier(referenceExpression, descriptor)
                     is ClassDescriptor -> ClassQualifier(referenceExpression, descriptor)
                     is TypeParameterDescriptor -> TypeParameterQualifier(referenceExpression, descriptor)
+                    is TypeAliasDescriptor -> {
+                        val classDescriptor = descriptor.classDescriptor ?: return null
+                        TypeAliasQualifier(referenceExpression, descriptor, classDescriptor)
+                    }
                     else -> return null
                 }
 

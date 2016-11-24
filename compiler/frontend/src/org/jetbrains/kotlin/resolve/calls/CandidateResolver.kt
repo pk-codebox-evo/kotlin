@@ -20,6 +20,7 @@ import com.google.common.collect.Lists
 import com.google.common.collect.Sets
 import org.jetbrains.kotlin.builtins.ReflectionTypes
 import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptor
 import org.jetbrains.kotlin.descriptors.impl.TypeAliasConstructorDescriptor
 import org.jetbrains.kotlin.diagnostics.Errors
 import org.jetbrains.kotlin.diagnostics.Errors.*
@@ -52,6 +53,7 @@ import org.jetbrains.kotlin.types.TypeUtils.noExpectedType
 import org.jetbrains.kotlin.types.checker.ErrorTypesAreEqualToAnything
 import org.jetbrains.kotlin.types.checker.KotlinTypeChecker
 import org.jetbrains.kotlin.types.expressions.DoubleColonExpressionResolver
+import org.jetbrains.kotlin.types.typeUtil.containsTypeProjectionsInTopLevelArguments
 import java.util.*
 
 class CandidateResolver(
@@ -95,6 +97,7 @@ class CandidateResolver(
         checkValueArguments()
 
         checkAbstractAndSuper()
+        checkConstructedExpandedType()
     }
 
     private fun CallCandidateResolutionContext<*>.checkValueArguments() = checkAndReport {
@@ -114,7 +117,7 @@ class CandidateResolver(
         if (candidateCall.knownTypeParametersSubstitutor != null) {
             candidateCall.setResultingSubstitutor(candidateCall.knownTypeParametersSubstitutor!!)
         }
-        else if (ktTypeArguments.isNotEmpty() || candidateDescriptor is TypeAliasConstructorDescriptor) {
+        else if (ktTypeArguments.isNotEmpty()) {
             // Explicit type arguments passed
 
             val typeArguments = ArrayList<KotlinType>()
@@ -240,13 +243,13 @@ class CandidateResolver(
         val dispatchReceiver = candidateCall.dispatchReceiver
         if (dispatchReceiver != null) {
             var nestedClass: ClassDescriptor? = null
-            if (candidateDescriptor is ConstructorDescriptor
+            if (candidateDescriptor is ClassConstructorDescriptor
                 && DescriptorUtils.isStaticNestedClass(candidateDescriptor.containingDeclaration)
             ) {
                 nestedClass = candidateDescriptor.containingDeclaration
             }
             else if (candidateDescriptor is FakeCallableDescriptorForObject) {
-                nestedClass = candidateDescriptor.getReferencedDescriptor()
+                nestedClass = candidateDescriptor.getReferencedObject()
             }
             if (nestedClass != null) {
                 tracing.nestedClassAccessViaInstanceReference(trace, nestedClass, candidateCall.explicitReceiverKind)
@@ -285,7 +288,7 @@ class CandidateResolver(
         if (expression is KtSimpleNameExpression) {
             // 'B' in 'class A: B()' is JetConstructorCalleeExpression
             if (descriptor is ConstructorDescriptor) {
-                val modality = descriptor.containingDeclaration.modality
+                val modality = descriptor.constructedClass.modality
                 if (modality == Modality.ABSTRACT) {
                     tracing.instantiationOfAbstractClass(trace)
                 }
@@ -306,6 +309,17 @@ class CandidateResolver(
         if (superExtensionReceiver != null) {
             trace.report(SUPER_CANT_BE_EXTENSION_RECEIVER.on(superExtensionReceiver, superExtensionReceiver.text))
             candidateCall.addStatus(OTHER_ERROR)
+        }
+    }
+
+    private fun CallCandidateResolutionContext<*>.checkConstructedExpandedType() = check {
+        val descriptor = candidateDescriptor
+
+        if (descriptor is TypeAliasConstructorDescriptor) {
+            if (descriptor.returnType.containsTypeProjectionsInTopLevelArguments()) {
+                trace.report(EXPANDED_TYPE_CANNOT_BE_CONSTRUCTED.on(call.callElement, descriptor.returnType))
+                candidateCall.addStatus(OTHER_ERROR)
+            }
         }
     }
 
@@ -377,7 +391,8 @@ class CandidateResolver(
                     val spreadElement = argument.getSpreadElement()
                     if (spreadElement != null && !type.isFlexible() && type.isMarkedNullable) {
                         val dataFlowValue = DataFlowValueFactory.createDataFlowValue(expression, type, context)
-                        val smartCastResult = SmartCastManager.checkAndRecordPossibleCast(dataFlowValue, expectedType, expression, context, calleeExpression = null, recordExpressionType = false)
+                        val smartCastResult = SmartCastManager.checkAndRecordPossibleCast(dataFlowValue, expectedType, expression, context,
+                                                                                          call = null, recordExpressionType = false)
                         if (smartCastResult == null || !smartCastResult.isCorrect) {
                             context.trace.report(Errors.SPREAD_OF_NULLABLE.on(spreadElement))
                         }
@@ -506,7 +521,7 @@ class CandidateResolver(
             val outerCallReceiver = call.outerCall.explicitReceiver
             if (outerCallReceiver != call.explicitReceiver && outerCallReceiver is ReceiverValue) {
                 val outerReceiverDataFlowValue = DataFlowValueFactory.createDataFlowValue(outerCallReceiver, this)
-                val outerReceiverNullability = dataFlowInfo.getPredictableNullability(outerReceiverDataFlowValue)
+                val outerReceiverNullability = dataFlowInfo.getStableNullability(outerReceiverDataFlowValue)
                 if (outerReceiverNullability.canBeNull() && !TypeUtils.isNullableType(expectedReceiverParameterType)) {
                     nullableImplicitInvokeReceiver = true
                     receiverArgumentType = TypeUtils.makeNullable(receiverArgumentType)
@@ -515,7 +530,7 @@ class CandidateResolver(
         }
 
         val dataFlowValue = DataFlowValueFactory.createDataFlowValue(receiverArgument, this)
-        val nullability = dataFlowInfo.getPredictableNullability(dataFlowValue)
+        val nullability = dataFlowInfo.getStableNullability(dataFlowValue)
         val expression = (receiverArgument as? ExpressionReceiver)?.expression
         if (nullability.canBeNull() && !nullability.canBeNonNull()) {
             if (!TypeUtils.isNullableType(expectedReceiverParameterType)) {
@@ -531,7 +546,7 @@ class CandidateResolver(
             val smartCastResult = SmartCastManager.checkAndRecordPossibleCast(
                     dataFlowValue, expectedReceiverParameterType,
                     { possibleSmartCast -> isCandidateVisibleOrExtensionReceiver(receiverArgument, possibleSmartCast, isDispatchReceiver) },
-                    expression, this, candidateCall.call.calleeExpression, recordExpressionType = true
+                    expression, this, candidateCall.call, recordExpressionType = true
             )
 
             if (smartCastResult == null) {
@@ -596,15 +611,19 @@ class CandidateResolver(
         private val argumentsMapping = typeAlias.declaredTypeParameters.zip(ktTypeArguments).toMap()
 
         override fun wrongNumberOfTypeArguments(typeAlias: TypeAliasDescriptor, numberOfParameters: Int) {
-            // TODO
+            // can't happen in single-step expansion
         }
 
         override fun conflictingProjection(typeAlias: TypeAliasDescriptor, typeParameter: TypeParameterDescriptor?, substitutedArgument: KotlinType) {
-            // TODO
+            // can't happen in single-step expansion
         }
 
         override fun recursiveTypeAlias(typeAlias: TypeAliasDescriptor) {
-            // can't happen in non-error type
+            // can't happen in single-step expansion
+        }
+
+        override fun repeatedAnnotation(annotation: AnnotationDescriptor) {
+            // can't happen in single-step expansion
         }
 
         override fun boundsViolationInSubstitution(bound: KotlinType, unsubstitutedArgument: KotlinType, argument: KotlinType, typeParameter: TypeParameterDescriptor) {
@@ -629,7 +648,7 @@ class CandidateResolver(
         val substitutedType = typeAliasParametersSubstitutor.substitute(typeAliasConstructorDescriptor.returnType, Variance.INVARIANT)!!
         val boundsSubstitutor = TypeSubstitutor.create(substitutedType)
 
-        val typeAliasDescriptor = typeAliasConstructorDescriptor.typeAliasDescriptor
+        val typeAliasDescriptor = typeAliasConstructorDescriptor.containingDeclaration
 
         val unsubstitutedType = typeAliasDescriptor.expandedType
         if (unsubstitutedType.isError) return

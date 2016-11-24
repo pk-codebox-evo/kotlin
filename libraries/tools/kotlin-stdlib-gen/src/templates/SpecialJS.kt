@@ -1,3 +1,19 @@
+/*
+ * Copyright 2010-2016 JetBrains s.r.o.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package templates
 
 import templates.Family.*
@@ -11,14 +27,12 @@ fun specialJS(): List<GenericFunction> {
         returns("List<T>")
         body(ArraysOfObjects) {
             """
-            val al = ArrayList<T>()
-            al.asDynamic().array = this    // black dynamic magic
-            return al
+            return ArrayList<T>(this.unsafeCast<Array<Any?>>())
             """
         }
 
         inline(true, ArraysOfPrimitives)
-        body(ArraysOfPrimitives) {"""return (this as Array<T>).asList()"""}
+        body(ArraysOfPrimitives) {"""return this.unsafeCast<Array<T>>().asList()"""}
     }
 
 
@@ -32,7 +46,7 @@ fun specialJS(): List<GenericFunction> {
         }
         body {
             """
-            return copyOf() as Array<T>
+            return copyOf().unsafeCast<Array<T>>()
             """
         }
     }
@@ -151,13 +165,100 @@ fun specialJS(): List<GenericFunction> {
         }
     }
 
+    templates add f("contentEquals(other: SELF)") {
+        only(ArraysOfObjects, ArraysOfPrimitives)
+        since("1.1")
+        infix(true)
+        doc {
+            """
+            Returns `true` if the two specified arrays are *structurally* equal to one another,
+            i.e. contain the same number of the same elements in the same order.
+            """
+        }
+        annotations("""@library("arrayEquals")""")
+        returns("Boolean")
+        body { "return noImpl" }
+    }
+
+    templates add f("contentDeepEquals(other: SELF)") {
+        only(ArraysOfObjects)
+        since("1.1")
+        infix(true)
+        doc {
+            """
+            Returns `true` if the two specified arrays are *deeply* equal to one another,
+            i.e. contain the same number of the same elements in the same order.
+
+            If two corresponding elements are nested arrays, they are also compared deeply.
+            If any of arrays contains itself on any nesting level the behavior is undefined.
+            """
+        }
+        annotations("""@library("arrayDeepEquals")""")
+        returns("Boolean")
+        body { "return noImpl" }
+    }
+
+    templates add f("contentToString()") {
+        only(ArraysOfObjects, ArraysOfPrimitives)
+        since("1.1")
+        doc { "Returns a string representation of the contents of the specified array as if it is a [List]." }
+        annotations("""@library("arrayToString")""")
+        returns("String")
+        body { "return noImpl" }
+    }
+
+    templates add f("contentDeepToString()") {
+        only(ArraysOfObjects)
+        since("1.1")
+        doc {
+            """
+            Returns a string representation of the contents of this array as if it is a [List].
+            Nested arrays are treated as lists too.
+
+            If any of arrays contains itself on any nesting level that reference
+            is rendered as `"[...]"` to prevent recursion.
+            """
+        }
+        annotations("""@library("arrayDeepToString")""")
+        returns("String")
+        body { "return noImpl" }
+    }
+
+    templates add f("contentHashCode()") {
+        only(ArraysOfObjects, ArraysOfPrimitives)
+        since("1.1")
+        doc {
+            "Returns a hash code based on the contents of this array as if it is [List]."
+        }
+        annotations("""@library("arrayHashCode")""")
+        returns("Int")
+        body { "return noImpl" }
+    }
+
+    templates add f("contentDeepHashCode()") {
+        only(ArraysOfObjects)
+        since("1.1")
+        doc {
+            """
+            Returns a hash code based on the contents of this array as if it is [List].
+            Nested arrays are treated as lists too.
+
+            If any of arrays contains itself on any nesting level the behavior is undefined.
+            """
+        }
+        annotations("""@library("arrayDeepHashCode")""")
+        returns("Int")
+        body { "return noImpl" }
+    }
+
+
     templates add f("sort(comparison: (T, T) -> Int)") {
         only(ArraysOfObjects, ArraysOfPrimitives)
         exclude(PrimitiveType.Boolean)
         annotations("@native")
         returns("Unit")
         doc { "Sorts the array in-place according to the order specified by the given [comparison] function." }
-        body { "return noImpl" }
+        body { "noImpl" }
     }
 
     templates add f("sortWith(comparator: Comparator<in T>)") {
@@ -180,7 +281,7 @@ fun specialJS(): List<GenericFunction> {
         returns("Unit")
         doc { "Sorts the array in-place." }
         annotations("""@library("primitiveArraySort")""")
-        body { "return noImpl" }
+        body { "noImpl" }
     }
 
     templates add f("sort()") {

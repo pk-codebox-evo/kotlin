@@ -19,7 +19,7 @@ package org.jetbrains.kotlin.j2k
 import com.intellij.codeInsight.NullableNotNullManager
 import com.intellij.psi.*
 import com.intellij.psi.CommonClassNames.JAVA_LANG_OBJECT
-import org.jetbrains.kotlin.asJava.KtLightElement
+import org.jetbrains.kotlin.asJava.elements.KtLightElement
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.j2k.ast.*
 import org.jetbrains.kotlin.psi.KtCallableDeclaration
@@ -58,14 +58,14 @@ class TypeConverter(val converter: Converter) {
 
     fun convertVariableType(variable: PsiVariable): Type {
         val result = if (variable.isMainMethodParameter()) {
-            ArrayType(ClassType(ReferenceElement(Identifier("String").assignNoPrototype(), listOf()).assignNoPrototype(), Nullability.NotNull, converter.settings).assignNoPrototype(),
+            ArrayType(ClassType(ReferenceElement(Identifier.withNoPrototype("String"), listOf()).assignNoPrototype(), Nullability.NotNull, converter.settings).assignNoPrototype(),
                       Nullability.NotNull,
                       converter.settings).assignNoPrototype()
         }
         else {
             convertType(variable.type, variableNullability(variable), variableMutability(variable))
         }
-        return result.assignPrototype(variable.typeElement)
+        return result.assignPrototype(variable.typeElement, CommentsAndSpacesInheritance.NO_SPACES)
     }
 
     fun convertMethodReturnType(method: PsiMethod): Type

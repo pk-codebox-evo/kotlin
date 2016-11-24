@@ -17,6 +17,7 @@
 package org.jetbrains.kotlin.cfg.pseudocode
 
 import org.jetbrains.kotlin.cfg.pseudocode.instructions.Instruction
+import org.jetbrains.kotlin.cfg.pseudocode.instructions.KtElementInstruction
 import org.jetbrains.kotlin.cfg.pseudocode.instructions.special.LocalFunctionDeclarationInstruction
 import org.jetbrains.kotlin.cfg.pseudocode.instructions.special.SubroutineEnterInstruction
 import org.jetbrains.kotlin.cfg.pseudocode.instructions.special.SubroutineExitInstruction
@@ -38,6 +39,8 @@ interface Pseudocode {
 
     val exitInstruction: SubroutineExitInstruction
 
+    val errorInstruction: SubroutineExitInstruction
+
     val sinkInstruction: SubroutineSinkInstruction
 
     val enterInstruction: SubroutineEnterInstruction
@@ -51,4 +54,6 @@ interface Pseudocode {
     fun isSideEffectFree(instruction: Instruction): Boolean
 
     fun copy(): Pseudocode
+
+    fun instructionForElement(element: KtElement): KtElementInstruction?
 }

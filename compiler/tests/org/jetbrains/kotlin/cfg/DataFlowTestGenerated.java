@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.cfg;
 import com.intellij.testFramework.TestDataPath;
 import org.jetbrains.kotlin.test.JUnit3RunnerWithInners;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
+import org.jetbrains.kotlin.test.TargetBackend;
 import org.jetbrains.kotlin.test.TestMetadata;
 import org.junit.runner.RunWith;
 
@@ -32,7 +33,7 @@ import java.util.regex.Pattern;
 @RunWith(JUnit3RunnerWithInners.class)
 public class DataFlowTestGenerated extends AbstractDataFlowTest {
     public void testAllFilesPresentInCfg_variables() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg-variables"), Pattern.compile("^(.+)\\.kt$"), true);
+        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg-variables"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
     }
 
     @TestMetadata("compiler/testData/cfg-variables/basic")
@@ -40,7 +41,7 @@ public class DataFlowTestGenerated extends AbstractDataFlowTest {
     @RunWith(JUnit3RunnerWithInners.class)
     public static class Basic extends AbstractDataFlowTest {
         public void testAllFilesPresentInBasic() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg-variables/basic"), Pattern.compile("^(.+)\\.kt$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg-variables/basic"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
         }
 
         @TestMetadata("ExhaustiveInitialization.kt")
@@ -91,7 +92,13 @@ public class DataFlowTestGenerated extends AbstractDataFlowTest {
     @RunWith(JUnit3RunnerWithInners.class)
     public static class Bugs extends AbstractDataFlowTest {
         public void testAllFilesPresentInBugs() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg-variables/bugs"), Pattern.compile("^(.+)\\.kt$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg-variables/bugs"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("doWhileNotDefined.kt")
+        public void testDoWhileNotDefined() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cfg-variables/bugs/doWhileNotDefined.kt");
+            doTest(fileName);
         }
 
         @TestMetadata("initializationInLocalClass.kt")
@@ -109,6 +116,24 @@ public class DataFlowTestGenerated extends AbstractDataFlowTest {
         @TestMetadata("kt4764.kt")
         public void testKt4764() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cfg-variables/bugs/kt4764.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("kt5469.kt")
+        public void testKt5469() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cfg-variables/bugs/kt5469.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("kt9825.kt")
+        public void testKt9825() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cfg-variables/bugs/kt9825.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("localObjectInConstructor.kt")
+        public void testLocalObjectInConstructor() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cfg-variables/bugs/localObjectInConstructor.kt");
             doTest(fileName);
         }
 
@@ -136,7 +161,7 @@ public class DataFlowTestGenerated extends AbstractDataFlowTest {
     @RunWith(JUnit3RunnerWithInners.class)
     public static class LexicalScopes extends AbstractDataFlowTest {
         public void testAllFilesPresentInLexicalScopes() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg-variables/lexicalScopes"), Pattern.compile("^(.+)\\.kt$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg-variables/lexicalScopes"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
         }
 
         @TestMetadata("doWhileScope.kt")

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
+ * Copyright 2010-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,6 +51,9 @@ import org.jetbrains.kotlin.idea.framework.getJsStdLibJar
 import org.jetbrains.kotlin.idea.framework.getReflectJar
 import org.jetbrains.kotlin.idea.framework.getRuntimeJar
 import org.jetbrains.kotlin.idea.framework.getTestJar
+import org.jetbrains.kotlin.idea.project.TargetPlatformDetector
+import org.jetbrains.kotlin.js.resolve.JsPlatform
+import org.jetbrains.kotlin.resolve.jvm.platform.JvmPlatform
 import org.jetbrains.kotlin.serialization.deserialization.BinaryVersion
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
@@ -334,12 +337,13 @@ class UnsupportedAbiVersionNotificationPanelProvider(private val project: Projec
         }
 
         fun collectBadRoots(module: Module): Collection<BinaryVersionedFile<BinaryVersion>> {
-            val badJVMRoots = getLibraryRootsWithAbiIncompatibleKotlinClasses(module)
-            val badJSRoots = getLibraryRootsWithAbiIncompatibleForKotlinJs(module)
+            val badRoots = when (TargetPlatformDetector.getPlatform(module)) {
+                JvmPlatform -> getLibraryRootsWithAbiIncompatibleKotlinClasses(module)
+                JsPlatform -> getLibraryRootsWithAbiIncompatibleForKotlinJs(module)
+                else -> return emptyList()
+            }
 
-            if (badJVMRoots.isEmpty() && badJSRoots.isEmpty()) return emptyList()
-
-            return (badJVMRoots + badJSRoots).toHashSet()
+            return if (badRoots.isEmpty()) emptyList() else badRoots.toHashSet()
         }
     }
 }

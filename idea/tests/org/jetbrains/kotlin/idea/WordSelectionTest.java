@@ -45,7 +45,19 @@ public class WordSelectionTest extends KotlinLightCodeInsightFixtureTestCase {
 
     public void testValueParameters() { doTest(); }
 
+    public void testValueParameters2() {
+        doTest();
+    }
+
     public void testDocComment() { doTest(); }
+
+    public void testDocCommentOneLine() { doTest(); }
+
+    public void testDocCommentTagName() { doTest(); }
+
+    public void testDocCommentTagText() { doTest(); }
+
+    public void testDocCommentTagLink() { doTest(); }
 
     public void testFunctionWithLineCommentBefore() { doTest(); }
 
@@ -75,6 +87,28 @@ public class WordSelectionTest extends KotlinLightCodeInsightFixtureTestCase {
     public void testMultiDeclaration() { doTest(); }
 
     public void testInvokedExpression() {
+        doTest();
+    }
+
+    public void testDefiningVariable() { doTest(); }
+
+    public void testDefiningSuperClass() {
+        doTest();
+    }
+
+    public void testDefiningMultipleSuperClass() {
+        doTest();
+    }
+
+    public void testObjectExpression() {
+        doTest();
+    }
+
+    public void testKT13675() {
+        doTest();
+    }
+
+    public void testArrayBrackets() {
         doTest();
     }
 

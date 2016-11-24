@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
+ * Copyright 2010-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,16 +17,17 @@
 package org.jetbrains.kotlin.idea.decompiler.textBuilder
 
 import com.intellij.openapi.vfs.VirtualFile
-import org.jetbrains.kotlin.asJava.OldPackageFacadeClassUtils
-import org.jetbrains.kotlin.descriptors.CallableMemberDescriptor
+import org.jetbrains.kotlin.descriptors.MemberDescriptor
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.descriptors.PackageFragmentDescriptor
+import org.jetbrains.kotlin.fileClasses.OldPackageFacadeClassUtils
 import org.jetbrains.kotlin.idea.decompiler.js.buildDecompiledTextFromJsMetadata
 import org.jetbrains.kotlin.idea.test.KotlinStdJSProjectDescriptor
 import org.jetbrains.kotlin.idea.vfilefinder.JsVirtualFileFinder
 import org.jetbrains.kotlin.js.resolve.JsPlatform
 import org.jetbrains.kotlin.load.kotlin.VirtualFileFinder
 import org.jetbrains.kotlin.name.FqName
+import org.jetbrains.kotlin.serialization.deserialization.DeserializationConfiguration
 import org.jetbrains.kotlin.serialization.js.KotlinJavascriptSerializationUtil
 import org.jetbrains.kotlin.storage.LockBasedStorageManager
 import org.jetbrains.kotlin.test.KotlinTestUtils
@@ -36,7 +37,7 @@ import org.jetbrains.kotlin.utils.sure
 
 class KotlinJavaScriptDecompiledTextConsistencyTest : TextConsistencyBaseTest() {
     override fun getPackages(): List<FqName> = listOf(
-            "java.util", "jquery", "jquery.ui", "kotlin", "kotlin.browser", "kotlin.dom", "kotlin.js"
+            "jquery", "jquery.ui", "kotlin", "kotlin.collections", "kotlin.browser", "kotlin.dom", "kotlin.js"
     ).map { FqName(it) }
 
     override fun getTopLevelMembers(): Map<String, String> = mapOf("kotlin" to "intArrayOf")
@@ -48,12 +49,13 @@ class KotlinJavaScriptDecompiledTextConsistencyTest : TextConsistencyBaseTest() 
 
     override fun getModuleDescriptor(): ModuleDescriptor {
         val stdlibJar = PathUtil.getKotlinPathsForDistDirectory().jsStdLibJarPath.absolutePath
-        val module = KotlinTestUtils.createEmptyModule("<module for stdlib>", JsPlatform, JsPlatform.builtIns)
+        val module = KotlinTestUtils.createEmptyModule("<module for stdlib>", JsPlatform.builtIns)
         val metadata = KotlinJavascriptMetadataUtils.loadMetadata(stdlibJar)
         assert(metadata.size == 1)
 
-        val provider = KotlinJavascriptSerializationUtil.readModule(metadata[0].body, LockBasedStorageManager(), module).data
-                .sure { "No package fragment provider was created" }
+        val provider = KotlinJavascriptSerializationUtil.readModule(
+                metadata.single().body, LockBasedStorageManager(), module, DeserializationConfiguration.Default
+        ).data.sure { "No package fragment provider was created" }
 
         module.initialize(provider)
         module.setDependencies(module, module.builtIns.builtInsModule)
@@ -63,7 +65,7 @@ class KotlinJavaScriptDecompiledTextConsistencyTest : TextConsistencyBaseTest() 
 
     override fun getProjectDescriptor() = KotlinStdJSProjectDescriptor.instance
 
-    override fun isFromFacade(descriptor: CallableMemberDescriptor, facadeFqName: FqName): Boolean {
+    override fun isFromFacade(descriptor: MemberDescriptor, facadeFqName: FqName): Boolean {
         val containingDeclaration = descriptor.containingDeclaration
         return containingDeclaration is PackageFragmentDescriptor &&
                facadeFqName == OldPackageFacadeClassUtils.getPackageClassFqName(containingDeclaration.fqName)

@@ -44,21 +44,20 @@ import org.jetbrains.kotlin.resolve.inline.InlineStrategy
 fun setInlineCallMetadata(
         expression: JsExpression,
         psiElement: KtExpression,
-        resolvedCall: ResolvedCall<*>,
+        descriptor: CallableDescriptor,
         context: TranslationContext
 ) {
-    val descriptor = PsiUtils.getFunctionDescriptor(resolvedCall)
     assert(CallExpressionTranslator.shouldBeInlined(descriptor)) {
         "Expected descriptor of callable, that should be inlined, but got: $descriptor"
     }
 
-    val name = context.aliasedName(descriptor)
+    val candidateNames = setOf(context.aliasedName(descriptor), context.getInnerNameForDescriptor(descriptor))
 
     val visitor = object : RecursiveJsVisitor() {
         override fun visitInvocation(invocation: JsInvocation) {
             super.visitInvocation(invocation)
 
-            if (name == invocation.name) {
+            if (invocation.name in candidateNames) {
                 invocation.descriptor = descriptor
                 invocation.inlineStrategy = InlineStrategy.IN_PLACE
                 invocation.psiElement = psiElement
@@ -67,6 +66,23 @@ fun setInlineCallMetadata(
     }
 
     visitor.accept(expression)
+}
+
+fun setInlineCallMetadata(
+        expression: JsExpression,
+        psiElement: KtExpression,
+        resolvedCall: ResolvedCall<*>,
+        context: TranslationContext
+) = setInlineCallMetadata(expression, psiElement, PsiUtils.getFunctionDescriptor(resolvedCall), context)
+
+fun setInlineCallMetadata(
+        nameRef: JsNameRef,
+        psiElement: KtExpression,
+        descriptor: CallableDescriptor
+) {
+    nameRef.descriptor = descriptor
+    nameRef.inlineStrategy = InlineStrategy.IN_PLACE
+    nameRef.psiElement = psiElement
 }
 
 fun TranslationContext.aliasedName(descriptor: CallableDescriptor): JsName {

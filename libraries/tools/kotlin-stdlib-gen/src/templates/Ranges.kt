@@ -50,6 +50,7 @@ fun ranges(): List<GenericFunction> {
         doc {
             """
             Returns a progression from this value down to the specified [to] value with the step -1.
+
             The [to] value has to be less than this value.
             """
         }
@@ -82,11 +83,15 @@ fun ranges(): List<GenericFunction> {
         val elementType = rangeElementType(fromType, toType)
         val progressionType = elementType.name + "Range"
         returns(progressionType)
+        val minValue = if (elementType == PrimitiveType.Char) "'\\u0000'" else "$elementType.MIN_VALUE"
 
         doc {
             """
             Returns a range from this value up to but excluding the specified [to] value.
-            ${ if (elementType == toType) "The [to] value must be greater than [$elementType.MIN_VALUE]." else "" }
+
+            ${textWhen(elementType == toType) {
+                "If the [to] value is less than or equal to [$minValue] the returned range is empty."
+            }}
             """
         }
 
@@ -100,10 +105,10 @@ fun ranges(): List<GenericFunction> {
                 else -> "to"
             }
             body {
+                // <= instead of == for JS
                 """
-                val to_  = ($toExpr - 1).to$elementType()
-                if (to_ > to) throw IllegalArgumentException("The to argument value '${'$'}to' was too small.")
-                return $fromExpr .. to_
+                if (to <= $minValue) return $progressionType.EMPTY
+                return $fromExpr .. (to - 1).to$elementType()
                 """
             }
         } else {

@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.integration;
 import com.intellij.testFramework.TestDataPath;
 import org.jetbrains.kotlin.test.JUnit3RunnerWithInners;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
+import org.jetbrains.kotlin.test.TargetBackend;
 import org.jetbrains.kotlin.test.TestMetadata;
 import org.junit.runner.RunWith;
 
@@ -38,7 +39,7 @@ public class AntTaskTestGenerated extends AbstractAntTaskTest {
     }
 
     public void testAllFilesPresentInJvm() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/integration/ant/jvm"), Pattern.compile("^([^\\.]+)$"), false);
+        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/integration/ant/jvm"), Pattern.compile("^([^\\.]+)$"), TargetBackend.ANY, false);
     }
 
     @TestMetadata("doNotFailOnError")
@@ -107,6 +108,12 @@ public class AntTaskTestGenerated extends AbstractAntTaskTest {
         doTest(fileName);
     }
 
+    @TestMetadata("noReflectForJavac")
+    public void testNoReflectForJavac() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/integration/ant/jvm/noReflectForJavac/");
+        doTest(fileName);
+    }
+
     @TestMetadata("noStdlibForJavac")
     public void testNoStdlibForJavac() throws Exception {
         String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/integration/ant/jvm/noStdlibForJavac/");
@@ -122,6 +129,12 @@ public class AntTaskTestGenerated extends AbstractAntTaskTest {
     @TestMetadata("suppressWarnings")
     public void testSuppressWarnings() throws Exception {
         String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/integration/ant/jvm/suppressWarnings/");
+        doTest(fileName);
+    }
+
+    @TestMetadata("valWithInvoke")
+    public void testValWithInvoke() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/integration/ant/jvm/valWithInvoke/");
         doTest(fileName);
     }
 

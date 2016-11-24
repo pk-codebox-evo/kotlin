@@ -142,6 +142,7 @@ class GenericFunction(val signature: String, val keyword: String = "fun") {
     val platformName = PrimitiveProperty<String>()
     val inline = InlineProperty()
     val jvmOnly = FamilyProperty<Boolean>()
+    val since = FamilyProperty<String>()
     val typeParams = ArrayList<String>()
     val returns = FamilyProperty<String>()
     val operator = FamilyProperty<Boolean>()
@@ -327,7 +328,7 @@ class GenericFunction(val signature: String, val keyword: String = "fun") {
             Iterables -> "Iterable<$isAsteriskOrT>"
             Collections -> "Collection<$isAsteriskOrT>"
             Lists -> "List<$isAsteriskOrT>"
-            Maps -> "Map<K, V>"
+            Maps -> "Map<out K, V>"
             Sets -> "Set<$isAsteriskOrT>"
             Sequences -> "Sequence<$isAsteriskOrT>"
             InvariantArraysOfObjects -> "Array<T>"
@@ -371,11 +372,8 @@ class GenericFunction(val signature: String, val keyword: String = "fun") {
 
         doc[f]?.let { methodDoc ->
             builder.append("/**\n")
-            StringReader(methodDoc).forEachLine {
-                val line = it.trim()
-                if (!line.isEmpty()) {
-                    builder.append(" * ").append(line).append("\n")
-                }
+            StringReader(methodDoc.trim()).forEachLine { line ->
+                builder.append(" * ").append(line.trim()).append("\n")
             }
             builder.append(" */\n")
         }
@@ -397,6 +395,9 @@ class GenericFunction(val signature: String, val keyword: String = "fun") {
 
         if (jvmOnly[f] ?: false) {
             builder.append("@kotlin.jvm.JvmVersion\n")
+        }
+        since[f]?.let { since ->
+            builder.append("@SinceKotlin(\"$since\")\n")
         }
 
         annotations[f]?.let { builder.append(it).append('\n') }

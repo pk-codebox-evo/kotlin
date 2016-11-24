@@ -16,12 +16,14 @@
 
 package org.jetbrains.kotlin.js.translate.context
 
-import org.jetbrains.kotlin.descriptors.*
 import com.google.dart.compiler.backend.js.ast.JsName
-import org.jetbrains.kotlin.js.translate.utils.ManglingUtils.getSuggestedName
 import com.google.dart.compiler.backend.js.ast.JsScope
+import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.js.descriptorUtils.isCoroutineLambda
+import org.jetbrains.kotlin.js.naming.NameSuggestion
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.DescriptorUtils.*
+import org.jetbrains.kotlin.resolve.calls.util.FakeCallableDescriptorForObject
 
 private val CAPTURED_RECEIVER_NAME_PREFIX : String = "this$"
 
@@ -43,9 +45,13 @@ class UsageTracker(
     fun used(descriptor: DeclarationDescriptor) {
         if (isCaptured(descriptor)) return
 
+        if (descriptor is FakeCallableDescriptorForObject) return
+
         // local named function
         if (descriptor is FunctionDescriptor && descriptor.visibility == Visibilities.LOCAL) {
-            assert(!descriptor.getName().isSpecial) { "Function with special name can not be captured, descriptor: $descriptor" }
+            assert(descriptor.isCoroutineLambda || !descriptor.getName().isSpecial) {
+                "Function with special name can not be captured, descriptor: $descriptor"
+            }
             captureIfNeed(descriptor)
         }
         // local variable
@@ -68,6 +74,8 @@ class UsageTracker(
         ) {
             return
         }
+
+        if (descriptor.isCoroutineLambda && descriptor == containingDescriptor) return
 
         parent?.captureIfNeed(descriptor)
 
@@ -101,11 +109,14 @@ class UsageTracker(
         if (descriptor !is ReceiverParameterDescriptor) return false
         if (containingDescriptor !is ClassDescriptor && containingDescriptor !is ConstructorDescriptor) return false
 
+        // Class in which we are trying to capture variable
         val containingClass = getParentOfType(containingDescriptor, ClassDescriptor::class.java, false) ?: return false
+
+        // Class which instance we are trying to capture
         val currentClass = descriptor.containingDeclaration as? ClassDescriptor ?: return false
 
         for (outerDeclaration in generateSequence(containingClass) { it.containingDeclaration as? ClassDescriptor }) {
-            if (DescriptorUtils.isSubclass(outerDeclaration, currentClass)) return true
+            if (outerDeclaration == currentClass) return true
         }
 
         return false
@@ -152,12 +163,15 @@ class UsageTracker(
     }
 
     private fun DeclarationDescriptor.getJsNameForCapturedDescriptor(): JsName {
-        val suggestedName = when (this) {
-            is ReceiverParameterDescriptor -> getNameForCapturedReceiver()
-            is TypeParameterDescriptor -> Namer.isInstanceSuggestedName(this)
+        val suggestedName = when {
+            this is ReceiverParameterDescriptor -> getNameForCapturedReceiver()
+            this is TypeParameterDescriptor -> Namer.isInstanceSuggestedName(this)
 
             // Append 'closure$' prefix to avoid name clash between closure and member fields in case of local classes
-            else -> "closure\$${getSuggestedName(this)}"
+            else -> {
+                val mangled = NameSuggestion().suggest(this)!!.names.last()
+                "closure\$$mangled"
+            }
         }
 
         return scope.declareFreshName(suggestedName)

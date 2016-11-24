@@ -62,7 +62,9 @@ public class DefaultErrorMessagesJvm implements DefaultErrorMessages.Extension {
         MAP.put(ErrorsJvm.OVERRIDE_CANNOT_BE_STATIC, "Override member cannot be '@JvmStatic' in object");
         MAP.put(ErrorsJvm.OVERLOADS_WITHOUT_DEFAULT_ARGUMENTS, "'@JvmOverloads' annotation has no effect for methods without default arguments");
         MAP.put(ErrorsJvm.OVERLOADS_ABSTRACT, "'@JvmOverloads' annotation cannot be used on abstract methods");
-        MAP.put(ErrorsJvm.OVERLOADS_PRIVATE, "'@JvmOverloads' annotation has no effect on private and local declarations");
+        MAP.put(ErrorsJvm.OVERLOADS_INTERFACE, "'@JvmOverloads' annotation cannot be used on interface methods");
+        MAP.put(ErrorsJvm.OVERLOADS_PRIVATE, "'@JvmOverloads' annotation has no effect on private declarations");
+        MAP.put(ErrorsJvm.OVERLOADS_LOCAL, "'@JvmOverloads' annotation cannot be used on local declarations");
         MAP.put(ErrorsJvm.INAPPLICABLE_JVM_NAME, "'@JvmName' annotation is not applicable to this declaration");
         MAP.put(ErrorsJvm.ILLEGAL_JVM_NAME, "Illegal JVM name");
         MAP.put(ErrorsJvm.VOLATILE_ON_VALUE, "'@Volatile' annotation cannot be used on immutable properties");
@@ -106,6 +108,12 @@ public class DefaultErrorMessagesJvm implements DefaultErrorMessages.Extension {
         MAP.put(ErrorsJvm.STRICTFP_ON_CLASS, "'@Strictfp' annotation on classes is unsupported yet");
 
         MAP.put(ErrorsJvm.SUPER_CALL_WITH_DEFAULT_PARAMETERS, "Super-calls with default arguments are not allowed. Please specify all arguments of ''super.{0}'' explicitly", Renderers.TO_STRING);
+
+        MAP.put(ErrorsJvm.TARGET6_INTERFACE_INHERITANCE,
+                "Compiling ''{0}'' to JVM 1.8, but its superinterface ''{1}'' was compiled for JVM 1.6. " +
+                "Method implementation inheritance is restricted for such cases. " +
+                "Please make explicit overrides (abstract or concrete) for the following non-abstract members of ''{1}'': {2}",
+                Renderers.NAME, Renderers.NAME, Renderers.TO_STRING);
     }
 
     @NotNull

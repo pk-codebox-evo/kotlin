@@ -17,6 +17,8 @@
 package org.jetbrains.kotlin.idea.completion
 
 import com.intellij.codeInsight.completion.InsertionContext
+import com.intellij.codeInsight.completion.OffsetKey
+import com.intellij.codeInsight.completion.OffsetMap
 import com.intellij.codeInsight.completion.PrefixMatcher
 import com.intellij.codeInsight.lookup.*
 import com.intellij.openapi.util.Key
@@ -29,6 +31,7 @@ import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.idea.KotlinIcons
 import org.jetbrains.kotlin.idea.completion.handlers.CastReceiverInsertHandler
 import org.jetbrains.kotlin.idea.completion.handlers.WithTailInsertHandler
+import org.jetbrains.kotlin.idea.core.ImportableFqNameClassifier
 import org.jetbrains.kotlin.idea.core.ShortenReferences
 import org.jetbrains.kotlin.idea.imports.importableFqName
 import org.jetbrains.kotlin.idea.resolve.ResolutionFacade
@@ -36,7 +39,6 @@ import org.jetbrains.kotlin.idea.util.*
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.parentsWithSelf
-import org.jetbrains.kotlin.renderer.DescriptorRenderer
 import org.jetbrains.kotlin.renderer.render
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.DescriptorUtils
@@ -44,6 +46,7 @@ import org.jetbrains.kotlin.resolve.inline.InlineUtil
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.typeUtil.TypeNullability
 import org.jetbrains.kotlin.types.typeUtil.nullability
+import org.jetbrains.kotlin.utils.addToStdlib.check
 import java.util.*
 
 tailrec fun <T : Any> LookupElement.putUserDataDeep(key: Key<T>, value: T?) {
@@ -124,7 +127,7 @@ fun LookupElementPresentation.prependTailText(text: String, grayed: Boolean) {
     tails.forEach { appendTailText(it.text, it.isGrayed) }
 }
 
-enum class CallableWeight {
+enum class CallableWeightEnum {
     local, // local non-extension
     thisClassMember,
     baseClassMember,
@@ -133,6 +136,14 @@ enum class CallableWeight {
     globalOrStatic, // global non-extension
     typeParameterExtension,
     receiverCastRequired
+}
+
+class CallableWeight(val enum: CallableWeightEnum, val receiverIndex: Int?) {
+    companion object {
+        val local = CallableWeight(CallableWeightEnum.local, null)
+        val globalOrStatic = CallableWeight(CallableWeightEnum.globalOrStatic, null)
+        val receiverCastRequired = CallableWeight(CallableWeightEnum.receiverCastRequired, null)
+    }
 }
 
 val CALLABLE_WEIGHT_KEY = Key<CallableWeight>("CALLABLE_WEIGHT_KEY")
@@ -160,7 +171,7 @@ fun shouldCompleteThisItems(prefixMatcher: PrefixMatcher): Boolean {
 class ThisItemLookupObject(val receiverParameter: ReceiverParameterDescriptor, val labelName: Name?) : KeywordLookupObject()
 
 fun ThisItemLookupObject.createLookupElement() = createKeywordElement("this", labelName.labelNameToTail(), lookupObject = this)
-        .withTypeText(DescriptorRenderer.SHORT_NAMES_IN_TYPES.renderType(receiverParameter.type))
+        .withTypeText(BasicLookupElementFactory.SHORT_NAMES_RENDERER.renderType(receiverParameter.type))
 
 fun thisExpressionItems(bindingContext: BindingContext, position: KtExpression, prefix: String, resolutionFacade: ResolutionFacade): Collection<ThisItemLookupObject> {
     val scope = position.getResolutionScope(bindingContext, resolutionFacade)
@@ -373,7 +384,7 @@ fun LookupElement.decorateAsStaticMember(
             }
 
             if (presentation.typeText.isNullOrEmpty()) {
-                presentation.typeText = DescriptorRenderer.SHORT_NAMES_IN_TYPES.renderType(classDescriptor.defaultType)
+                presentation.typeText = BasicLookupElementFactory.SHORT_NAMES_RENDERER.renderType(classDescriptor.defaultType)
             }
         }
 
@@ -391,5 +402,20 @@ fun LookupElement.decorateAsStaticMember(
 
             super.handleInsert(context)
         }
+    }
+}
+
+fun ImportableFqNameClassifier.isImportableDescriptorImported(descriptor: DeclarationDescriptor): Boolean {
+    val classification = classify(descriptor.importableFqName!!, false)
+    return classification != ImportableFqNameClassifier.Classification.notImported
+           && classification != ImportableFqNameClassifier.Classification.siblingImported
+}
+
+fun OffsetMap.tryGetOffset(key: OffsetKey): Int? {
+    try {
+        return getOffset(key).check { it != -1 } // prior to IDEA 2016.3 getOffset() returned -1 if not found, now it throws exception
+    }
+    catch(e: Exception) {
+        return null
     }
 }

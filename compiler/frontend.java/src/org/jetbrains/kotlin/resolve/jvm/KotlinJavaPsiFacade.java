@@ -28,6 +28,7 @@ import com.intellij.psi.*;
 import com.intellij.psi.impl.PsiElementFinderImpl;
 import com.intellij.psi.impl.file.PsiPackageImpl;
 import com.intellij.psi.impl.file.impl.JavaFileManager;
+import com.intellij.psi.impl.light.LightModifierList;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.PsiModificationTracker;
 import com.intellij.reference.SoftReference;
@@ -41,6 +42,8 @@ import kotlin.collections.CollectionsKt;
 import kotlin.jvm.functions.Function1;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.kotlin.idea.KotlinLanguage;
+import org.jetbrains.kotlin.load.java.JavaClassFinderImpl;
 import org.jetbrains.kotlin.name.FqName;
 import org.jetbrains.kotlin.progress.ProgressIndicatorAndCompilationCanceledStatus;
 import org.jetbrains.kotlin.name.ClassId;
@@ -62,6 +65,7 @@ public class KotlinJavaPsiFacade {
     private volatile SoftReference<PackageCache> packageCache;
 
     private final Project project;
+    private final LightModifierList emptyModifierList;
 
     public static KotlinJavaPsiFacade getInstance(Project project) {
         return ServiceManager.getService(project, KotlinJavaPsiFacade.class);
@@ -69,6 +73,8 @@ public class KotlinJavaPsiFacade {
 
     public KotlinJavaPsiFacade(@NotNull Project project) {
         this.project = project;
+
+        emptyModifierList = new LightModifierList(PsiManager.getInstance(project), KotlinLanguage.INSTANCE);
 
         final PsiModificationTracker modificationTracker = PsiManager.getInstance(project).getModificationTracker();
         MessageBus bus = project.getMessageBus();
@@ -86,6 +92,10 @@ public class KotlinJavaPsiFacade {
                 }
             }
         });
+    }
+
+    public LightModifierList getEmptyModifierList() {
+        return emptyModifierList;
     }
 
     public PsiClass findClass(@NotNull ClassId classId, @NotNull GlobalSearchScope scope) {
@@ -108,7 +118,30 @@ public class KotlinJavaPsiFacade {
             }
             else {
                 PsiClass aClass = finder.findClass(qualifiedName, scope);
-                if (aClass != null) return aClass;
+                if (aClass != null) {
+                    if (scope instanceof JavaClassFinderImpl.FilterOutKotlinSourceFilesScope) {
+                        GlobalSearchScope baseScope = ((JavaClassFinderImpl.FilterOutKotlinSourceFilesScope) scope).getBase();
+                        boolean isSourcesScope = baseScope instanceof GlobalSearchScopeWithModuleSources;
+
+                        if (!isSourcesScope) {
+                            Object originalFinder = (finder instanceof KotlinPsiElementFinderWrapperImpl)
+                                                    ? ((KotlinPsiElementFinderWrapperImpl) finder).getOriginal()
+                                                    : finder;
+
+                            // Temporary fix for #KT-12402
+                            boolean isAndroidDataBindingClassWriter = originalFinder.getClass().getName()
+                                    .equals("com.android.tools.idea.databinding.DataBindingClassFinder");
+                            boolean isAndroidDataBindingComponentClassWriter = originalFinder.getClass().getName()
+                                    .equals("com.android.tools.idea.databinding.DataBindingComponentClassFinder");
+
+                            if (isAndroidDataBindingClassWriter || isAndroidDataBindingComponentClassWriter) {
+                                continue;
+                            }
+                        }
+                    }
+
+                    return aClass;
+                }
             }
         }
 
@@ -275,6 +308,10 @@ public class KotlinJavaPsiFacade {
 
         private KotlinPsiElementFinderWrapperImpl(@NotNull PsiElementFinder finder) {
             this.finder = finder;
+        }
+
+        public PsiElementFinder getOriginal() {
+            return finder;
         }
 
         @Override

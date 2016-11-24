@@ -18,6 +18,7 @@ package org.jetbrains.kotlin.idea.quickfix.createFromUsage.callableBuilder
 
 import com.intellij.refactoring.psi.SearchUtils
 import org.jetbrains.kotlin.cfg.pseudocode.*
+import org.jetbrains.kotlin.descriptors.ClassifierDescriptor
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor
 import org.jetbrains.kotlin.descriptors.VariableDescriptor
@@ -31,7 +32,7 @@ import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.getAssignmentByLHS
 import org.jetbrains.kotlin.psi.psiUtil.getNonStrictParentOfType
 import org.jetbrains.kotlin.resolve.BindingContext
-import org.jetbrains.kotlin.resolve.bindingContextUtil.getDataFlowInfo
+import org.jetbrains.kotlin.resolve.bindingContextUtil.getDataFlowInfoAfter
 import org.jetbrains.kotlin.resolve.bindingContextUtil.isUsedAsStatement
 import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowValueFactory
 import org.jetbrains.kotlin.resolve.descriptorUtil.resolveTopLevelClass
@@ -44,6 +45,10 @@ import java.util.*
 
 internal operator fun KotlinType.contains(inner: KotlinType): Boolean {
     return KotlinTypeChecker.DEFAULT.equalTypes(this, inner) || arguments.any { inner in it.type }
+}
+
+internal operator fun KotlinType.contains(descriptor: ClassifierDescriptor): Boolean {
+    return constructor.declarationDescriptor == descriptor || arguments.any { descriptor in it.type }
 }
 
 private fun KotlinType.render(typeParameterNameMap: Map<TypeParameterDescriptor, String>, fq: Boolean): String {
@@ -122,7 +127,7 @@ fun KtExpression.guessTypes(
     // if we know the actual type of the expression
     val theType1 = context.getType(this)
     if (theType1 != null) {
-        val dataFlowInfo = context.getDataFlowInfo(this)
+        val dataFlowInfo = context.getDataFlowInfoAfter(this)
         val possibleTypes = dataFlowInfo.getCollectedTypes(DataFlowValueFactory.createDataFlowValue(this, theType1, context, module))
         return if (possibleTypes.isNotEmpty()) possibleTypes.toTypedArray() else arrayOf(theType1)
     }

@@ -1,5 +1,6 @@
 @file:kotlin.jvm.JvmMultifileClass
 @file:kotlin.jvm.JvmName("MapsKt")
+@file:kotlin.jvm.JvmVersion
 
 package kotlin.collections
 
@@ -41,7 +42,7 @@ public inline fun <K, V> ConcurrentMap<K, V>.getOrPut(key: K, defaultValue: () -
  *
  * @sample test.collections.MapJVMTest.toSortedMap
  */
-public fun <K : Comparable<K>, V> Map<K, V>.toSortedMap(): SortedMap<K, V> = TreeMap(this)
+public fun <K : Comparable<K>, V> Map<out K, V>.toSortedMap(): SortedMap<K, V> = TreeMap(this)
 
 /**
  * Converts this [Map] to a [SortedMap] using the given [comparator] so that iteration order will be in the order
@@ -49,7 +50,7 @@ public fun <K : Comparable<K>, V> Map<K, V>.toSortedMap(): SortedMap<K, V> = Tre
  *
  * @sample test.collections.MapJVMTest.toSortedMapWithComparator
  */
-public fun <K, V> Map<K, V>.toSortedMap(comparator: Comparator<in K>): SortedMap<K, V>
+public fun <K, V> Map<out K, V>.toSortedMap(comparator: Comparator<in K>): SortedMap<K, V>
         = TreeMap<K, V>(comparator).apply { putAll(this@toSortedMap) }
 
 /**

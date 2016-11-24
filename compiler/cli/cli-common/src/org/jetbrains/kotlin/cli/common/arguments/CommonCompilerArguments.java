@@ -25,13 +25,21 @@ import java.util.List;
 public abstract class CommonCompilerArguments {
     public static final String PLUGIN_OPTION_FORMAT = "plugin:<pluginId>:<optionName>=<value>";
 
+    @GradleOption(DefaultValues.LanguageVersions.class)
     @Argument(value = "language-version", description = "Provide source compatibility with specified language version")
     @ValueDescription("<version>")
     public String languageVersion;
 
+    @GradleOption(DefaultValues.LanguageVersions.class)
+    @Argument(value = "api-version", description = "Allow to use declarations only from the specified version of bundled libraries")
+    @ValueDescription("<version>")
+    public String apiVersion;
+
+    @GradleOption(DefaultValues.BooleanFalseDefault.class)
     @Argument(value = "nowarn", description = "Generate no warnings")
     public boolean suppressWarnings;
 
+    @GradleOption(DefaultValues.BooleanFalseDefault.class)
     @Argument(value = "verbose", description = "Enable verbose logging output")
     public boolean verbose;
 
@@ -55,6 +63,9 @@ public abstract class CommonCompilerArguments {
     @Argument(value = "Xplugin", description = "Load plugins from the given classpath")
     @ValueDescription("<path>")
     public String[] pluginClasspaths;
+
+    @Argument(value = "Xmulti-platform", description = "Enable experimental language support for multi-platform projects")
+    public boolean multiPlatform;
 
     @Argument(value = "P", description = "Pass an option to a plugin")
     @ValueDescription(PLUGIN_OPTION_FORMAT)

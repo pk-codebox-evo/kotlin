@@ -2,6 +2,8 @@ class Controller {
     suspend fun suspendHere(x: Continuation<String>) {
         x.resume("OK")
     }
+
+    // INTERCEPT_RESUME_PLACEHOLDER
 }
 
 fun builder(coroutine c: Controller.() -> Continuation<Unit>) {
@@ -20,7 +22,7 @@ fun box(): String {
                 }
 
                 if (data != "OK") {
-                    throw java.lang.RuntimeException("fail: $data")
+                    throw RuntimeException("fail: $data")
                 }
 
                 result = "OK"

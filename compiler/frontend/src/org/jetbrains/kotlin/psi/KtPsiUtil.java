@@ -42,7 +42,6 @@ import org.jetbrains.kotlin.parsing.KotlinExpressionParsing;
 import org.jetbrains.kotlin.psi.psiUtil.KtPsiUtilKt;
 import org.jetbrains.kotlin.resolve.StatementFilter;
 import org.jetbrains.kotlin.resolve.StatementFilterKt;
-import org.jetbrains.kotlin.types.expressions.OperatorConventions;
 
 import java.util.Collection;
 import java.util.HashSet;
@@ -276,34 +275,12 @@ public class KtPsiUtil {
         }
     }
 
-    public static boolean isVariableNotParameterDeclaration(@NotNull KtDeclaration declaration) {
+    public static boolean isRemovableVariableDeclaration(@NotNull KtDeclaration declaration) {
         if (!(declaration instanceof KtVariableDeclaration)) return false;
         if (declaration instanceof KtProperty) return true;
         assert declaration instanceof KtDestructuringDeclarationEntry;
-        KtDestructuringDeclarationEntry multiDeclarationEntry = (KtDestructuringDeclarationEntry) declaration;
-        return !(multiDeclarationEntry.getParent().getParent() instanceof KtForExpression);
-    }
-
-    @Nullable
-    public static Name getConventionName(@NotNull KtSimpleNameExpression simpleNameExpression) {
-        if (simpleNameExpression.getIdentifier() != null) {
-            return simpleNameExpression.getReferencedNameAsName();
-        }
-
-        PsiElement firstChild = simpleNameExpression.getFirstChild();
-        if (firstChild != null) {
-            IElementType elementType = firstChild.getNode().getElementType();
-            if (elementType instanceof KtToken) {
-                KtToken jetToken = (KtToken) elementType;
-                boolean isPrefixExpression = simpleNameExpression.getParent() instanceof KtPrefixExpression;
-                if (isPrefixExpression) {
-                    return OperatorConventions.getNameForOperationSymbol(jetToken, true, false);
-                }
-                return OperatorConventions.getNameForOperationSymbol(jetToken);
-            }
-        }
-
-        return null;
+        // We can always replace destructuring entry with _
+        return true;
     }
 
     @Nullable
@@ -480,7 +457,7 @@ public class KtPsiUtil {
 
             PsiElement current = parentElement;
 
-            while (!(current instanceof KtBlockExpression || current instanceof KtDeclaration || current instanceof KtStatementExpression)) {
+            while (!(current instanceof KtBlockExpression || current instanceof KtDeclaration || current instanceof KtStatementExpression || current instanceof KtFile)) {
                 if (current.getTextRange().getEndOffset() != currentInner.getTextRange().getEndOffset()) {
                     return !(current instanceof KtParenthesizedExpression) && !(current instanceof KtValueArgumentList); // if current expression is "guarded" by parenthesis, no extra parenthesis is necessary
                 }

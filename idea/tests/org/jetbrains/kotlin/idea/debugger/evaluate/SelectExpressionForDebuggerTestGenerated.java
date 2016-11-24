@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.idea.debugger.evaluate;
 import com.intellij.testFramework.TestDataPath;
 import org.jetbrains.kotlin.test.JUnit3RunnerWithInners;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
+import org.jetbrains.kotlin.test.TargetBackend;
 import org.jetbrains.kotlin.test.TestMetadata;
 import org.junit.runner.RunWith;
 
@@ -34,7 +35,7 @@ public class SelectExpressionForDebuggerTestGenerated extends AbstractSelectExpr
     @RunWith(JUnit3RunnerWithInners.class)
     public static class SelectExpression extends AbstractSelectExpressionForDebuggerTest {
         public void testAllFilesPresentInSelectExpression() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/debugger/selectExpression"), Pattern.compile("^(.+)\\.kt$"), false);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/debugger/selectExpression"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, false);
         }
 
         @TestMetadata("annotation.kt")
@@ -76,6 +77,12 @@ public class SelectExpressionForDebuggerTestGenerated extends AbstractSelectExpr
         @TestMetadata("extensionFun.kt")
         public void testExtensionFun() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("idea/testData/debugger/selectExpression/extensionFun.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("firstCallInChain.kt")
+        public void testFirstCallInChain() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/debugger/selectExpression/firstCallInChain.kt");
             doTest(fileName);
         }
 
@@ -205,9 +212,21 @@ public class SelectExpressionForDebuggerTestGenerated extends AbstractSelectExpr
             doTest(fileName);
         }
 
+        @TestMetadata("superSelector.kt")
+        public void testSuperSelector() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/debugger/selectExpression/superSelector.kt");
+            doTest(fileName);
+        }
+
         @TestMetadata("this.kt")
         public void testThis() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("idea/testData/debugger/selectExpression/this.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("thisSelector.kt")
+        public void testThisSelector() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/debugger/selectExpression/thisSelector.kt");
             doTest(fileName);
         }
 
@@ -247,7 +266,7 @@ public class SelectExpressionForDebuggerTestGenerated extends AbstractSelectExpr
     @RunWith(JUnit3RunnerWithInners.class)
     public static class DisallowMethodCalls extends AbstractSelectExpressionForDebuggerTest {
         public void testAllFilesPresentInDisallowMethodCalls() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/debugger/selectExpression/disallowMethodCalls"), Pattern.compile("^(.+)\\.kt$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/debugger/selectExpression/disallowMethodCalls"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
         }
 
         @TestMetadata("binaryExpression.kt")
@@ -340,9 +359,21 @@ public class SelectExpressionForDebuggerTestGenerated extends AbstractSelectExpr
             doTestWoMethodCalls(fileName);
         }
 
+        @TestMetadata("superSelector.kt")
+        public void testSuperSelector() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/debugger/selectExpression/disallowMethodCalls/superSelector.kt");
+            doTestWoMethodCalls(fileName);
+        }
+
         @TestMetadata("this.kt")
         public void testThis() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("idea/testData/debugger/selectExpression/disallowMethodCalls/this.kt");
+            doTestWoMethodCalls(fileName);
+        }
+
+        @TestMetadata("thisSelector.kt")
+        public void testThisSelector() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/debugger/selectExpression/disallowMethodCalls/thisSelector.kt");
             doTestWoMethodCalls(fileName);
         }
 

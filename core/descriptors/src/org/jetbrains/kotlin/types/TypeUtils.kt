@@ -60,6 +60,7 @@ fun KotlinType.isBoolean(): Boolean = KotlinBuiltIns.isBoolean(this)
 fun KotlinType.isPrimitiveNumberType(): Boolean = KotlinBuiltIns.isPrimitiveType(this) && !isBoolean()
 fun KotlinType.isBooleanOrNullableBoolean(): Boolean = KotlinBuiltIns.isBooleanOrNullableBoolean(this)
 fun KotlinType.isThrowable(): Boolean = isConstructedFromClassWithGivenFqName(KotlinBuiltIns.FQ_NAMES.throwable) && !isMarkedNullable
+fun KotlinType.isIterator(): Boolean = isConstructedFromClassWithGivenFqName(KotlinBuiltIns.FQ_NAMES.iterator) && !isMarkedNullable
 
 fun KotlinType.isConstructedFromClassWithGivenFqName(fqName: FqName) =
         (constructor.declarationDescriptor as? ClassDescriptor)?.fqNameUnsafe == fqName.toUnsafe()
@@ -161,7 +162,7 @@ fun KotlinType.getImmediateSuperclassNotAny(): KotlinType? {
 }
 
 fun KotlinType.asTypeProjection(): TypeProjection = TypeProjectionImpl(this)
-fun KotlinType.contains(predicate: (KotlinType) -> Boolean) = TypeUtils.contains(this, predicate)
+fun KotlinType.contains(predicate: (UnwrappedType) -> Boolean) = TypeUtils.contains(this, predicate)
 
 fun KotlinType.replaceArgumentsWithStarProjections(): KotlinType {
     val unwrapped = unwrap()
@@ -202,3 +203,8 @@ fun KotlinType.requiresTypeAliasExpansion(): Boolean =
             } ?: false
         }
 
+fun KotlinType.containsTypeProjectionsInTopLevelArguments(): Boolean {
+    if (isError) return false
+    val possiblyInnerType = buildPossiblyInnerType() ?: return false
+    return possiblyInnerType.arguments.any { it.isStarProjection || it.projectionKind != Variance.INVARIANT }
+}

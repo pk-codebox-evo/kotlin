@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.resolve
 import org.jetbrains.kotlin.descriptors.TypeAliasDescriptor
 import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
+import org.jetbrains.kotlin.descriptors.annotations.CompositeAnnotations
 import org.jetbrains.kotlin.resolve.scopes.MemberScope
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.typeUtil.containsTypeAliasParameters
@@ -39,8 +40,8 @@ class TypeAliasExpander(
             recursionDepth: Int,
             withAbbreviatedType: Boolean
     ): SimpleType {
-        val originalProjection = TypeProjectionImpl(Variance.INVARIANT, typeAliasExpansion.descriptor.underlyingType)
-        val expandedProjection = expandTypeProjection(originalProjection, typeAliasExpansion, null, recursionDepth)
+        val underlyingProjection = TypeProjectionImpl(Variance.INVARIANT, typeAliasExpansion.descriptor.underlyingType)
+        val expandedProjection = expandTypeProjection(underlyingProjection, typeAliasExpansion, null, recursionDepth)
         val expandedType = expandedProjection.type.asSimpleType()
 
         if (expandedType.isError) return expandedType
@@ -49,67 +50,89 @@ class TypeAliasExpander(
             "Type alias expansion: result for ${typeAliasExpansion.descriptor} is ${expandedProjection.projectionKind}, should be invariant"
         }
 
-        return if (withAbbreviatedType) {
-            val abbreviatedType = KotlinTypeFactory.simpleType(annotations,
-                                                               typeAliasExpansion.descriptor.typeConstructor,
-                                                               typeAliasExpansion.arguments,
-                                                               originalProjection.type.isMarkedNullable,
-                                                               MemberScope.Empty)
+        val expandedTypeWithExtraAnnotations = expandedType.combineAnnotations(annotations)
 
-            expandedType.withAbbreviation(abbreviatedType)
-        }
-        else {
-            expandedType
-        }
+        return if (withAbbreviatedType)
+            expandedTypeWithExtraAnnotations.withAbbreviation(typeAliasExpansion.createAbbreviation(underlyingProjection, annotations))
+        else
+            expandedTypeWithExtraAnnotations
     }
 
+    private fun SimpleType.combineAnnotations(annotations: Annotations): SimpleType {
+        if (isError) return this
+
+        val existingAnnotationTypes = this.annotations.getAllAnnotations().mapTo(hashSetOf<KotlinType>()) { it.annotation.type }
+
+        for (annotation in annotations) {
+            if (annotation.type in existingAnnotationTypes) {
+                reportStrategy.repeatedAnnotation(annotation)
+            }
+        }
+
+        return replace(newAnnotations = CompositeAnnotations(listOf(annotations, this.annotations)))
+    }
+
+    private fun TypeAliasExpansion.createAbbreviation(originalProjection: TypeProjection, annotations: Annotations) =
+            KotlinTypeFactory.simpleType(
+                    annotations,
+                    descriptor.typeConstructor,
+                    arguments,
+                    originalProjection.type.isMarkedNullable,
+                    MemberScope.Empty
+            )
+
     private fun expandTypeProjection(
-            originalProjection: TypeProjection,
+            underlyingProjection: TypeProjection,
             typeAliasExpansion: TypeAliasExpansion,
             typeParameterDescriptor: TypeParameterDescriptor?,
             recursionDepth: Int
     ): TypeProjection {
+        // TODO refactor TypeSubstitutor to introduce custom diagnostics
         assertRecursionDepth(recursionDepth, typeAliasExpansion.descriptor)
 
-        val originalType = originalProjection.type
+        if (underlyingProjection.isStarProjection) return TypeUtils.makeStarProjection(typeParameterDescriptor!!)
 
-        val typeAliasArgument = typeAliasExpansion.getReplacement(originalType.constructor)
-
-        if (typeAliasArgument == null) {
-            return expandNonArgumentTypeProjection(originalProjection, typeAliasExpansion, recursionDepth)
+        val underlyingType = underlyingProjection.type
+        val argument = typeAliasExpansion.getReplacement(underlyingType.constructor)
+        if (argument == null) {
+            return expandNonArgumentTypeProjection(underlyingProjection, typeAliasExpansion, recursionDepth)
         }
 
-        val originalVariance =
-                if (originalProjection.projectionKind != Variance.INVARIANT)
-                    originalProjection.projectionKind
-                else if (typeParameterDescriptor != null)
-                    typeParameterDescriptor.variance
-                else
-                    Variance.INVARIANT
+        if (argument.isStarProjection) return TypeUtils.makeStarProjection(typeParameterDescriptor!!)
 
-        val argumentVariance = typeAliasArgument.projectionKind
+        val argumentVariance = argument.projectionKind
+        val underlyingVariance = underlyingProjection.projectionKind
 
-        val substitutedVariance =
-                if (argumentVariance == Variance.INVARIANT)
-                    originalVariance
-                else if (originalVariance == Variance.INVARIANT || originalVariance == argumentVariance)
-                    argumentVariance
-                else if (typeAliasArgument.isStarProjection)
-                    argumentVariance
-                else {
-                    if (originalVariance != argumentVariance && !typeAliasArgument.isStarProjection) {
-                        reportStrategy.conflictingProjection(typeAliasExpansion.descriptor, typeParameterDescriptor, typeAliasArgument.type)
+        val argumentType = argument.type.unwrap() as? SimpleType ?:
+                           throw AssertionError("Non-simple type in type alias argument: $argument")
+
+        val substitutionVariance =
+                when {
+                    underlyingVariance == argumentVariance -> argumentVariance
+                    underlyingVariance == Variance.INVARIANT -> argumentVariance
+                    argumentVariance == Variance.INVARIANT -> underlyingVariance
+                    else -> {
+                        reportStrategy.conflictingProjection(typeAliasExpansion.descriptor, typeParameterDescriptor, argumentType)
+                        argumentVariance
                     }
-                    argumentVariance
                 }
 
-        if (typeAliasArgument.isStarProjection) {
-            return TypeUtils.makeStarProjection(typeParameterDescriptor!!)
-        }
+        val parameterVariance = typeParameterDescriptor?.variance ?: Variance.INVARIANT
+        val resultingVariance =
+                when {
+                    parameterVariance == substitutionVariance -> substitutionVariance
+                    parameterVariance == Variance.INVARIANT -> substitutionVariance
+                    substitutionVariance == Variance.INVARIANT -> Variance.INVARIANT
+                    else -> {
+                        reportStrategy.conflictingProjection(typeAliasExpansion.descriptor, typeParameterDescriptor, argumentType)
+                        substitutionVariance
+                    }
+                }
 
-        val substitutedType = TypeUtils.makeNullableIfNeeded(typeAliasArgument.type, originalType.isMarkedNullable)
+        val substitutedType = TypeUtils.makeNullableIfNeeded(argumentType, underlyingType.isMarkedNullable)
+                .combineAnnotations(underlyingType.annotations)
 
-        return TypeProjectionImpl(substitutedVariance, substitutedType)
+        return TypeProjectionImpl(resultingVariance, substitutedType)
     }
 
     private fun expandNonArgumentTypeProjection(
@@ -153,7 +176,11 @@ class TypeAliasExpander(
             }
             else -> {
                 val substitutedArguments = type.arguments.mapIndexed { i, originalArgument ->
-                    expandTypeProjection(originalArgument, typeAliasExpansion, typeConstructor.parameters[i], recursionDepth + 1)
+                    val projection = expandTypeProjection(
+                            originalArgument, typeAliasExpansion, typeConstructor.parameters[i], recursionDepth + 1)
+                    if (projection.isStarProjection) projection
+                    else TypeProjectionImpl(projection.projectionKind,
+                                            TypeUtils.makeNullableIfNeeded(projection.type, originalArgument.type.isMarkedNullable))
                 }
 
                 val substitutedType = type.replace(newArguments = substitutedArguments)

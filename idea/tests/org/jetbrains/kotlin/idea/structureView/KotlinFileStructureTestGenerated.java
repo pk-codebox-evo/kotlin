@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.idea.structureView;
 import com.intellij.testFramework.TestDataPath;
 import org.jetbrains.kotlin.test.JUnit3RunnerWithInners;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
+import org.jetbrains.kotlin.test.TargetBackend;
 import org.jetbrains.kotlin.test.TestMetadata;
 import org.junit.runner.RunWith;
 
@@ -32,7 +33,13 @@ import java.util.regex.Pattern;
 @RunWith(JUnit3RunnerWithInners.class)
 public class KotlinFileStructureTestGenerated extends AbstractKotlinFileStructureTest {
     public void testAllFilesPresentInFileStructure() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/structureView/fileStructure"), Pattern.compile("^([^\\.]+)\\.kt$"), true);
+        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/structureView/fileStructure"), Pattern.compile("^([^.]+)\\.kt$"), TargetBackend.ANY, true);
+    }
+
+    @TestMetadata("AnonymousObjectMembers.kt")
+    public void testAnonymousObjectMembers() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("idea/testData/structureView/fileStructure/AnonymousObjectMembers.kt");
+        doTest(fileName);
     }
 
     @TestMetadata("CheckLocationForKotlin.kt")
@@ -110,6 +117,12 @@ public class KotlinFileStructureTestGenerated extends AbstractKotlinFileStructur
     @TestMetadata("InheritedSynthesizedFromDataClass.kt")
     public void testInheritedSynthesizedFromDataClass() throws Exception {
         String fileName = KotlinTestUtils.navigationMetadata("idea/testData/structureView/fileStructure/InheritedSynthesizedFromDataClass.kt");
+        doTest(fileName);
+    }
+
+    @TestMetadata("LocalElements.kt")
+    public void testLocalElements() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("idea/testData/structureView/fileStructure/LocalElements.kt");
         doTest(fileName);
     }
 

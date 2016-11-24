@@ -70,8 +70,7 @@ class CallExpressionResolver(
         private val argumentTypeResolver: ArgumentTypeResolver,
         private val dataFlowAnalyzer: DataFlowAnalyzer,
         private val builtIns: KotlinBuiltIns,
-        private val qualifiedExpressionResolver: QualifiedExpressionResolver,
-        private val classifierUsageCheckers: Iterable<ClassifierUsageChecker>
+        private val qualifiedExpressionResolver: QualifiedExpressionResolver
 ) {
     private lateinit var expressionTypingServices: ExpressionTypingServices
 
@@ -162,7 +161,7 @@ class CallExpressionResolver(
         val temporaryForQualifier = TemporaryTraceAndCache.create(context, "trace to resolve as qualifier", nameExpression)
         val contextForQualifier = context.replaceTraceAndCache(temporaryForQualifier)
         qualifiedExpressionResolver.resolveNameExpressionAsQualifierForDiagnostics(nameExpression, receiver, contextForQualifier)?.let {
-            resolveQualifierAsStandaloneExpression(it, contextForQualifier, classifierUsageCheckers)
+            resolveQualifierAsStandaloneExpression(it, contextForQualifier)
             temporaryForQualifier.commit()
         } ?: temporaryForVariable.commit()
         return noTypeInfo(context)
@@ -210,14 +209,14 @@ class CallExpressionResolver(
                 return noTypeInfo(context)
             }
             if (functionDescriptor is ConstructorDescriptor) {
-                val containingDescriptor = functionDescriptor.containingDeclaration
-                if (DescriptorUtils.isAnnotationClass(containingDescriptor) && !canInstantiateAnnotationClass(callExpression, context.trace)) {
+                val constructedClass = functionDescriptor.constructedClass
+                if (DescriptorUtils.isAnnotationClass(constructedClass) && !canInstantiateAnnotationClass(callExpression, context.trace)) {
                     context.trace.report(ANNOTATION_CLASS_CONSTRUCTOR_CALL.on(callExpression))
                 }
-                if (DescriptorUtils.isEnumClass(containingDescriptor)) {
+                if (DescriptorUtils.isEnumClass(constructedClass)) {
                     context.trace.report(ENUM_CLASS_CONSTRUCTOR_CALL.on(callExpression))
                 }
-                if (DescriptorUtils.isSealedClass(containingDescriptor)) {
+                if (DescriptorUtils.isSealedClass(constructedClass)) {
                     context.trace.report(SEALED_CLASS_CONSTRUCTOR_CALL.on(callExpression))
                 }
             }
@@ -225,7 +224,7 @@ class CallExpressionResolver(
             val type = functionDescriptor.returnType
             // Extracting jump out possible and jump point flow info from arguments, if any
             val arguments = callExpression.valueArguments
-            val resultFlowInfo = resolvedCall!!.dataFlowInfoForArguments.resultInfo
+            val resultFlowInfo = resolvedCall.dataFlowInfoForArguments.resultInfo
             var jumpFlowInfo = resultFlowInfo
             var jumpOutPossible = false
             for (argument in arguments) {
@@ -319,7 +318,7 @@ class CallExpressionResolver(
         var initialDataFlowInfoForArguments = context.dataFlowInfo
         val receiverDataFlowValue = (receiver as? ReceiverValue)?.let { DataFlowValueFactory.createDataFlowValue(it, context) }
         val receiverCanBeNull = receiverDataFlowValue != null &&
-                                initialDataFlowInfoForArguments.getPredictableNullability(receiverDataFlowValue).canBeNull()
+                                initialDataFlowInfoForArguments.getStableNullability(receiverDataFlowValue).canBeNull()
         if (receiverDataFlowValue != null && element.safe) {
             // Additional "receiver != null" information should be applied if we consider a safe call
             if (receiverCanBeNull) {
@@ -449,7 +448,7 @@ class CallExpressionResolver(
             context.trace.get(BindingContext.REFERENCE_TARGET, it)
         }
 
-        resolveQualifierAsReceiverInExpression(qualifier, selectorDescriptor, context, classifierUsageCheckers)
+        resolveQualifierAsReceiverInExpression(qualifier, selectorDescriptor, context)
     }
 
     companion object {
@@ -502,10 +501,9 @@ class CallExpressionResolver(
             val receiverQualifier = context.trace.get(BindingContext.QUALIFIER, expression.receiverExpression)
 
             if (receiverQualifier == null && expressionQualifier != null) {
-                assert(expressionQualifier is ClassQualifier) { "Only class can (package cannot) be accessed by instance reference: " + expressionQualifier }
-                context.trace.report(NESTED_CLASS_ACCESSED_VIA_INSTANCE_REFERENCE.on(
-                        selectorExpression,
-                        (expressionQualifier as ClassQualifier).descriptor))
+                assert(expressionQualifier is ClassifierQualifier) { "Only class can (package cannot) be accessed by instance reference: " + expressionQualifier }
+                val descriptor = (expressionQualifier as ClassifierQualifier).descriptor
+                context.trace.report(NESTED_CLASS_ACCESSED_VIA_INSTANCE_REFERENCE.on(selectorExpression, descriptor))
             }
         }
     }

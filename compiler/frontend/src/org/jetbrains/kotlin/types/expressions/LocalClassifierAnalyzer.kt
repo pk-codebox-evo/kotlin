@@ -18,7 +18,7 @@ package org.jetbrains.kotlin.types.expressions
 
 import com.intellij.psi.PsiElement
 import com.intellij.psi.util.PsiTreeUtil
-import org.jetbrains.kotlin.config.LanguageFeatureSettings
+import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.container.get
 import org.jetbrains.kotlin.context.GlobalContext
 import org.jetbrains.kotlin.context.withModule
@@ -46,21 +46,19 @@ import org.jetbrains.kotlin.resolve.lazy.declarations.PsiBasedClassMemberDeclara
 import org.jetbrains.kotlin.resolve.lazy.descriptors.LazyClassDescriptor
 import org.jetbrains.kotlin.resolve.scopes.LexicalScope
 import org.jetbrains.kotlin.resolve.scopes.LexicalWritableScope
-import org.jetbrains.kotlin.resolve.scopes.SyntheticScopes
 import org.jetbrains.kotlin.storage.StorageManager
-import org.jetbrains.kotlin.types.DynamicTypesSettings
 
 class LocalClassifierAnalyzer(
         private val globalContext: GlobalContext,
         private val storageManager: StorageManager,
         private val descriptorResolver: DescriptorResolver,
-        private val funcionDescriptorResolver: FunctionDescriptorResolver,
+        private val functionDescriptorResolver: FunctionDescriptorResolver,
         private val typeResolver: TypeResolver,
         private val annotationResolver: AnnotationResolver,
         private val platform: TargetPlatform,
         private val lookupTracker: LookupTracker,
         private val supertypeLoopChecker: SupertypeLoopChecker,
-        private val languageFeatureSettings: LanguageFeatureSettings
+        private val languageVersionSettings: LanguageVersionSettings
 ) {
     fun processClassOrObject(
             scope: LexicalWritableScope?,
@@ -75,7 +73,8 @@ class LocalClassifierAnalyzer(
                 context.trace,
                 platform,
                 lookupTracker,
-                languageFeatureSettings,
+                languageVersionSettings,
+                context.statementFilter,
                 LocalClassDescriptorHolder(
                         scope,
                         classOrObject,
@@ -84,10 +83,11 @@ class LocalClassifierAnalyzer(
                         context,
                         module,
                         descriptorResolver,
-                        funcionDescriptorResolver,
+                        functionDescriptorResolver,
                         typeResolver,
                         annotationResolver,
-                        supertypeLoopChecker
+                        supertypeLoopChecker,
+                        languageVersionSettings
                 )
         )
 
@@ -110,7 +110,8 @@ class LocalClassDescriptorHolder(
         val functionDescriptorResolver: FunctionDescriptorResolver,
         val typeResolver: TypeResolver,
         val annotationResolver: AnnotationResolver,
-        val supertypeLoopChecker: SupertypeLoopChecker
+        val supertypeLoopChecker: SupertypeLoopChecker,
+        val languageVersionSettings: LanguageVersionSettings
 ) {
     // We do not need to synchronize here, because this code is used strictly from one thread
     private var classDescriptor: ClassDescriptor? = null
@@ -146,6 +147,7 @@ class LocalClassDescriptorHolder(
                         override val annotationResolver = this@LocalClassDescriptorHolder.annotationResolver
                         override val lookupTracker: LookupTracker = LookupTracker.DO_NOTHING
                         override val supertypeLoopChecker = this@LocalClassDescriptorHolder.supertypeLoopChecker
+                        override val languageVersionSettings = this@LocalClassDescriptorHolder.languageVersionSettings
                     }
                     ,
                     containingDeclaration,

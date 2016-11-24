@@ -31,11 +31,11 @@ import org.jetbrains.kotlin.idea.core.util.DescriptorMemberChooserObject
 import org.jetbrains.kotlin.idea.j2k.IdeaDocCommentConverter
 import org.jetbrains.kotlin.idea.kdoc.KDocElementFactory
 import org.jetbrains.kotlin.idea.util.IdeDescriptorRenderers
+import org.jetbrains.kotlin.idea.util.approximateFlexibleTypes
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.findDocComment.findDocComment
 import org.jetbrains.kotlin.renderer.*
 import org.jetbrains.kotlin.resolve.descriptorUtil.setSingleOverridden
-import org.jetbrains.kotlin.types.typeUtil.makeNotNullable
 
 interface OverrideMemberChooserObject : ClassMember {
     enum class BodyType {
@@ -104,7 +104,7 @@ fun OverrideMemberChooserObject.generateMember(project: Project, copyDoc: Boolea
     }
 
     if (copyDoc) {
-        val superDeclaration = DescriptorToSourceUtilsIde.getAnyDeclaration(project, descriptor)
+        val superDeclaration = DescriptorToSourceUtilsIde.getAnyDeclaration(project, descriptor)?.navigationElement
         val kDoc = when (superDeclaration) {
             is KtDeclaration ->
                 findDocComment(superDeclaration)
@@ -130,6 +130,7 @@ private val OVERRIDE_RENDERER = DescriptorRenderer.withOptions {
     overrideRenderingPolicy = OverrideRenderingPolicy.RENDER_OVERRIDE
     unitReturnType = false
     typeNormalizer = IdeDescriptorRenderers.APPROXIMATE_FLEXIBLE_TYPES
+    renderUnabbreviatedType = false
 }
 
 private fun generateProperty(project: Project, descriptor: PropertyDescriptor, bodyType: OverrideMemberChooserObject.BodyType): KtProperty {
@@ -158,7 +159,7 @@ private fun generateConstructorParameter(project: Project, descriptor: PropertyD
 private fun generateFunction(project: Project, descriptor: FunctionDescriptor, bodyType: OverrideMemberChooserObject.BodyType): KtNamedFunction {
     val newDescriptor = object : FunctionDescriptor by descriptor {
         override fun getModality() = Modality.OPEN
-        override fun getReturnType() = descriptor.returnType?.makeNotNullable()
+        override fun getReturnType() = descriptor.returnType?.approximateFlexibleTypes(preferNotNull = true, preferStarForRaw = true)
         override fun getOverriddenDescriptors() = listOf(descriptor)
         override fun <R : Any?, D : Any?> accept(visitor: DeclarationDescriptorVisitor<R, D>, data: D) = visitor.visitFunctionDescriptor(this, data)
     }
@@ -181,9 +182,9 @@ fun generateUnsupportedOrSuperCall(
         bodyType: OverrideMemberChooserObject.BodyType
 ): String {
     if (bodyType == OverrideMemberChooserObject.BodyType.EMPTY) {
-        if (descriptor !is FunctionDescriptor) return "throw UnsupportedOperationException()"
+        val templateKind = if (descriptor is FunctionDescriptor) TemplateKind.FUNCTION else TemplateKind.PROPERTY_INITIALIZER
         return getFunctionBodyTextFromTemplate(project,
-                                               TemplateKind.FUNCTION,
+                                               templateKind,
                                                descriptor.name.asString(),
                                                descriptor.returnType?.let { IdeDescriptorRenderers.SOURCE_CODE.renderType(it) } ?: "Unit",
                                                null)

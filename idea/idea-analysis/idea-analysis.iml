@@ -32,5 +32,7 @@
     <orderEntry type="module" module-name="ide-common" exported="" />
     <orderEntry type="module" module-name="util" />
     <orderEntry type="module" module-name="idea-core" />
+    <orderEntry type="module" module-name="idea-jps-common" />
+    <orderEntry type="module" module-name="cli-common" />
   </component>
 </module>

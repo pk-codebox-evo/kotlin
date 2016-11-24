@@ -48,8 +48,8 @@ import kotlin.jvm.functions.Function1;
 import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.kotlin.asJava.KtLightClassForExplicitDeclaration;
-import org.jetbrains.kotlin.asJava.KtLightMethod;
+import org.jetbrains.kotlin.asJava.classes.KtLightClassForSourceDeclaration;
+import org.jetbrains.kotlin.asJava.elements.KtLightMethod;
 import org.jetbrains.kotlin.idea.MainFunctionDetector;
 import org.jetbrains.kotlin.idea.caches.resolve.ResolutionUtils;
 import org.jetbrains.kotlin.name.FqName;
@@ -233,19 +233,19 @@ public class JetRunConfiguration extends ModuleBasedConfiguration<RunConfigurati
     @Nullable
     @Override
     public RefactoringElementListener getRefactoringElementListener(PsiElement element) {
-        FqName fqNameBeingRenamed;
+        String fqNameBeingRenamed;
         if (element instanceof KtDeclarationContainer) {
             fqNameBeingRenamed = KotlinRunConfigurationProducer.Companion.getStartClassFqName((KtDeclarationContainer) element);
         }
         else if (element instanceof PsiPackage) {
-            fqNameBeingRenamed = new FqName(((PsiPackage) element).getQualifiedName());
+            fqNameBeingRenamed = ((PsiPackage) element).getQualifiedName();
         }
         else {
             fqNameBeingRenamed = null;
         }
 
         if (fqNameBeingRenamed == null ||
-            !MAIN_CLASS_NAME.equals(fqNameBeingRenamed.asString()) && !MAIN_CLASS_NAME.startsWith(fqNameBeingRenamed.asString() + ".")) {
+            !MAIN_CLASS_NAME.equals(fqNameBeingRenamed) && !MAIN_CLASS_NAME.startsWith(fqNameBeingRenamed + ".")) {
             return null;
         }
 
@@ -279,9 +279,9 @@ public class JetRunConfiguration extends ModuleBasedConfiguration<RunConfigurati
 
     private void updateMainClassName(PsiElement element) {
         KtDeclarationContainer container = KotlinRunConfigurationProducer.Companion.getEntryPointContainer(element);
-        FqName name = KotlinRunConfigurationProducer.Companion.getStartClassFqName(container);
+        String name = KotlinRunConfigurationProducer.Companion.getStartClassFqName(container);
         if (name != null) {
-            MAIN_CLASS_NAME = name.asString();
+            MAIN_CLASS_NAME = name;
         }
     }
 
@@ -308,6 +308,7 @@ public class JetRunConfiguration extends ModuleBasedConfiguration<RunConfigurati
                             @Override
                             public KtNamedFunction invoke(PsiMethod method) {
                                 if (!(method instanceof KtLightMethod)) return null;
+                                if (!method.getName().equals("main")) return null;
 
                                 KtDeclaration declaration = ((KtLightMethod) method).getKotlinOrigin();
                                 return declaration instanceof KtNamedFunction ? (KtNamedFunction) declaration : null;
@@ -389,7 +390,7 @@ public class JetRunConfiguration extends ModuleBasedConfiguration<RunConfigurati
         private String noFunctionFoundMessage(@NotNull PsiClass psiClass) {
             //noinspection ConstantConditions
             FqName classFqName = new FqName(psiClass.getQualifiedName());
-            if (psiClass instanceof KtLightClassForExplicitDeclaration) {
+            if (psiClass instanceof KtLightClassForSourceDeclaration) {
                 return String.format("Function 'main' not found in class '%s'", classFqName);
             }
             return String.format("Top-level function 'main' not found in package '%s'", classFqName.parent());

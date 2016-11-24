@@ -23,8 +23,10 @@ import org.jetbrains.kotlin.descriptors.ModuleDescriptor;
 import org.jetbrains.kotlin.js.analyze.TopDownAnalyzerFacadeForJS;
 import org.jetbrains.kotlin.js.analyzer.JsAnalysisResult;
 import org.jetbrains.kotlin.js.config.JsConfig;
+import org.jetbrains.kotlin.js.coroutine.CoroutineTransformer;
 import org.jetbrains.kotlin.js.facade.exceptions.TranslationException;
 import org.jetbrains.kotlin.js.inline.JsInliner;
+import org.jetbrains.kotlin.js.inline.clean.RemoveUnusedImportsKt;
 import org.jetbrains.kotlin.js.translate.context.TranslationContext;
 import org.jetbrains.kotlin.js.translate.general.Translation;
 import org.jetbrains.kotlin.progress.ProgressIndicatorAndCompilationCanceledStatus;
@@ -82,6 +84,12 @@ public final class K2JSTranslator {
         if (hasError(diagnostics)) return new TranslationResult.Fail(diagnostics);
 
         JsProgram program = JsInliner.process(context);
+        ProgressIndicatorAndCompilationCanceledStatus.checkCanceled();
+        if (hasError(diagnostics)) return new TranslationResult.Fail(diagnostics);
+
+        CoroutineTransformer coroutineTransformer = new CoroutineTransformer(program);
+        coroutineTransformer.accept(program);
+        RemoveUnusedImportsKt.removeUnusedImports(program);
         ProgressIndicatorAndCompilationCanceledStatus.checkCanceled();
         if (hasError(diagnostics)) return new TranslationResult.Fail(diagnostics);
 

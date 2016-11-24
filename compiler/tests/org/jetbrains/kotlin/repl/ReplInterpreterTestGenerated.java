@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.repl;
 import com.intellij.testFramework.TestDataPath;
 import org.jetbrains.kotlin.test.JUnit3RunnerWithInners;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
+import org.jetbrains.kotlin.test.TargetBackend;
 import org.jetbrains.kotlin.test.TestMetadata;
 import org.junit.runner.RunWith;
 
@@ -32,7 +33,7 @@ import java.util.regex.Pattern;
 @RunWith(JUnit3RunnerWithInners.class)
 public class ReplInterpreterTestGenerated extends AbstractReplInterpreterTest {
     public void testAllFilesPresentInRepl() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/repl"), Pattern.compile("^(.+)\\.repl$"), true);
+        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/repl"), Pattern.compile("^(.+)\\.repl$"), TargetBackend.ANY, true);
     }
 
     @TestMetadata("analyzeErrors.repl")
@@ -136,7 +137,7 @@ public class ReplInterpreterTestGenerated extends AbstractReplInterpreterTest {
     @RunWith(JUnit3RunnerWithInners.class)
     public static class Classes extends AbstractReplInterpreterTest {
         public void testAllFilesPresentInClasses() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/repl/classes"), Pattern.compile("^(.+)\\.repl$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/repl/classes"), Pattern.compile("^(.+)\\.repl$"), TargetBackend.ANY, true);
         }
 
         @TestMetadata("classInheritance.repl")
@@ -200,12 +201,27 @@ public class ReplInterpreterTestGenerated extends AbstractReplInterpreterTest {
         }
     }
 
+    @TestMetadata("compiler/testData/repl/modules")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class Modules extends AbstractReplInterpreterTest {
+        public void testAllFilesPresentInModules() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/repl/modules"), Pattern.compile("^(.+)\\.repl$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("kt10001.repl")
+        public void testKt10001() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/repl/modules/kt10001.repl");
+            doTest(fileName);
+        }
+    }
+
     @TestMetadata("compiler/testData/repl/multiline")
     @TestDataPath("$PROJECT_ROOT")
     @RunWith(JUnit3RunnerWithInners.class)
     public static class Multiline extends AbstractReplInterpreterTest {
         public void testAllFilesPresentInMultiline() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/repl/multiline"), Pattern.compile("^(.+)\\.repl$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/repl/multiline"), Pattern.compile("^(.+)\\.repl$"), TargetBackend.ANY, true);
         }
 
         @TestMetadata("functionOnSeveralLines.repl")
@@ -238,7 +254,7 @@ public class ReplInterpreterTestGenerated extends AbstractReplInterpreterTest {
     @RunWith(JUnit3RunnerWithInners.class)
     public static class Objects extends AbstractReplInterpreterTest {
         public void testAllFilesPresentInObjects() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/repl/objects"), Pattern.compile("^(.+)\\.repl$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/repl/objects"), Pattern.compile("^(.+)\\.repl$"), TargetBackend.ANY, true);
         }
 
         @TestMetadata("emptyObject.repl")
@@ -265,7 +281,7 @@ public class ReplInterpreterTestGenerated extends AbstractReplInterpreterTest {
     @RunWith(JUnit3RunnerWithInners.class)
     public static class PrimitiveTypes extends AbstractReplInterpreterTest {
         public void testAllFilesPresentInPrimitiveTypes() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/repl/primitiveTypes"), Pattern.compile("^(.+)\\.repl$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/repl/primitiveTypes"), Pattern.compile("^(.+)\\.repl$"), TargetBackend.ANY, true);
         }
 
         @TestMetadata("arrayOfBoxed.repl")
@@ -286,7 +302,7 @@ public class ReplInterpreterTestGenerated extends AbstractReplInterpreterTest {
     @RunWith(JUnit3RunnerWithInners.class)
     public static class Regressions extends AbstractReplInterpreterTest {
         public void testAllFilesPresentInRegressions() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/repl/regressions"), Pattern.compile("^(.+)\\.repl$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/repl/regressions"), Pattern.compile("^(.+)\\.repl$"), TargetBackend.ANY, true);
         }
 
         @TestMetadata("kt6843.repl")
@@ -301,7 +317,7 @@ public class ReplInterpreterTestGenerated extends AbstractReplInterpreterTest {
     @RunWith(JUnit3RunnerWithInners.class)
     public static class UseJava extends AbstractReplInterpreterTest {
         public void testAllFilesPresentInUseJava() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/repl/useJava"), Pattern.compile("^(.+)\\.repl$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/repl/useJava"), Pattern.compile("^(.+)\\.repl$"), TargetBackend.ANY, true);
         }
 
         @TestMetadata("syntheticProperty.repl")

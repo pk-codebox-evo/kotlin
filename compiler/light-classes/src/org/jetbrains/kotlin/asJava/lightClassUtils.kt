@@ -18,6 +18,12 @@ package org.jetbrains.kotlin.asJava
 
 import com.intellij.psi.*
 import com.intellij.psi.search.GlobalSearchScope
+import org.jetbrains.kotlin.asJava.classes.KtLightClass
+import org.jetbrains.kotlin.asJava.classes.KtLightClassForFacade
+import org.jetbrains.kotlin.asJava.elements.KtLightAnnotation
+import org.jetbrains.kotlin.asJava.elements.KtLightElement
+import org.jetbrains.kotlin.asJava.elements.KtLightIdentifier
+import org.jetbrains.kotlin.asJava.elements.KtLightMethod
 import org.jetbrains.kotlin.load.java.JvmAbi
 import org.jetbrains.kotlin.load.java.propertyNameByGetMethodName
 import org.jetbrains.kotlin.load.java.propertyNameBySetMethodName
@@ -39,7 +45,7 @@ fun KtFile.findFacadeClass(): KtLightClass? {
             .firstOrNull { it is KtLightClassForFacade && this in it.files } as? KtLightClass
 }
 
-fun KtDeclaration.toLightElements(): List<PsiNamedElement> =
+fun KtElement.toLightElements(): List<PsiNamedElement> =
         when (this) {
             is KtClassOrObject -> toLightClass().singletonOrEmptyList()
             is KtNamedFunction,
@@ -54,6 +60,7 @@ fun KtDeclaration.toLightElements(): List<PsiNamedElement> =
                 elements
             }
             is KtTypeParameter -> toPsiTypeParameters()
+            is KtFile -> findFacadeClass().singletonOrEmptyList()
             else -> listOf()
         }
 
@@ -165,7 +172,7 @@ fun propertyNameByAccessor(name: String, accessor: KtLightMethod): String? {
     return when {
         JvmAbi.isGetterName(name) -> propertyNameByGetMethodName(methodName)
         JvmAbi.isSetterName(name) -> propertyNameBySetMethodName(methodName, propertyName.startsWith("is"))
-        else -> null
+        else -> methodName
     }?.asString()
 }
 
@@ -176,4 +183,8 @@ fun accessorNameByPropertyName(name: String, accessor: KtLightMethod): String? {
         JvmAbi.isSetterName(methodName) -> JvmAbi.setterName(name)
         else -> null
     }
+}
+
+fun getAccessorNamesCandidatesByPropertyName(name: String): List<String> {
+    return listOf(JvmAbi.setterName(name), JvmAbi.getterName(name))
 }

@@ -16,7 +16,10 @@
 
 package org.jetbrains.kotlin.resolve.constants.evaluate
 
+import com.intellij.psi.tree.IElementType
 import com.intellij.psi.util.PsiTreeUtil
+import com.intellij.util.text.LiteralFormatUtil
+import org.jetbrains.kotlin.KtNodeType
 import org.jetbrains.kotlin.KtNodeTypes
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.descriptors.*
@@ -283,8 +286,7 @@ private class ConstantExpressionEvaluatorVisitor(
         if (nodeElementType == KtNodeTypes.NULL) return factory.createNullValue().wrap()
 
         val result: Any? = when (nodeElementType) {
-                               KtNodeTypes.INTEGER_CONSTANT -> parseLong(text)
-                               KtNodeTypes.FLOAT_CONSTANT -> parseFloatingLiteral(text)
+                               KtNodeTypes.INTEGER_CONSTANT, KtNodeTypes.FLOAT_CONSTANT -> parseNumericLiteral(text, nodeElementType)
                                KtNodeTypes.BOOLEAN_CONSTANT -> parseBoolean(text)
                                KtNodeTypes.CHARACTER_CONSTANT -> CompileTimeConstantChecker.parseChar(expression)
                                else -> throw IllegalArgumentException("Unsupported constant: " + expression)
@@ -625,7 +627,7 @@ private class ConstantExpressionEvaluatorVisitor(
 
         // Ann()
         if (resultingDescriptor is ConstructorDescriptor) {
-            val classDescriptor: ClassDescriptor = resultingDescriptor.containingDeclaration
+            val classDescriptor: ClassDescriptor = resultingDescriptor.constructedClass
             if (DescriptorUtils.isAnnotationClass(classDescriptor)) {
                 val descriptor = AnnotationDescriptorImpl(
                         classDescriptor.defaultType,
@@ -702,9 +704,10 @@ private class ConstantExpressionEvaluatorVisitor(
         }
     }
 
-    private fun createOperationArgument(expression: KtExpression, expressionType: KotlinType, compileTimeType: CompileTimeType<*>): OperationArgument? {
-        val compileTimeConstant = constantExpressionEvaluator.evaluateExpression(expression, trace, expressionType) ?: return null
-        val evaluationResult = compileTimeConstant.getValue(expressionType) ?: return null
+    private fun createOperationArgument(expression: KtExpression, parameterType: KotlinType, compileTimeType: CompileTimeType<*>): OperationArgument? {
+        val compileTimeConstant = constantExpressionEvaluator.evaluateExpression(expression, trace, parameterType) ?: return null
+        if (compileTimeConstant is TypedCompileTimeConstant && !compileTimeConstant.type.isSubtypeOf(parameterType)) return null
+        val evaluationResult = compileTimeConstant.getValue(parameterType) ?: return null
         return OperationArgument(evaluationResult, compileTimeType, expression)
     }
 
@@ -764,7 +767,16 @@ private class ConstantExpressionEvaluatorVisitor(
 
 private fun hasLongSuffix(text: String) = text.endsWith('l') || text.endsWith('L')
 
-fun parseLong(text: String): Long? {
+private fun parseNumericLiteral(text: String, type: IElementType): Any? {
+    val canonicalText = LiteralFormatUtil.removeUnderscores(text)
+    return when (type) {
+        KtNodeTypes.INTEGER_CONSTANT -> parseLong(canonicalText)
+        KtNodeTypes.FLOAT_CONSTANT -> parseFloatingLiteral(canonicalText)
+        else -> null
+    }
+}
+
+private fun parseLong(text: String): Long? {
     try {
         fun substringLongSuffix(s: String) = if (hasLongSuffix(text)) s.substring(0, s.length - 1) else s
         fun parseLong(text: String, radix: Int) = java.lang.Long.parseLong(substringLongSuffix(text), radix)
@@ -866,18 +878,20 @@ private fun getReceiverExpressionType(resolvedCall: ResolvedCall<*>): KotlinType
     }
 }
 
-internal class CompileTimeType<T>
+internal class CompileTimeType<T>(val name: String) {
+    override fun toString() = name
+}
 
-internal val BYTE = CompileTimeType<Byte>()
-internal val SHORT = CompileTimeType<Short>()
-internal val INT = CompileTimeType<Int>()
-internal val LONG = CompileTimeType<Long>()
-internal val DOUBLE = CompileTimeType<Double>()
-internal val FLOAT = CompileTimeType<Float>()
-internal val CHAR = CompileTimeType<Char>()
-internal val BOOLEAN = CompileTimeType<Boolean>()
-internal val STRING = CompileTimeType<String>()
-internal val ANY = CompileTimeType<Any>()
+internal val BYTE = CompileTimeType<Byte>("Byte")
+internal val SHORT = CompileTimeType<Short>("Short")
+internal val INT = CompileTimeType<Int>("Int")
+internal val LONG = CompileTimeType<Long>("Long")
+internal val DOUBLE = CompileTimeType<Double>("Double")
+internal val FLOAT = CompileTimeType<Float>("Float")
+internal val CHAR = CompileTimeType<Char>("Char")
+internal val BOOLEAN = CompileTimeType<Boolean>("Boolean")
+internal val STRING = CompileTimeType<String>("String")
+internal val ANY = CompileTimeType<Any>("Any")
 
 @Suppress("UNCHECKED_CAST")
 internal fun <A, B> binaryOperation(

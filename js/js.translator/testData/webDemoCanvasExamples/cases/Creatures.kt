@@ -4,7 +4,6 @@
 */
 package creatures
 
-import java.util.ArrayList
 import jquery.*
 import kotlin.browser.window
 import org.w3c.dom.*
@@ -308,8 +307,11 @@ class RadialGradientGenerator(val context: CanvasRenderingContext2D) {
 }
 
 fun v(x: Double, y: Double) = Vector(x, y)
+fun v(x: Int, y: Int) = Vector(x.toDouble(), y.toDouble())
 
 class Vector(val x: Double = 0.0, val y: Double = 0.0) {
+    constructor(x: Int, y: Int) : this(x.toDouble(), y.toDouble())
+
     operator fun plus(v: Vector) = v(x + v.x, y + v.y)
     operator fun unaryMinus() = v(-x, -y)
     operator fun minus(v: Vector) = v(x - v.x, y - v.y)

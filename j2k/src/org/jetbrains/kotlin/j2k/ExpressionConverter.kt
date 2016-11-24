@@ -25,8 +25,8 @@ import com.intellij.psi.tree.IElementType
 import com.intellij.psi.util.MethodSignature
 import com.intellij.psi.util.MethodSignatureUtil
 import com.intellij.psi.util.PsiTreeUtil
-import org.jetbrains.kotlin.asJava.KtLightField
-import org.jetbrains.kotlin.asJava.KtLightMethod
+import org.jetbrains.kotlin.asJava.elements.KtLightField
+import org.jetbrains.kotlin.asJava.elements.KtLightMethod
 import org.jetbrains.kotlin.builtins.PrimitiveType
 import org.jetbrains.kotlin.j2k.ast.*
 import org.jetbrains.kotlin.j2k.ast.Function
@@ -37,6 +37,7 @@ import org.jetbrains.kotlin.psi.psiUtil.getParentOfType
 import org.jetbrains.kotlin.psi.psiUtil.getStrictParentOfType
 import org.jetbrains.kotlin.psi.psiUtil.isExtensionDeclaration
 import org.jetbrains.kotlin.resolve.jvm.JvmPrimitiveType
+import java.lang.AssertionError
 
 interface ExpressionConverter {
     fun convertExpression(expression: PsiExpression, codeConverter: CodeConverter): Expression
@@ -117,8 +118,8 @@ class DefaultExpressionConverter : JavaElementVisitor(), ExpressionConverter {
         val expectedNullability = if (operationTokenType in NON_NULL_OPERAND_OPS) Nullability.NotNull else null
 
         val leftOperandExpectedType = getOperandExpectedType(left, right, operationTokenType)
-        var leftConverted = codeConverter.convertExpression(left, leftOperandExpectedType, expectedNullability)
-        var rightConverted = codeConverter.convertExpression(
+        val leftConverted = codeConverter.convertExpression(left, leftOperandExpectedType, expectedNullability)
+        val rightConverted = codeConverter.convertExpression(
                 right,
                 if (leftOperandExpectedType == null)
                     getOperandExpectedType(right, left, operationTokenType)
@@ -128,7 +129,7 @@ class DefaultExpressionConverter : JavaElementVisitor(), ExpressionConverter {
         )
 
         if (operationTokenType == JavaTokenType.GTGTGT) {
-            result = MethodCallExpression.buildNotNull(leftConverted, "ushr", listOf(rightConverted))
+            result = MethodCallExpression.buildNonNull(leftConverted, "ushr", ArgumentList.withNoPrototype(rightConverted))
         }
         else {
             var operator = Operator(operationTokenType)
@@ -231,28 +232,19 @@ class DefaultExpressionConverter : JavaElementVisitor(), ExpressionConverter {
 
     override fun visitClassObjectAccessExpression(expression: PsiClassObjectAccessExpression) {
         val operand = expression.operand
+        val type = converter.convertTypeElement(operand, Nullability.NotNull)
         val typeName = operand.type.canonicalText
         val primitiveType = JvmPrimitiveType.values().firstOrNull { it.javaKeywordName == typeName }
-        val wrapperTypeName = if (primitiveType != null) {
-            primitiveType.wrapperFqName
-        }
-        else if (typeName == "void") { // by unknown reason it's not in JvmPrimitiveType enum
-            FqName("java.lang.Void")
-        }
-        else {
-            val type = converter.convertTypeElement(operand, Nullability.NotNull)
-            result = QualifiedExpression(ClassLiteralExpression(type).assignNoPrototype(), Identifier("java").assignNoPrototype())
+        if (typeName == "void") {
+            result = QualifiedExpression(Identifier("Void", false).assignNoPrototype(), Identifier.withNoPrototype("TYPE", isNullable = false), null)
             return
         }
-
-        //TODO: need more correct way to detect if short name is ok
-        val qualifiedName = wrapperTypeName.asString()
-        val classNameToUse = if (qualifiedName in needQualifierNameSet)
-            qualifiedName
-        else
-            wrapperTypeName.shortName().asString()
-        result = QualifiedExpression(Identifier(classNameToUse, false).assignPrototype(operand),
-                                     Identifier("TYPE", false).assignNoPrototype())
+        val name = if (primitiveType != null) {
+            "javaPrimitiveType"
+        } else {
+            "java"
+        }
+        result = QualifiedExpression(ClassLiteralExpression(type).assignNoPrototype(), Identifier.withNoPrototype(name), null)
     }
 
     override fun visitConditionalExpression(expression: PsiConditionalExpression) {
@@ -281,15 +273,18 @@ class DefaultExpressionConverter : JavaElementVisitor(), ExpressionConverter {
         if (type != null) {
             val typeStr = type.canonicalText
             if (typeStr == "double") {
-                text = text.replace("D", "").replace("d", "")
-                if (!text.contains(".")) {
-                    text += ".0"
-                }
-
+                text = text.replace("d", "", true)
+                        .replace(".e", "e", true)
+                if (!text.contains(".") && !text.contains("e", true))
+                    text += "."
+                if (text.endsWith("."))
+                    text += "0"
             }
 
             if (typeStr == "float") {
-                text = text.replace("F", "f")
+                text = text.replace(".f", "f", true)
+                        .replace("F", "f")
+                        .replace(".e", "e", true)
             }
 
             if (typeStr == "long") {
@@ -309,6 +304,10 @@ class DefaultExpressionConverter : JavaElementVisitor(), ExpressionConverter {
                 val toIntIsNeeded = value != null && value.toString().toInt() < 0 && !isLongField(expression.parent)
                 text = if (value != null && !isHexLiteral(text)) value.toString() else text + (if (toIntIsNeeded) ".toInt()" else "")
             }
+            if (typeStr == "java.lang.String" || typeStr == "char")
+                text = text.replace("\\\\([0-3]?[0-7]{1,2})".toRegex()) {
+                    String.format("\\u%04x", Integer.parseInt(it.groupValues[1], 8))
+                }
 
             if (typeStr == "java.lang.String") {
                 text = text.replace("\\$([A-Za-z]+|\\{)".toRegex(), "\\\\$0")
@@ -321,6 +320,8 @@ class DefaultExpressionConverter : JavaElementVisitor(), ExpressionConverter {
     override fun visitMethodCallExpression(expression: PsiMethodCallExpression) {
         val methodExpr = expression.methodExpression
         val arguments = expression.argumentList.expressions
+        val qualifier = methodExpr.qualifierExpression
+        val dot = methodExpr.dot()
         val target = methodExpr.resolve()
         val isNullable = if (target is PsiMethod) typeConverter.methodNullability(target).isNullable(codeConverter.settings) else false
         val typeArguments = convertTypeArguments(expression)
@@ -335,16 +336,19 @@ class DefaultExpressionConverter : JavaElementVisitor(), ExpressionConverter {
                     origin as KtNamedDeclaration
                 val parameterCount = target.parameterList.parameters.size
                 if (parameterCount == arguments.size) {
-                    val propertyName = Identifier(property.name!!, isNullable).assignNoPrototype()
+                    val propertyName = Identifier.withNoPrototype(property.name!!, isNullable)
                     val isExtension = property.isExtensionDeclaration()
                     val propertyAccess = if (isTopLevel) {
                         if (isExtension)
-                            QualifiedExpression(codeConverter.convertExpression(arguments.firstOrNull(), true), propertyName).assignNoPrototype()
+                            QualifiedExpression(codeConverter.convertExpression(arguments.firstOrNull(), shouldParenthesize = true), propertyName, null).assignNoPrototype()
                         else
                             propertyName
                     }
+                    else if (qualifier != null) {
+                        QualifiedExpression(codeConverter.convertExpression(qualifier), propertyName, dot).assignNoPrototype()
+                    }
                     else {
-                        QualifiedExpression(codeConverter.convertExpression(methodExpr.qualifierExpression), propertyName).assignNoPrototype()
+                        propertyName
                     }
 
                     when(if (isExtension) parameterCount - 1 else parameterCount) {
@@ -364,12 +368,13 @@ class DefaultExpressionConverter : JavaElementVisitor(), ExpressionConverter {
             else if (origin is KtFunction) {
                 if (isTopLevel) {
                     result = if (origin.isExtensionDeclaration()) {
-                        val qualifier = codeConverter.convertExpression(arguments.firstOrNull(), true)
+                        val qualifier = codeConverter.convertExpression(arguments.firstOrNull(), shouldParenthesize = true)
                         MethodCallExpression.build(qualifier,
                                                    origin.name!!,
                                                    convertArguments(expression, isExtension = true),
                                                    typeArguments,
-                                                   isNullable)
+                                                   isNullable,
+                                                   dot)
                     }
                     else {
                         MethodCallExpression.build(null,
@@ -385,12 +390,13 @@ class DefaultExpressionConverter : JavaElementVisitor(), ExpressionConverter {
                 val resolvedQualifier = (methodExpr.qualifier as? PsiReferenceExpression)?.resolve()
                 if (isFacadeClassFromLibrary(resolvedQualifier)) {
                     result = if (target.isKotlinExtensionFunction()) {
-                        val qualifier = codeConverter.convertExpression(arguments.firstOrNull(), true)
+                        val qualifier = codeConverter.convertExpression(arguments.firstOrNull(), shouldParenthesize = true)
                         MethodCallExpression.build(qualifier,
                                                    methodExpr.referenceName!!,
                                                    convertArguments(expression, isExtension = true),
                                                    typeArguments,
-                                                   isNullable)
+                                                   isNullable,
+                                                   dot)
                     }
                     else {
                         MethodCallExpression.build(null,
@@ -407,7 +413,10 @@ class DefaultExpressionConverter : JavaElementVisitor(), ExpressionConverter {
         if (target is PsiMethod) {
             val specialMethod = SpecialMethod.match(target, arguments.size, converter.services)
             if (specialMethod != null) {
-                val converted = specialMethod.convertCall(methodExpr.qualifierExpression, arguments, typeArguments, codeConverter)
+                val lPar = expression.argumentList.lPar()
+                val rPar = expression.argumentList.rPar()
+                val data = SpecialMethod.ConvertCallData(qualifier, arguments.asList(), typeArguments, dot, lPar, rPar, codeConverter)
+                val converted = specialMethod.convertCall(data)
                 if (converted != null) {
                     result = converted
                     return
@@ -465,7 +474,7 @@ class DefaultExpressionConverter : JavaElementVisitor(), ExpressionConverter {
         else if (expression.arrayDimensions.size > 0 && expression.type is PsiArrayType) {
             result = ArrayWithoutInitializationExpression(
                     typeConverter.convertType(expression.type, Nullability.NotNull) as ArrayType,
-                    codeConverter.convertExpressions(expression.arrayDimensions))
+                    codeConverter.convertExpressionsInList(expression.arrayDimensions.asList()))
         }
         else {
             if (type?.canonicalText in PsiPrimitiveType.getAllBoxedTypeNames()) {
@@ -508,7 +517,7 @@ class DefaultExpressionConverter : JavaElementVisitor(), ExpressionConverter {
         val operand = codeConverter.convertExpression(expression.operand, expression.operand!!.type)
         val token = expression.operationTokenType
         if (token == JavaTokenType.TILDE) {
-            result = MethodCallExpression.buildNotNull(operand, "inv")
+            result = MethodCallExpression.buildNonNull(operand, "inv")
         }
         else if (token == JavaTokenType.EXCL && operand is BinaryExpression && operand.op.asString() == "==") { // happens when equals is converted to ==
             result = BinaryExpression(operand.left, operand.right, Operator(JavaTokenType.NE).assignPrototype(expression.operand))
@@ -529,16 +538,29 @@ class DefaultExpressionConverter : JavaElementVisitor(), ExpressionConverter {
             return
         }
 
-        val referenceName = expression.referenceName!!
+        val referenceName = expression.referenceName ?: run {
+            result = LiteralExpression(expression.text).assignNoPrototype()
+            return
+        }
+
         val target = expression.resolve()
 
         val isNullable = target is PsiVariable && isNullable(target)
 
         val qualifier = expression.qualifierExpression
 
-        var identifier = Identifier(referenceName, isNullable).assignNoPrototype()
+        var identifier = Identifier.withNoPrototype(referenceName, isNullable)
+
+
+        expression.getContainingClass()?.getParentOfType<PsiVariable>(false)?.let {
+            if (it == expression.qualifierExpression?.reference?.resolve()) {
+                result = QualifiedExpression(ThisExpression(Identifier.Empty).assignNoPrototype(), identifier, null)
+                return
+            }
+        }
+
         if (qualifier != null && qualifier.type is PsiArrayType && referenceName == "length") {
-            identifier = Identifier("size", isNullable).assignNoPrototype()
+            identifier = Identifier.withNoPrototype("size", isNullable)
         }
         else if (qualifier != null) {
             if (target is KtLightField && target.kotlinOrigin is KtObjectDeclaration) {
@@ -549,7 +571,7 @@ class DefaultExpressionConverter : JavaElementVisitor(), ExpressionConverter {
         else {
             if (target is PsiClass) {
                 if (PrimitiveType.values().any { it.typeName.asString() == target.name }) {
-                    result = Identifier(target.qualifiedName!!, false)
+                    result = Identifier.withNoPrototype(target.qualifiedName!!, isNullable = false)
                     return
                 }
             }
@@ -568,12 +590,15 @@ class DefaultExpressionConverter : JavaElementVisitor(), ExpressionConverter {
                     code = Identifier.toKotlin(containingClass.name!!) + "." + code
                     member = containingClass
                 }
-                result = Identifier(code, false, false)
+                result = Identifier.withNoPrototype(code, isNullable = false, quotingNeeded = false)
                 return
             }
         }
 
-        result = if (qualifier != null) QualifiedExpression(codeConverter.convertExpression(qualifier), identifier) else identifier
+        result = if (qualifier != null)
+            QualifiedExpression(codeConverter.convertExpression(qualifier), identifier, expression.dot())
+        else
+            identifier
     }
 
     private fun isNullable(target: PsiVariable): Boolean {
@@ -622,7 +647,7 @@ class DefaultExpressionConverter : JavaElementVisitor(), ExpressionConverter {
         val typeConversion = PRIMITIVE_TYPE_CONVERSIONS[typeText]
         val operandConverted = codeConverter.convertExpression(operand)
         if (operandType is PsiPrimitiveType && typeConversion != null) {
-            result = MethodCallExpression.buildNotNull(operandConverted, typeConversion)
+            result = MethodCallExpression.buildNonNull(operandConverted, typeConversion)
         }
         else {
             val nullability = if (operandConverted.isNullable && !expression.isQualifier())
@@ -643,6 +668,26 @@ class DefaultExpressionConverter : JavaElementVisitor(), ExpressionConverter {
         }
     }
 
+
+    private fun polyadicExpressionToBinaryExpressions(operands: List<Expression>, operators: List<Operator>): Expression {
+        if (operators.isEmpty())
+            return operands.first()
+        else {
+            var op: Operator = operators.first()
+            var index = 0
+            operators.forEachIndexed { i, operator ->
+                if(operator.precedence >= op.precedence) {
+                    op = operator
+                    index = i
+                }
+            }
+            val left = polyadicExpressionToBinaryExpressions(operands.subList(0, index + 1), operators.subList(0, index))
+            val right = polyadicExpressionToBinaryExpressions(operands.subList(index + 1, operands.size),
+                                                              operators.subList(index + 1, operators.size))
+            return BinaryExpression(left, right, op).assignNoPrototype()
+        }
+    }
+
     override fun visitPolyadicExpression(expression: PsiPolyadicExpression) {
         val args = expression.operands.map {
             codeConverter.convertExpression(it, expression.type).assignPrototype(it, CommentsAndSpacesInheritance.LINE_BREAKS)
@@ -654,12 +699,12 @@ class DefaultExpressionConverter : JavaElementVisitor(), ExpressionConverter {
                 operator.assignPrototype(it, commentsAndSpacesInheritance)
             }
         }
-
-        result = PolyadicExpression(args, operators).assignPrototype(expression)
+        result = polyadicExpressionToBinaryExpressions(args, operators).assignPrototype(expression)
     }
 
-    private fun convertArguments(expression: PsiCallExpression, isExtension: Boolean = false): List<Expression> {
-        var arguments = expression.argumentList?.expressions?.toList() ?: listOf()
+    private fun convertArguments(expression: PsiCallExpression, isExtension: Boolean = false): ArgumentList {
+        val argumentList = expression.argumentList
+        var arguments = argumentList?.expressions?.toList() ?: listOf()
         if (isExtension && arguments.isNotEmpty()) {
             arguments = arguments.drop(1)
         }
@@ -669,7 +714,7 @@ class DefaultExpressionConverter : JavaElementVisitor(), ExpressionConverter {
 
         val commentsAndSpacesInheritance = CommentsAndSpacesInheritance.LINE_BREAKS
 
-        return if (arguments.size == parameters.size) {
+        val convertedArguments = if (arguments.size == parameters.size) {
             arguments.mapIndexed { i, argument ->
                 val expectedNullability = typeConverter.variableNullability(parameters[i])
                 val converted = codeConverter.convertExpression(argument, parameters[i].type, expectedNullability)
@@ -682,23 +727,27 @@ class DefaultExpressionConverter : JavaElementVisitor(), ExpressionConverter {
             }
         }
         else {
-            arguments.map { codeConverter.convertExpression(it).assignPrototype(it, commentsAndSpacesInheritance) }
+            codeConverter.convertExpressionsInList(arguments)
         }
+
+        val lPar = argumentList?.lPar()
+        val rPar = argumentList?.rPar()
+        return ArgumentList(convertedArguments, LPar.withPrototype(lPar), RPar.withPrototype(rPar)).assignPrototype(argumentList)
     }
 
     override fun visitLambdaExpression(expression: PsiLambdaExpression) {
         val parameters = expression.parameterList
         val convertedParameters = ParameterList(parameters.parameters.map {
-            val paramName = Identifier(it.name!!).assignNoPrototype()
+            val paramName = Identifier.withNoPrototype(it.name!!)
             val paramType = if (it.typeElement != null) converter.typeConverter.convertType(it.type) else null
             LambdaParameter(paramName, paramType).assignPrototype(it)
-        }).assignPrototype(parameters)
+        }, lPar = null, rPar = null).assignPrototype(parameters)
 
         val body = expression.body
         when (body) {
             is PsiExpression -> {
                 val convertedBody = codeConverter.convertExpression(body).assignPrototype(body)
-                result = LambdaExpression(convertedParameters, Block(listOf(convertedBody), LBrace().assignNoPrototype(), RBrace().assignNoPrototype()))
+                result = LambdaExpression(convertedParameters, Block.of(convertedBody).assignNoPrototype())
             }
             is PsiCodeBlock -> {
                 val convertedBlock = codeConverter.withSpecialStatementConverter(object: SpecialStatementConverter {
@@ -718,7 +767,7 @@ class DefaultExpressionConverter : JavaElementVisitor(), ExpressionConverter {
 
                         val callExpression = expression.getParentOfType<PsiMethodCallExpression>(false)
                         if (callExpression != null) {
-                            return ReturnStatement(expressionForReturn, Identifier(callExpression.methodExpression.text).assignNoPrototype())
+                            return ReturnStatement(expressionForReturn, Identifier.withNoPrototype(callExpression.methodExpression.text))
                         }
 
                         return ReturnStatement(expressionForReturn)
@@ -770,13 +819,15 @@ class DefaultExpressionConverter : JavaElementVisitor(), ExpressionConverter {
         val callParams = if (needThis) parameters.drop(1) else parameters
 
         val specialMethod = method?.let { SpecialMethod.match(it, callParams.size, converter.services) }
-        val statement: Statement = if (expression.isConstructor) {
-            MethodCallExpression.build(null, convertMethodReferenceQualifier(qualifier), callParams.map { it.first }, emptyList(), false)
+        val statement: Statement
+        if (expression.isConstructor) {
+            val argumentList = ArgumentList.withNoPrototype(callParams.map { it.first })
+            statement = MethodCallExpression.buildNonNull(null, convertMethodReferenceQualifier(qualifier), argumentList)
         }
         else if (specialMethod != null) {
             val factory = PsiElementFactory.SERVICE.getInstance(converter.project)
             val fakeReceiver = receiver?.let {
-                val psiExpression = if (qualifier is PsiExpression) qualifier else factory.createExpressionFromText("fakeReceiver", null)
+                val psiExpression = qualifier as? PsiExpression ?: factory.createExpressionFromText("fakeReceiver", null)
                 psiExpression.convertedExpression = it.first
                 psiExpression
             }
@@ -795,11 +846,13 @@ class DefaultExpressionConverter : JavaElementVisitor(), ExpressionConverter {
                 }
             })
 
-            specialMethod.convertCall(fakeReceiver, fakeParams.toTypedArray(), emptyList(), patchedConverter)!!
+            val callData = SpecialMethod.ConvertCallData(fakeReceiver, fakeParams, emptyList(), null, null, null, patchedConverter)
+            statement = specialMethod.convertCall(callData)!!
         }
         else {
             val referenceName = expression.referenceName!!
-            MethodCallExpression.build(receiver?.first, referenceName, callParams.map { it.first }, emptyList(), false)
+            val argumentList = ArgumentList.withNoPrototype(callParams.map { it.first })
+            statement = MethodCallExpression.buildNonNull(receiver?.first, referenceName, argumentList)
         }
 
         statement.assignNoPrototype()
@@ -810,26 +863,21 @@ class DefaultExpressionConverter : JavaElementVisitor(), ExpressionConverter {
                     emptyList()
                 } else {
                     parameters.map { LambdaParameter(it.first, it.second).assignNoPrototype() }
-                }).assignNoPrototype()
+                },
+                lPar = null,
+                rPar = null).assignNoPrototype()
 
-        val lambdaExpression = LambdaExpression(
-                lambdaParameterList,
-                Block(listOf(statement),
-                      LBrace().assignNoPrototype(),
-                      RBrace().assignNoPrototype()).assignNoPrototype()
-        ).assignNoPrototype()
+        val lambdaExpression = LambdaExpression(lambdaParameterList, Block.of(statement).assignNoPrototype()).assignNoPrototype()
 
         if (isKotlinFunctionType) {
             result = lambdaExpression
         }
         else {
             val convertedFunctionalType = converter.typeConverter.convertType(functionalType)
-            result = MethodCallExpression.build(
+            result = MethodCallExpression.buildNonNull(
                     null,
                     convertedFunctionalType.canonicalCode(),
-                    listOf(lambdaExpression),
-                    emptyList(),
-                    false
+                    ArgumentList.withNoPrototype(lambdaExpression)
             )
         }
     }
@@ -855,23 +903,23 @@ class DefaultExpressionConverter : JavaElementVisitor(), ExpressionConverter {
             val containingClassName = thisClass.qualifiedName ?: containingClass!!.name
             if (containingClassName != null) {
                 val fqName = FqName(containingClassName)
-                val identifier = Identifier(fqName.shortName().identifier, imports = listOf(fqName)).assignNoPrototype()
+                val identifier = Identifier.withNoPrototype(fqName.shortName().identifier, imports = listOf(fqName))
                 thisClassType = ClassType(
                         ReferenceElement(identifier, converter.convertTypeParameterList(thisClass.typeParameterList).parameters).assignNoPrototype(),
                         Nullability.NotNull,
                         converter.settings).assignNoPrototype()
             }
         }
-        if (needThis) newParameters.add(Identifier("obj", false).assignNoPrototype() to thisClassType)
+        if (needThis) newParameters.add(Identifier.withNoPrototype("obj", isNullable = false) to thisClassType)
 
         parameterList.parameters.forEach {
             val parameterType = if (isKotlinFunctionType) converter.typeConverter.convertType(it.type, Nullability.NotNull) else null
-            newParameters.add(Identifier(it.name ?: "p", false).assignNoPrototype() to parameterType)
+            newParameters.add(Identifier.withNoPrototype(it.name ?: "p", isNullable = false) to parameterType)
         }
 
         if (newParameters.size == 1 && !isKotlinFunctionType) {
             newParameters.clear()
-            newParameters.add(Identifier("it", false).assignNoPrototype() to null)
+            newParameters.add(Identifier.withNoPrototype("it", isNullable = false) to null)
         }
 
         return newParameters
@@ -879,9 +927,5 @@ class DefaultExpressionConverter : JavaElementVisitor(), ExpressionConverter {
 
     override fun visitExpression(expression: PsiExpression) {
         result = DummyStringExpression(expression.text)
-    }
-
-    companion object {
-        private val needQualifierNameSet = setOf("java.lang.Byte", "java.lang.Double", "java.lang.Float", "java.lang.Long", "java.lang.Short")
     }
 }

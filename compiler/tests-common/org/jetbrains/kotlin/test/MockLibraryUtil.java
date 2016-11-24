@@ -73,8 +73,29 @@ public class MockLibraryUtil {
             @NotNull String... extraClasspath
     ) {
         try {
-            File contentDir = KotlinTestUtils.tmpDir("testLibrary-" + jarName);
+            return compileLibraryToJar(
+                    sourcesPath,
+                    KotlinTestUtils.tmpDir("testLibrary-" + jarName),
+                    jarName,
+                    addSources,
+                    allowKotlinPackage,
+                    extraClasspath);
+        }
+        catch (IOException e) {
+            throw ExceptionUtilsKt.rethrow(e);
+        }
+    }
 
+    @NotNull
+    public static File compileLibraryToJar(
+            @NotNull String sourcesPath,
+            @NotNull File contentDir,
+            @NotNull String jarName,
+            boolean addSources,
+            boolean allowKotlinPackage,
+            @NotNull String... extraClasspath
+    ) {
+        try {
             File classesDir = new File(contentDir, "classes");
 
             File srcFile = new File(sourcesPath);
@@ -134,7 +155,7 @@ public class MockLibraryUtil {
         }
     }
 
-    private static File createJarFile(File contentDir, File dirToAdd, String sourcesPath, String jarName, boolean addSources) throws IOException {
+    public static File createJarFile(File contentDir, File dirToAdd, String sourcesPath, String jarName, boolean addSources) throws IOException {
         File jarFile = new File(contentDir, jarName + ".jar");
 
         ZipOutputStream zip = new ZipOutputStream(new FileOutputStream(jarFile));

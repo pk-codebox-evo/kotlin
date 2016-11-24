@@ -86,7 +86,7 @@ public class ExpressionTypingUtils {
             @NotNull LexicalScopeKind scopeKind,
             @NotNull OverloadChecker overloadChecker
     ) {
-        return new LexicalWritableScope(context.scope, context.scope.getOwnerDescriptor(), false, null,
+        return new LexicalWritableScope(context.scope, context.scope.getOwnerDescriptor(), false,
                                         new TraceBasedLocalRedeclarationChecker(context.trace, overloadChecker), scopeKind);
     }
 
@@ -112,6 +112,12 @@ public class ExpressionTypingUtils {
         if (oldDescriptor != null && isLocal(variableDescriptor.getContainingDeclaration(), oldDescriptor)) {
             PsiElement declaration = DescriptorToSourceUtils.descriptorToDeclaration(variableDescriptor);
             if (declaration != null) {
+                if (declaration instanceof KtDestructuringDeclarationEntry && declaration.getParent().getParent() instanceof KtParameter) {
+                    // foo { a, (a, b) -> } -- do not report NAME_SHADOWING on the second 'a', because REDECLARATION must be reported here
+                    PsiElement oldElement = DescriptorToSourceUtils.descriptorToDeclaration(oldDescriptor);
+
+                    if (oldElement != null && oldElement.getParent().equals(declaration.getParent().getParent().getParent())) return;
+                }
                 trace.report(Errors.NAME_SHADOWING.on(declaration, variableDescriptor.getName().asString()));
             }
         }

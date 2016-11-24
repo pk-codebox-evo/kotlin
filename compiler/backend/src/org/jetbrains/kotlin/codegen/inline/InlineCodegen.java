@@ -26,6 +26,7 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.backend.common.CodegenUtil;
 import org.jetbrains.kotlin.builtins.BuiltInsPackageFragment;
 import org.jetbrains.kotlin.codegen.*;
+import org.jetbrains.kotlin.codegen.binding.CodegenBinding;
 import org.jetbrains.kotlin.codegen.context.*;
 import org.jetbrains.kotlin.codegen.intrinsics.IntrinsicArrayConstructorsKt;
 import org.jetbrains.kotlin.codegen.state.GenerationState;
@@ -50,6 +51,7 @@ import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmMethodParameterSignature
 import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmMethodSignature;
 import org.jetbrains.kotlin.resolve.scopes.MemberScope;
 import org.jetbrains.kotlin.serialization.deserialization.descriptors.DeserializedCallableMemberDescriptor;
+import org.jetbrains.kotlin.types.KotlinType;
 import org.jetbrains.kotlin.types.expressions.DoubleColonLHS;
 import org.jetbrains.kotlin.types.expressions.LabelResolver;
 import org.jetbrains.org.objectweb.asm.Label;
@@ -171,7 +173,7 @@ public class InlineCodegen extends CallGenerator {
 
         SMAPAndMethodNode nodeAndSmap = null;
         try {
-            nodeAndSmap = createMethodNode(functionDescriptor, jvmSignature, codegen, context, callDefault);
+            nodeAndSmap = createMethodNode(functionDescriptor, jvmSignature, codegen, context, callDefault, resolvedCall);
             endCall(inlineCall(nodeAndSmap));
         }
         catch (CompilationException e) {
@@ -227,8 +229,24 @@ public class InlineCodegen extends CallGenerator {
             @NotNull JvmMethodSignature jvmSignature,
             @NotNull ExpressionCodegen codegen,
             @NotNull CodegenContext context,
-            boolean callDefault
+            boolean callDefault,
+            @Nullable ResolvedCall<?> resolvedCall
     ) {
+        if (InlineCodegenUtil.isSpecialEnumMethod(functionDescriptor)) {
+            assert resolvedCall != null : "Resolved call for " + functionDescriptor + " should be not null";
+            Map<TypeParameterDescriptor, KotlinType> arguments = resolvedCall.getTypeArguments();
+            assert arguments.size() == 1 : "Resolved call for " + functionDescriptor + " should have 1 type argument";
+            KotlinType type = arguments.values().iterator().next();
+            MethodNode node =
+                    InlineCodegenUtil.createSpecialEnumMethodBody(
+                            codegen,
+                            functionDescriptor.getName().asString(),
+                            type,
+                            codegen.getState().getTypeMapper()
+                    );
+            return new SMAPAndMethodNode(node, SMAPParser.parseOrCreateDefault(null, null, "fake", -1, -1));
+        }
+
         final GenerationState state = codegen.getState();
         final Method asmMethod =
                 callDefault
@@ -283,8 +301,6 @@ public class InlineCodegen extends CallGenerator {
             @NotNull final GenerationState state,
             @NotNull Method asmMethod
     ) {
-        KotlinTypeMapper typeMapper = state.getTypeMapper();
-
         if (isBuiltInArrayIntrinsic(callableDescriptor)) {
             ClassId classId = IntrinsicArrayConstructorsKt.getClassId();
             byte[] bytes = InlineCacheKt.getOrPut(state.getInlineCache().getClassBytes(), classId, new Function0<byte[]>() {
@@ -300,7 +316,7 @@ public class InlineCodegen extends CallGenerator {
         assert callableDescriptor instanceof DeserializedCallableMemberDescriptor : "Not a deserialized function or proper: " + callableDescriptor;
 
         KotlinTypeMapper.ContainingClassesInfo containingClasses =
-                typeMapper.getContainingClassesForDeserializedCallable((DeserializedCallableMemberDescriptor) callableDescriptor);
+                KotlinTypeMapper.getContainingClassesForDeserializedCallable((DeserializedCallableMemberDescriptor) callableDescriptor);
 
         final ClassId containerId = containingClasses.getImplClassId();
 
@@ -372,7 +388,8 @@ public class InlineCodegen extends CallGenerator {
             smap = createSMAPWithDefaultMapping(inliningFunction, parentCodegen.getOrCreateSourceMapper().getResultMappings());
         }
         else {
-            smap = generateMethodBody(maxCalcAdapter, callableDescriptor, methodContext, inliningFunction, jvmSignature, false, codegen);
+            smap = generateMethodBody(maxCalcAdapter, callableDescriptor, methodContext, inliningFunction, jvmSignature, codegen,
+                                      null);
         }
         maxCalcAdapter.visitMaxs(-1, -1);
         maxCalcAdapter.visitEnd();
@@ -504,8 +521,10 @@ public class InlineCodegen extends CallGenerator {
         KtExpression declaration = info.getFunctionWithBodyOrCallableReference();
         FunctionDescriptor descriptor = info.getFunctionDescriptor();
 
-        MethodContext context =
-                codegen.getContext().intoClosure(descriptor, codegen, typeMapper).intoInlinedLambda(descriptor, info.isCrossInline);
+        ClassContext closureContext = info.isPropertyReference()
+                                        ? codegen.getContext().intoAnonymousClass(info.getClassDescriptor(), codegen, OwnerKind.IMPLEMENTATION)
+                                        : codegen.getContext().intoClosure(descriptor, codegen, typeMapper);
+        MethodContext context = closureContext.intoInlinedLambda(descriptor, info.isCrossInline, info.isPropertyReference());
 
         JvmMethodSignature jvmMethodSignature = typeMapper.mapSignatureSkipGeneric(descriptor);
         Method asmMethod = jvmMethodSignature.getAsmMethod();
@@ -516,7 +535,7 @@ public class InlineCodegen extends CallGenerator {
 
         MethodVisitor adapter = InlineCodegenUtil.wrapWithMaxLocalCalc(methodNode);
 
-        SMAP smap = generateMethodBody(adapter, descriptor, context, declaration, jvmMethodSignature, true, codegen);
+        SMAP smap = generateMethodBody(adapter, descriptor, context, declaration, jvmMethodSignature, codegen, info);
         adapter.visitMaxs(-1, -1);
         return new SMAPAndMethodNode(methodNode, smap);
     }
@@ -528,9 +547,10 @@ public class InlineCodegen extends CallGenerator {
             @NotNull MethodContext context,
             @NotNull KtExpression expression,
             @NotNull JvmMethodSignature jvmMethodSignature,
-            boolean isLambda,
-            @NotNull ExpressionCodegen codegen
+            @NotNull ExpressionCodegen codegen,
+            @Nullable LambdaInfo lambdaInfo
     ) {
+        boolean isLambda = lambdaInfo != null;
         GenerationState state = codegen.getState();
 
         // Wrapping for preventing marking actual parent codegen as containing reified markers
@@ -541,21 +561,37 @@ public class InlineCodegen extends CallGenerator {
         );
 
         FunctionGenerationStrategy strategy;
-        if (expression instanceof KtCallableReferenceExpression) {
+        if (state.getBindingContext().get(CodegenBinding.CUSTOM_STRATEGY_FOR_INLINE_LAMBDA, expression) != null) {
+            strategy = state.getBindingContext().get(CodegenBinding.CUSTOM_STRATEGY_FOR_INLINE_LAMBDA, expression);
+        }
+        else if (expression instanceof KtCallableReferenceExpression) {
             KtCallableReferenceExpression callableReferenceExpression = (KtCallableReferenceExpression) expression;
             KtExpression receiverExpression = callableReferenceExpression.getReceiverExpression();
-            StackValue receiverValue =
+            Type receiverType =
                     receiverExpression != null && codegen.getBindingContext().getType(receiverExpression) != null
-                    ? codegen.gen(receiverExpression)
+                    ? codegen.getState().getTypeMapper().mapType(codegen.getBindingContext().getType(receiverExpression))
                     : null;
 
-            strategy = new FunctionReferenceGenerationStrategy(
-                    state,
-                    descriptor,
-                    CallUtilKt.getResolvedCallWithAssert(callableReferenceExpression.getCallableReference(), codegen.getBindingContext()),
-                    receiverValue != null ? receiverValue.type : null,
-                    receiverValue
-            );
+            if (isLambda && lambdaInfo.isPropertyReference()) {
+                Type asmType = state.getTypeMapper().mapClass(lambdaInfo.getClassDescriptor());
+                PropertyReferenceInfo info = lambdaInfo.getPropertyReferenceInfo();
+                strategy = new PropertyReferenceCodegen.PropertyReferenceGenerationStrategy(
+                        true, info.getGetFunction(), info.getTarget(), asmType, receiverType, lambdaInfo.expression, state
+                );
+            }
+            else {
+                strategy = new FunctionReferenceGenerationStrategy(
+                        state,
+                        descriptor,
+                        CallUtilKt
+                                .getResolvedCallWithAssert(callableReferenceExpression.getCallableReference(), codegen.getBindingContext()),
+                        receiverType,
+                        null
+                );
+            }
+        }
+        else if (expression instanceof KtFunctionLiteral) {
+            strategy = new ClosureGenerationStrategy(state, (KtDeclarationWithBody) expression);
         }
         else {
             strategy = new FunctionGenerationStrategy.FunctionDefault(state, (KtDeclarationWithBody) expression);
@@ -640,16 +676,16 @@ public class InlineCodegen extends CallGenerator {
         if (!asFunctionInline && Type.VOID_TYPE != type) {
             //TODO remap only inlinable closure => otherwise we could get a lot of problem
             boolean couldBeRemapped = !shouldPutValue(type, stackValue);
-            StackValue remappedIndex = couldBeRemapped ? stackValue : null;
+            StackValue remappedValue = couldBeRemapped ? stackValue : null;
 
             ParameterInfo info;
             if (capturedParamIndex >= 0) {
                 CapturedParamDesc capturedParamInfoInLambda = activeLambda.getCapturedVars().get(capturedParamIndex);
                 info = invocationParamBuilder.addCapturedParam(capturedParamInfoInLambda, capturedParamInfoInLambda.getFieldName(), false);
-                info.setRemapValue(remappedIndex);
+                info.setRemapValue(remappedValue);
             }
             else {
-                info = invocationParamBuilder.addNextValueParameter(type, false, remappedIndex, parameterIndex);
+                info = invocationParamBuilder.addNextValueParameter(type, false, remappedValue, parameterIndex);
             }
 
             recordParameterValueInLocalVal(info);
@@ -707,7 +743,12 @@ public class InlineCodegen extends CallGenerator {
             ParameterInfo info = infos[i];
             if (!info.isSkippedOrRemapped()) {
                 Type type = info.type;
-                StackValue.local(index[i], type).store(StackValue.onStack(type), codegen.v);
+                StackValue.Local local = StackValue.local(index[i], type);
+                local.store(StackValue.onStack(type), codegen.v);
+                if (info instanceof CapturedParamInfo) {
+                    info.setRemapValue(local);
+                    ((CapturedParamInfo) info).setSynthetic(true);
+                }
             }
         }
     }
@@ -726,7 +767,7 @@ public class InlineCodegen extends CallGenerator {
         }
 
         invocationParamBuilder.markValueParametersStart();
-        List<ParameterInfo> hiddenParameters = invocationParamBuilder.buildParameters().getReal();
+        List<ParameterInfo> hiddenParameters = invocationParamBuilder.buildParameters().getParameters();
         recordParameterValueInLocalVal(hiddenParameters.toArray(new ParameterInfo[hiddenParameters.size()]));
     }
 
@@ -734,29 +775,16 @@ public class InlineCodegen extends CallGenerator {
         List<ParameterInfo> infos = invocationParamBuilder.listAllParams();
         for (ListIterator<? extends ParameterInfo> iterator = infos.listIterator(infos.size()); iterator.hasPrevious(); ) {
             ParameterInfo param = iterator.previous();
-            if (!param.isSkippedOrRemapped()) {
+            if (!param.isSkippedOrRemapped() || CapturedParamInfo.isSynthetic(param)) {
                 codegen.getFrameMap().leaveTemp(param.type);
             }
         }
     }
 
     /*lambda or callable reference*/
-    private boolean isInliningParameter(@NotNull KtExpression expression, @NotNull ValueParameterDescriptor valueParameterDescriptor) {
+    private static boolean isInliningParameter(@NotNull KtExpression expression, @NotNull ValueParameterDescriptor valueParameterDescriptor) {
         //TODO deparenthisise typed
         KtExpression deparenthesized = KtPsiUtil.deparenthesize(expression);
-
-        if (deparenthesized instanceof KtCallableReferenceExpression) {
-            // TODO: support inline of property references passed to inlinable function parameters
-            SimpleFunctionDescriptor functionReference = state.getBindingContext().get(BindingContext.FUNCTION, deparenthesized);
-            if (functionReference == null) return false;
-
-            KtExpression receiverExpression = ((KtCallableReferenceExpression) deparenthesized).getReceiverExpression();
-            if (receiverExpression != null) {
-                // TODO (!): support inline for bound function references
-                DoubleColonLHS lhs = state.getBindingContext().get(BindingContext.DOUBLE_COLON_LHS, receiverExpression);
-                if (lhs instanceof DoubleColonLHS.Expression) return false;
-            }
-        }
 
         return InlineUtil.isInlineLambdaParameter(valueParameterDescriptor) &&
                isInlinableParameterExpression(deparenthesized);
@@ -768,15 +796,17 @@ public class InlineCodegen extends CallGenerator {
                deparenthesized instanceof KtCallableReferenceExpression;
     }
 
-    private void rememberClosure(@NotNull KtExpression expression, @NotNull Type type, @NotNull ValueParameterDescriptor parameter) {
+    private LambdaInfo rememberClosure(@NotNull KtExpression expression, @NotNull Type type, @NotNull ValueParameterDescriptor parameter) {
         KtExpression lambda = KtPsiUtil.deparenthesize(expression);
         assert isInlinableParameterExpression(lambda) : "Couldn't find inline expression in " + expression.getText();
 
-        LambdaInfo info = new LambdaInfo(lambda, typeMapper, parameter.isCrossinline());
+        LambdaInfo info =
+                new LambdaInfo(lambda, typeMapper, parameter.isCrossinline(), getBoundCallableReferenceReceiver(expression) != null);
 
         ParameterInfo closureInfo = invocationParamBuilder.addNextValueParameter(type, true, null, parameter.getIndex());
         closureInfo.setLambda(info);
         expressionMap.put(closureInfo.getIndex(), info);
+        return info;
     }
 
     @NotNull
@@ -801,9 +831,15 @@ public class InlineCodegen extends CallGenerator {
 
     private void putClosureParametersOnStack() {
         for (LambdaInfo next : expressionMap.values()) {
-            activeLambda = next;
-            codegen.pushClosureOnStack(next.getClassDescriptor(), true, this, /* functionReferenceReceiver = */ null);
+            //closure parameters for bounded callable references are generated inplace
+            if (next.isBoundCallableReference()) continue;
+            putClosureParametersOnStack(next, null);
         }
+    }
+
+    private void putClosureParametersOnStack(@NotNull LambdaInfo next, @Nullable StackValue functionReferenceReceiver) {
+        activeLambda = next;
+        codegen.pushClosureOnStack(next.getClassDescriptor(), true, this, functionReferenceReceiver);
         activeLambda = null;
     }
 
@@ -846,12 +882,31 @@ public class InlineCodegen extends CallGenerator {
             int parameterIndex
     ) {
         if (isInliningParameter(argumentExpression, valueParameterDescriptor)) {
-            rememberClosure(argumentExpression, parameterType, valueParameterDescriptor);
+            LambdaInfo lambdaInfo = rememberClosure(argumentExpression, parameterType, valueParameterDescriptor);
+
+            KtExpression receiver = getBoundCallableReferenceReceiver(argumentExpression);
+            if (receiver != null) {
+                putClosureParametersOnStack(lambdaInfo, codegen.gen(receiver));
+            }
         }
         else {
             StackValue value = codegen.gen(argumentExpression);
             putValueIfNeeded(parameterType, value, valueParameterDescriptor.getIndex());
         }
+    }
+
+    private KtExpression getBoundCallableReferenceReceiver(
+            @NotNull KtExpression argumentExpression
+    ) {
+        KtExpression deparenthesized = KtPsiUtil.deparenthesize(argumentExpression);
+        if (deparenthesized instanceof KtCallableReferenceExpression) {
+            KtExpression receiverExpression = ((KtCallableReferenceExpression) deparenthesized).getReceiverExpression();
+            if (receiverExpression != null) {
+                DoubleColonLHS lhs = state.getBindingContext().get(BindingContext.DOUBLE_COLON_LHS, receiverExpression);
+                if (lhs instanceof DoubleColonLHS.Expression) return receiverExpression;
+            }
+        }
+        return null;
     }
 
     @Override

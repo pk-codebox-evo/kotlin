@@ -26,6 +26,7 @@ import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.descriptors.ValueParameterDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptor
+import org.jetbrains.kotlin.idea.util.IdeDescriptorRenderers
 import org.jetbrains.kotlin.lexer.KtModifierKeywordToken
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.Name
@@ -33,10 +34,13 @@ import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.containingClassOrObject
 import org.jetbrains.kotlin.psi.psiUtil.getLambdaArgumentName
 import org.jetbrains.kotlin.psi.psiUtil.visibilityModifierType
+import org.jetbrains.kotlin.psi.typeRefHelpers.setReceiverTypeReference
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.DescriptorResolver
 import org.jetbrains.kotlin.resolve.OverridingUtil
 import org.jetbrains.kotlin.resolve.calls.callUtil.getValueArgumentsInParentheses
+import org.jetbrains.kotlin.types.KotlinType
+import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
 
 @Suppress("UNCHECKED_CAST")
 inline fun <reified T: PsiElement> PsiElement.replaced(newElement: T): T {
@@ -205,7 +209,7 @@ fun KtDeclaration.implicitVisibility(): KtModifierKeywordToken? =
             else KtTokens.DEFAULT_VISIBILITY_KEYWORD
         }
         else if (hasModifier(KtTokens.OVERRIDE_KEYWORD)) {
-            (resolveToDescriptor() as? CallableMemberDescriptor)
+            (resolveToDescriptor(BodyResolveMode.PARTIAL) as? CallableMemberDescriptor)
                     ?.overriddenDescriptors
                     ?.let { OverridingUtil.findMaxVisibility(it) }
                     ?.toKeywordToken()
@@ -272,3 +276,45 @@ fun dropEnclosingParenthesesIfPossible(expression: KtExpression): KtExpression {
     if (!KtPsiUtil.areParenthesesUseless(parent)) return expression
     return parent.replaced(expression)
 }
+
+fun KtTypeParameterListOwner.addTypeParameter(typeParameter: KtTypeParameter): KtTypeParameter? {
+    typeParameterList?.let { return it.addParameter(typeParameter) }
+
+    val list = KtPsiFactory(this).createTypeParameterList("<X>")
+    list.parameters[0].replace(typeParameter)
+    val leftAnchor = when (this) {
+        is KtClass -> nameIdentifier ?: getClassOrInterfaceKeyword()
+        is KtNamedFunction -> funKeyword
+        is KtProperty -> valOrVarKeyword
+        else -> null
+    } ?: return null
+    return (addAfter(list, leftAnchor) as KtTypeParameterList).parameters.first()
+}
+
+fun KtNamedFunction.getOrCreateValueParameterList(): KtParameterList {
+    valueParameterList?.let { return it }
+    val parameterList = KtPsiFactory(this).createParameterList("()")
+    val anchor = nameIdentifier ?: funKeyword!!
+    return addAfter(parameterList, anchor) as KtParameterList
+}
+
+fun KtCallableDeclaration.setType(type: KotlinType, shortenReferences: Boolean = true) {
+    if (type.isError) return
+    setType(IdeDescriptorRenderers.SOURCE_CODE.renderType(type), shortenReferences)
+}
+
+fun KtCallableDeclaration.setType(typeString: String, shortenReferences: Boolean = true) {
+    val typeReference = KtPsiFactory(project).createType(typeString)
+    setTypeReference(typeReference)
+    if (shortenReferences) {
+        ShortenReferences.DEFAULT.process(getTypeReference()!!)
+    }
+}
+
+fun KtCallableDeclaration.setReceiverType(type: KotlinType) {
+    if (type.isError) return
+    val typeReference = KtPsiFactory(project).createType(IdeDescriptorRenderers.SOURCE_CODE.renderType(type))
+    setReceiverTypeReference(typeReference)
+    ShortenReferences.DEFAULT.process(receiverTypeReference!!)
+}
+

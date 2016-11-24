@@ -16,33 +16,29 @@
 
 package org.jetbrains.kotlin.compilerRunner
 
-import com.intellij.util.xmlb.XmlSerializerUtil
 import org.jetbrains.jps.api.GlobalOptions
 import org.jetbrains.kotlin.cli.common.ExitCode
 import org.jetbrains.kotlin.cli.common.KOTLIN_COMPILER_ENVIRONMENT_KEEPALIVE_PROPERTY
 import org.jetbrains.kotlin.cli.common.arguments.CommonCompilerArguments
 import org.jetbrains.kotlin.cli.common.arguments.K2JSCompilerArguments
 import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments
+import org.jetbrains.kotlin.cli.common.arguments.mergeBeans
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageLocation
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity.ERROR
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity.INFO
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.cli.common.messages.MessageCollectorUtil
+import org.jetbrains.kotlin.config.CompilerSettings
 import org.jetbrains.kotlin.daemon.client.CompilationServices
 import org.jetbrains.kotlin.daemon.client.DaemonReportMessage
 import org.jetbrains.kotlin.daemon.client.DaemonReportingTargets
 import org.jetbrains.kotlin.daemon.client.KotlinCompilerClient
-import org.jetbrains.kotlin.config.CompilerSettings
 import org.jetbrains.kotlin.daemon.common.*
 import org.jetbrains.kotlin.jps.build.KotlinBuilder
 import org.jetbrains.kotlin.load.kotlin.incremental.components.IncrementalCompilationComponents
 import org.jetbrains.kotlin.progress.CompilationCanceledStatus
-import org.jetbrains.kotlin.utils.rethrow
 import java.io.*
-import java.lang.reflect.Field
-import java.lang.reflect.Modifier
-import java.rmi.ConnectException
 import java.util.*
 import java.util.concurrent.TimeUnit
 
@@ -157,13 +153,8 @@ object KotlinCompilerRunner {
                 val profiler = if (daemonOptions.reportPerf) WallAndThreadAndMemoryTotalProfiler(withGC = false) else DummyProfiler()
 
                 profiler.withMeasure(null) {
-                    fun newFlagFile(): File {
-                        val flagFile = File.createTempFile("kotlin-compiler-jps-session-", "-is-running")
-                        flagFile.deleteOnExit()
-                        return flagFile
-                    }
                     val daemon = KotlinCompilerClient.connectToCompileService(compilerId, daemonJVMOptions, daemonOptions, DaemonReportingTargets(null, daemonReportMessages), true, true)
-                    connection = DaemonConnection(daemon, daemon?.leaseCompileSession(newFlagFile().absolutePath)?.get() ?: CompileService.NO_SESSION)
+                    connection = DaemonConnection(daemon, daemon?.leaseCompileSession(makeAutodeletingFlagFile("compiler-jps-session").absolutePath)?.get() ?: CompileService.NO_SESSION)
                 }
 
                 for (msg in daemonReportMessages) {
@@ -255,40 +246,11 @@ object KotlinCompilerRunner {
         }
     }
 
-    private fun <T : CommonCompilerArguments> mergeBeans(from: CommonCompilerArguments, to: T): T {
-        // TODO: rewrite when updated version of com.intellij.util.xmlb is available on TeamCity
-        val copy = XmlSerializerUtil.createCopy(to)
-
-        val fromFields = collectFieldsToCopy(from.javaClass)
-        for (fromField in fromFields) {
-            val toField = copy.javaClass.getField(fromField.name)
-            toField.set(copy, fromField.get(from))
-        }
-
-        return copy
-    }
-
-    private fun collectFieldsToCopy(clazz: Class<*>): List<Field> {
-        val fromFields = ArrayList<Field>()
-
-        var currentClass: Class<*>? = clazz
-        while (currentClass != null) {
-            for (field in currentClass.declaredFields) {
-                val modifiers = field.modifiers
-                if (!Modifier.isStatic(modifiers) && Modifier.isPublic(modifiers)) {
-                    fromFields.add(field)
-                }
-            }
-            currentClass = currentClass.superclass
-        }
-
-        return fromFields
-    }
-
     private fun setupK2JvmArguments(moduleFile: File, settings: K2JVMCompilerArguments) {
         with(settings) {
             module = moduleFile.absolutePath
             noStdlib = true
+            noReflect = true
             noJdk = true
         }
     }

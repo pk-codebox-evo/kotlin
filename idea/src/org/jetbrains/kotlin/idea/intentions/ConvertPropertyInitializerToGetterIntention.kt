@@ -34,7 +34,10 @@ class ConvertPropertyInitializerToGetterIntention : SelfTargetingRangeIntention<
             return null
     }
 
-    override fun allowCaretInsideElement(element: PsiElement) = element !is KtDeclaration // do not work inside lambda's in initializer - they can be too big
+    override fun allowCaretInsideElement(element: PsiElement): Boolean {
+        // do not work inside lambda's in initializer - they can be too big
+        return element !is KtDeclaration && super.allowCaretInsideElement(element)
+    }
 
     override fun applyTo(element: KtProperty, editor: Editor?) {
         convertPropertyInitializerToGetter(element, editor)
@@ -56,7 +59,7 @@ class ConvertPropertyInitializerToGetterIntention : SelfTargetingRangeIntention<
                 property.add(getter)
             }
 
-            property.setInitializer(null)
+            property.initializer = null
         }
     }
 }

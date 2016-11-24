@@ -28,20 +28,20 @@ import org.jetbrains.kotlin.storage.StorageManager
 class DeserializationComponents(
         val storageManager: StorageManager,
         val moduleDescriptor: ModuleDescriptor,
+        val configuration: DeserializationConfiguration,
         val classDataFinder: ClassDataFinder,
         val annotationAndConstantLoader: AnnotationAndConstantLoader<AnnotationDescriptor, ConstantValue<*>, AnnotationWithTarget>,
         val packageFragmentProvider: PackageFragmentProvider,
-        val localClassifierResolver: LocalClassifierResolver,
+        val localClassifierTypeSettings: LocalClassifierTypeSettings,
         val errorReporter: ErrorReporter,
         val lookupTracker: LookupTracker,
         val flexibleTypeDeserializer: FlexibleTypeDeserializer,
-        val fictitiousClassDescriptorFactory: ClassDescriptorFactory,
+        val fictitiousClassDescriptorFactories: Iterable<ClassDescriptorFactory>,
         val notFoundClasses: NotFoundClasses,
         val additionalClassPartsProvider: AdditionalClassPartsProvider = AdditionalClassPartsProvider.None,
         val platformDependentDeclarationFilter: PlatformDependentDeclarationFilter = PlatformDependentDeclarationFilter.All
 ) {
     val classDeserializer: ClassDeserializer = ClassDeserializer(this)
-    val typeAliasDeserializer: TypeAliasDeserializer = TypeAliasDeserializer(this)
 
     fun deserializeClass(classId: ClassId): ClassDescriptor? = classDeserializer.deserializeClass(classId)
 
@@ -53,8 +53,6 @@ class DeserializationComponents(
     ): DeserializationContext =
             DeserializationContext(this, nameResolver, descriptor, typeTable, containerSource,
                                    parentTypeDeserializer = null, typeParameters = listOf())
-
-    fun deserializeTypeAlias(typeAliasId: ClassId): TypeAliasDescriptor? = typeAliasDeserializer.deserializeTypeAlias(typeAliasId)
 }
 
 

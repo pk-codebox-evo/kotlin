@@ -73,8 +73,10 @@ import org.jetbrains.kotlin.types.checker.KotlinTypeChecker
 import org.jetbrains.kotlin.types.typeUtil.isAnyOrNullableAny
 import org.jetbrains.kotlin.types.typeUtil.isUnit
 import org.jetbrains.kotlin.utils.addToStdlib.singletonOrEmptyList
+import java.lang.AssertionError
+import java.lang.IllegalArgumentException
+import java.lang.IllegalStateException
 import java.util.*
-import kotlin.properties.Delegates
 
 /**
  * Represents a single choice for a type (e.g. parameter type or return type).
@@ -168,14 +170,14 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
                 override fun hashCode() = 0 // no good way to compute hashCode() that would agree with our equals()
             }
 
-            val newTypes = LinkedHashSet(types.map { EqWrapper(it) })
+            val newTypes = LinkedHashSet(types.map(::EqWrapper))
             for (substitution in substitutions) {
                 // each substitution can be applied or not, so we offer all options
                 val toAdd = newTypes.map { it._type.substitute(substitution, typeInfo.variance) }
                 // substitution.byType are type arguments, but they cannot already occur in the type before substitution
                 val toRemove = newTypes.filter { substitution.byType in it._type }
 
-                newTypes.addAll(toAdd.map { EqWrapper(it) })
+                newTypes.addAll(toAdd.map(::EqWrapper))
                 newTypes.removeAll(toRemove)
             }
 
@@ -447,14 +449,15 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
                             if (containingElement is KtClass && containingElement.isInterface()) "" else "abstract "
                         }
                         else if (containingElement is KtClassOrObject
+                                 && !(containingElement is KtClass && containingElement.isInterface())
                                  && containingElement.isAncestor(config.originalElement)
                                  && callableInfo.kind != CallableKind.SECONDARY_CONSTRUCTOR) "private "
+                        else if (isExtension) "private "
                         else ""
 
                 val declaration: KtNamedDeclaration = when (callableInfo.kind) {
                     CallableKind.FUNCTION, CallableKind.SECONDARY_CONSTRUCTOR -> {
                         val body = when {
-                            containingElement is KtClass && containingElement.isInterface() && !config.isExtension -> ""
                             callableInfo.kind == CallableKind.SECONDARY_CONSTRUCTOR -> ""
                             callableInfo.isAbstract -> ""
                             else -> "{}"
@@ -497,96 +500,27 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
                         }
                     }
                     CallableKind.PROPERTY -> {
-                        val valVar = if ((callableInfo as PropertyInfo).writable) "var" else "val"
-                        psiFactory.createProperty("$modifiers$valVar<> $header")
+                        val isVar = (callableInfo as PropertyInfo).writable
+                        val valVar = if (isVar) "var" else "val"
+                        val accessors = if (isExtension) {
+                            buildString {
+                                append("\nget() {}")
+                                if (isVar) {
+                                    append("\nset() {}")
+                                }
+                            }
+                        }
+                        else ""
+                        psiFactory.createProperty("$modifiers$valVar<> $header$accessors")
                     }
                 }
 
                 if (assignmentToReplace != null) {
-                    (declaration as KtProperty).setInitializer(assignmentToReplace.right)
+                    (declaration as KtProperty).initializer = assignmentToReplace.right
                     return assignmentToReplace.replace(declaration) as KtCallableDeclaration
                 }
 
-                val newLine = psiFactory.createNewLine()
-
-                fun calcNecessaryEmptyLines(decl: KtDeclaration, after: Boolean): Int {
-                    var lineBreaksPresent: Int = 0
-                    var neighbor: PsiElement? = null
-
-                    siblingsLoop@
-                    for (sibling in decl.siblings(forward = after, withItself = false)) {
-                        when (sibling) {
-                            is PsiWhiteSpace -> lineBreaksPresent += (sibling.text ?: "").count { it == '\n' }
-                            else -> {
-                                neighbor = sibling
-                                break@siblingsLoop
-                            }
-                        }
-                    }
-
-                    val neighborType = neighbor?.node?.elementType
-                    val lineBreaksNeeded = when {
-                        neighborType == KtTokens.LBRACE || neighborType == KtTokens.RBRACE -> 1
-                        neighbor is KtDeclaration && (neighbor !is KtProperty || decl !is KtProperty) -> 2
-                        else -> 1
-                    }
-
-                    return Math.max(lineBreaksNeeded - lineBreaksPresent, 0)
-                }
-
-                val actualContainer = (containingElement as? KtClassOrObject)?.getOrCreateBody() ?: containingElement
-
-                fun addNextToOriginalElementContainer(addBefore: Boolean): KtNamedDeclaration {
-                    val sibling = config.originalElement.parentsWithSelf.first { it.parent == actualContainer }
-                    return if (addBefore) {
-                        actualContainer.addBefore(declaration, sibling)
-                    }
-                    else {
-                        actualContainer.addAfter(declaration, sibling)
-                    } as KtNamedDeclaration
-                }
-
-                val declarationInPlace = when {
-                    actualContainer.isAncestor(config.originalElement, true) -> {
-                        val insertToBlock = containingElement is KtBlockExpression
-                        if (insertToBlock) {
-                            val parent = containingElement.parent
-                            if (parent is KtFunctionLiteral) {
-                                if (!parent.isMultiLine()) {
-                                    parent.addBefore(newLine, containingElement)
-                                    parent.addAfter(newLine, containingElement)
-                                }
-                            }
-                        }
-                        addNextToOriginalElementContainer(insertToBlock || declaration is KtProperty)
-                    }
-
-                    containingElement is KtFile -> containingElement.add(declaration) as KtNamedDeclaration
-
-                    containingElement is PsiClass -> {
-                        if (declaration is KtSecondaryConstructor) {
-                            val wrappingClass = psiFactory.createClass("class ${containingElement.name} {\n}")
-                            addDeclarationToClassOrObject(wrappingClass, declaration)
-                            (jetFileToEdit.add(wrappingClass) as KtClass).declarations.first() as KtNamedDeclaration
-                        }
-                        else {
-                            jetFileToEdit.add(declaration) as KtNamedDeclaration
-                        }
-                    }
-
-                    containingElement is KtClassOrObject -> {
-                        insertMember(null, containingElement, declaration, containingElement.declarations.lastOrNull())
-                    }
-                    else -> throw AssertionError("Invalid containing element: ${containingElement.text}")
-                }
-
-                val parent = declarationInPlace.parent
-                calcNecessaryEmptyLines(declarationInPlace, false).let {
-                    if (it > 0) parent.addBefore(psiFactory.createNewLine(it), declarationInPlace)
-                }
-                calcNecessaryEmptyLines(declarationInPlace, true).let {
-                    if (it > 0) parent.addAfter(psiFactory.createNewLine(it), declarationInPlace)
-                }
+                val declarationInPlace = placeDeclarationInContainer(declaration, containingElement, config.originalElement, jetFileToEdit)
 
                 if (declarationInPlace is KtSecondaryConstructor) {
                     val containingClass = declarationInPlace.containingClassOrObject!!
@@ -600,19 +534,6 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
 
                 return declarationInPlace
             }
-        }
-
-        private fun addDeclarationToClassOrObject(classOrObject: KtClassOrObject,
-                                                  declaration: KtNamedDeclaration): KtNamedDeclaration {
-            val classBody = classOrObject.getOrCreateBody()
-            return if (declaration is KtNamedFunction) {
-                val anchor = PsiTreeUtil.skipSiblingsBackward(
-                        classBody.rBrace ?: classBody.lastChild!!,
-                        PsiWhiteSpace::class.java
-                )
-                classBody.addAfter(declaration, anchor) as KtNamedDeclaration
-            }
-            else classBody.addAfter(declaration, classBody.lBrace!!) as KtNamedDeclaration
         }
 
         private fun getTypeParameterRenames(scope: HierarchicalScope): Map<TypeParameterDescriptor, String> {
@@ -682,18 +603,18 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
             return typeRefsToShorten
         }
 
-        private fun setupFunctionBody(func: KtFunction) {
+        private fun setupDeclarationBody(func: KtDeclarationWithBody) {
             val oldBody = func.bodyExpression ?: return
             val templateKind = when (func) {
                 is KtSecondaryConstructor -> TemplateKind.SECONDARY_CONSTRUCTOR
-                is KtNamedFunction -> TemplateKind.FUNCTION
+                is KtNamedFunction, is KtPropertyAccessor -> TemplateKind.FUNCTION
                 else -> throw AssertionError("Unexpected declaration: " + func.getElementTextWithContext())
             }
             val bodyText = getFunctionBodyTextFromTemplate(
                     func.project,
                     templateKind,
                     if (callableInfo.name.isNotEmpty()) callableInfo.name else null,
-                    if (skipReturnType) "Unit" else func.typeReference!!.text,
+                    if (skipReturnType) "Unit" else (func as? KtFunction)?.typeReference?.text ?: "",
                     receiverClassDescriptor?.importableFqName ?: receiverClassDescriptor?.name?.let { FqName.topLevel(it) }
             )
             oldBody.replace(KtPsiFactory(func).createBlock(bodyText))
@@ -987,7 +908,11 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
                         runWriteAction {
                             // file templates
                             if (newDeclaration is KtNamedFunction || newDeclaration is KtSecondaryConstructor) {
-                                setupFunctionBody(newDeclaration as KtFunction)
+                                setupDeclarationBody(newDeclaration as KtFunction)
+                            }
+
+                            if (newDeclaration is KtProperty) {
+                                newDeclaration.getter?.let { setupDeclarationBody(it) }
                             }
 
                             val callElement = config.originalElement as? KtCallElement
@@ -1028,6 +953,114 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
             }
         }
     }
+}
+
+// TODO: Simplify and use formatter as much as possible
+@Suppress("UNCHECKED_CAST")
+internal fun <D : KtNamedDeclaration> placeDeclarationInContainer(
+        declaration: D,
+        container: PsiElement,
+        anchor: PsiElement,
+        fileToEdit: KtFile = container.containingFile as KtFile
+): D {
+    val psiFactory = KtPsiFactory(container)
+    val newLine = psiFactory.createNewLine()
+
+    fun calcNecessaryEmptyLines(decl: KtDeclaration, after: Boolean): Int {
+        var lineBreaksPresent: Int = 0
+        var neighbor: PsiElement? = null
+
+        siblingsLoop@
+        for (sibling in decl.siblings(forward = after, withItself = false)) {
+            when (sibling) {
+                is PsiWhiteSpace -> lineBreaksPresent += (sibling.text ?: "").count { it == '\n' }
+                else -> {
+                    neighbor = sibling
+                    break@siblingsLoop
+                }
+            }
+        }
+
+        val neighborType = neighbor?.node?.elementType
+        val lineBreaksNeeded = when {
+            neighborType == KtTokens.LBRACE || neighborType == KtTokens.RBRACE -> 1
+            neighbor is KtDeclaration && (neighbor !is KtProperty || decl !is KtProperty) -> 2
+            else -> 1
+        }
+
+        return Math.max(lineBreaksNeeded - lineBreaksPresent, 0)
+    }
+
+    val actualContainer = (container as? KtClassOrObject)?.getOrCreateBody() ?: container
+
+    fun addDeclarationToClassOrObject(classOrObject: KtClassOrObject,
+                                      declaration: KtNamedDeclaration): KtNamedDeclaration {
+        val classBody = classOrObject.getOrCreateBody()
+        return if (declaration is KtNamedFunction) {
+            val neighbor = PsiTreeUtil.skipSiblingsBackward(
+                    classBody.rBrace ?: classBody.lastChild!!,
+                    PsiWhiteSpace::class.java
+            )
+            classBody.addAfter(declaration, neighbor) as KtNamedDeclaration
+        }
+        else classBody.addAfter(declaration, classBody.lBrace!!) as KtNamedDeclaration
+    }
+
+
+    fun addNextToOriginalElementContainer(addBefore: Boolean): D {
+        val sibling = anchor.parentsWithSelf.first { it.parent == actualContainer }
+        return if (addBefore) {
+            actualContainer.addBefore(declaration, sibling)
+        }
+        else {
+            actualContainer.addAfter(declaration, sibling)
+        } as D
+    }
+
+    val declarationInPlace = when {
+        actualContainer.isAncestor(anchor, true) -> {
+            val insertToBlock = container is KtBlockExpression
+            if (insertToBlock) {
+                val parent = container.parent
+                if (parent is KtFunctionLiteral) {
+                    if (!parent.isMultiLine()) {
+                        parent.addBefore(newLine, container)
+                        parent.addAfter(newLine, container)
+                    }
+                }
+            }
+            addNextToOriginalElementContainer(insertToBlock
+                                              || (declaration is KtProperty && actualContainer !is KtFile)
+                                              || declaration is KtTypeAlias)
+        }
+
+        container is KtFile -> container.add(declaration) as D
+
+        container is PsiClass -> {
+            if (declaration is KtSecondaryConstructor) {
+                val wrappingClass = psiFactory.createClass("class ${container.name} {\n}")
+                addDeclarationToClassOrObject(wrappingClass, declaration)
+                (fileToEdit.add(wrappingClass) as KtClass).declarations.first() as D
+            }
+            else {
+                fileToEdit.add(declaration) as D
+            }
+        }
+
+        container is KtClassOrObject -> {
+            insertMember(null, container, declaration, container.declarations.lastOrNull())
+        }
+        else -> throw AssertionError("Invalid containing element: ${container.text}")
+    }
+
+    val parent = declarationInPlace.parent
+    calcNecessaryEmptyLines(declarationInPlace, false).let {
+        if (it > 0) parent.addBefore(psiFactory.createNewLine(it), declarationInPlace)
+    }
+    calcNecessaryEmptyLines(declarationInPlace, true).let {
+        if (it > 0) parent.addAfter(psiFactory.createNewLine(it), declarationInPlace)
+    }
+    return declarationInPlace
 }
 
 internal fun KtNamedDeclaration.getReturnTypeReference(): KtTypeReference? {

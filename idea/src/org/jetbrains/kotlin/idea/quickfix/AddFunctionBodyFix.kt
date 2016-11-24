@@ -30,10 +30,12 @@ class AddFunctionBodyFix(element: KtFunction) : KotlinQuickFixAction<KtFunction>
     override fun getText() = familyName
 
     override fun isAvailable(project: Project, editor: Editor?, file: PsiFile): Boolean {
+        val element = element ?: return false
         return super.isAvailable(project, editor, file) && !element.hasBody()
     }
 
     public override fun invoke(project: Project, editor: Editor?, file: KtFile) {
+        val element = element ?: return
         if (!element.hasBody()) {
             element.add(KtPsiFactory(project).createEmptyBody())
         }
@@ -41,7 +43,7 @@ class AddFunctionBodyFix(element: KtFunction) : KotlinQuickFixAction<KtFunction>
 
     companion object : KotlinSingleIntentionActionFactory() {
         public override fun createAction(diagnostic: Diagnostic): AddFunctionBodyFix? {
-            return diagnostic.psiElement.getNonStrictParentOfType<KtFunction>()?.let { AddFunctionBodyFix(it) }
+            return diagnostic.psiElement.getNonStrictParentOfType<KtFunction>()?.let(::AddFunctionBodyFix)
         }
     }
 }

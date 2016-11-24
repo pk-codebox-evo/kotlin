@@ -26,7 +26,7 @@ import org.jetbrains.kotlin.idea.test.KotlinLightCodeInsightFixtureTestCase
 import com.intellij.testFramework.LightProjectDescriptor
 import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase
 import org.jetbrains.kotlin.descriptors.PackageViewDescriptor
-import org.jetbrains.kotlin.resolve.bindingContextUtil.getDataFlowInfo
+import org.jetbrains.kotlin.resolve.bindingContextUtil.getDataFlowInfoAfter
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.psi.psiUtil.getStrictParentOfType
 import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowValue
@@ -47,7 +47,7 @@ abstract class AbstractDataFlowValueRenderingTest: KotlinLightCodeInsightFixture
 
     private fun DataFlowValue.render() =
             // If it is not a stable identifier, there's no point in rendering it
-            if (!isPredictable) null
+            if (!isStable) null
             else identifierInfo.render()
 
     override fun getTestDataPath() : String {
@@ -65,7 +65,7 @@ abstract class AbstractDataFlowValueRenderingTest: KotlinLightCodeInsightFixture
         val jetFile = fixture.file as KtFile
         val element = jetFile.findElementAt(fixture.caretOffset)!!
         val expression = element.getStrictParentOfType<KtExpression>()!!
-        val info = expression.analyze().getDataFlowInfo(expression)
+        val info = expression.analyze().getDataFlowInfoAfter(expression)
 
         val allValues = (info.completeTypeInfo.keySet() + info.completeNullabilityInfo.keys).toSet()
         val actual = allValues.mapNotNull { it.render() }.sorted().joinToString("\n")

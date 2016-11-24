@@ -26,7 +26,8 @@ import org.jetbrains.kotlin.resolve.calls.inference.TypeBounds.BoundKind.*
 import org.jetbrains.kotlin.resolve.calls.inference.constraintPosition.ConstraintPosition
 import org.jetbrains.kotlin.resolve.calls.inference.constraintPosition.ConstraintPositionKind
 import org.jetbrains.kotlin.resolve.calls.inference.constraintPosition.ConstraintPositionKind.TYPE_BOUND_POSITION
-import org.jetbrains.kotlin.resolve.createFunctionType
+import org.jetbrains.kotlin.resolve.calls.results.SimpleConstraintSystem
+import org.jetbrains.kotlin.resolve.calls.util.createFunctionType
 import org.jetbrains.kotlin.resolve.descriptorUtil.hasExactAnnotation
 import org.jetbrains.kotlin.resolve.descriptorUtil.hasNoInferAnnotation
 import org.jetbrains.kotlin.types.*
@@ -36,9 +37,11 @@ import org.jetbrains.kotlin.types.checker.TypeCheckingProcedureCallbacks
 import org.jetbrains.kotlin.types.typeUtil.builtIns
 import org.jetbrains.kotlin.types.typeUtil.defaultProjections
 import org.jetbrains.kotlin.types.typeUtil.isDefaultBound
+import java.lang.IllegalArgumentException
+import java.lang.IllegalStateException
 import java.util.*
 
-class ConstraintSystemBuilderImpl(private val mode: Mode = ConstraintSystemBuilderImpl.Mode.INFERENCE) : ConstraintSystem.Builder {
+open class ConstraintSystemBuilderImpl(private val mode: Mode = ConstraintSystemBuilderImpl.Mode.INFERENCE) : ConstraintSystem.Builder {
     enum class Mode {
         INFERENCE,
         SPECIFICITY
@@ -151,13 +154,10 @@ class ConstraintSystemBuilderImpl(private val mode: Mode = ConstraintSystemBuild
             }
 
             override fun capture(type: KotlinType, typeProjection: TypeProjection): Boolean {
-                if (isMyTypeVariable(typeProjection.type)) return false
+                if (isMyTypeVariable(typeProjection.type) || depth > 0) return false
                 val myTypeVariable = getMyTypeVariable(type)
 
                 if (myTypeVariable != null && constraintPosition.isParameter()) {
-                    if (depth > 0) {
-                        errors.add(CannotCapture(constraintPosition, myTypeVariable))
-                    }
                     generateTypeParameterCaptureConstraint(myTypeVariable, typeProjection, newConstraintContext, type.isMarkedNullable)
                     return true
                 }
@@ -409,7 +409,20 @@ class ConstraintSystemBuilderImpl(private val mode: Mode = ConstraintSystemBuild
     }
 
     companion object {
-        fun forSpecificity() = ConstraintSystemBuilderImpl(Mode.SPECIFICITY)
+        fun forSpecificity(): SimpleConstraintSystem = object : ConstraintSystemBuilderImpl(Mode.SPECIFICITY), SimpleConstraintSystem {
+            var counter = 0
+
+            override fun registerTypeVariables(typeParameters: Collection<TypeParameterDescriptor>) =
+                    registerTypeVariables(CallHandle.NONE, typeParameters)
+
+            override fun addSubtypeConstraint(subType: UnwrappedType, superType: UnwrappedType) =
+                    addSubtypeConstraint(subType, superType, ConstraintPositionKind.VALUE_PARAMETER_POSITION.position(counter++))
+
+            override fun hasContradiction(): Boolean {
+                fixVariables()
+                return build().status.hasContradiction()
+            }
+        }
     }
 }
 
@@ -435,5 +448,5 @@ internal fun createTypeForFunctionPlaceholder(
         functionPlaceholderTypeConstructor.argumentTypes
     }
     val receiverType = if (isExtension) DONT_CARE else null
-    return createFunctionType(functionPlaceholder.builtIns, Annotations.EMPTY, receiverType, newArgumentTypes, DONT_CARE)
+    return createFunctionType(functionPlaceholder.builtIns, Annotations.EMPTY, receiverType, newArgumentTypes, null, DONT_CARE)
 }

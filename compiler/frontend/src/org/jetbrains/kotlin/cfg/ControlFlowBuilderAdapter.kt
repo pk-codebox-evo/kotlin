@@ -123,12 +123,16 @@ abstract class ControlFlowBuilderAdapter : ControlFlowBuilder {
         delegateBuilder.throwException(throwExpression, thrownValue)
     }
 
-    override fun getExitPoint(labelElement: KtElement): Label? {
-        return delegateBuilder.getExitPoint(labelElement)
+    override fun getSubroutineExitPoint(labelElement: KtElement): Label? {
+        return delegateBuilder.getSubroutineExitPoint(labelElement)
     }
 
-    override fun getConditionEntryPoint(labelElement: KtElement): Label {
-        return delegateBuilder.getConditionEntryPoint(labelElement)
+    override fun getLoopConditionEntryPoint(loop: KtLoopExpression): Label? {
+        return delegateBuilder.getLoopConditionEntryPoint(loop)
+    }
+
+    override fun getLoopExitPoint(loop: KtLoopExpression): Label? {
+        return delegateBuilder.getLoopExitPoint(loop)
     }
 
     override fun enterLoop(expression: KtLoopExpression): LoopInfo {
@@ -176,6 +180,9 @@ abstract class ControlFlowBuilderAdapter : ControlFlowBuilder {
         delegateBuilder.returnNoValue(returnExpression, subroutine)
     }
 
+    override fun read(element: KtElement, target: AccessTarget, receiverValues: Map<PseudoValue, ReceiverValue>) =
+            delegateBuilder.read(element, target, receiverValues)
+
     override fun write(
             assignment: KtElement,
             lValue: KtElement,
@@ -195,6 +202,10 @@ abstract class ControlFlowBuilderAdapter : ControlFlowBuilder {
 
     override fun declareFunction(subroutine: KtElement, pseudocode: Pseudocode) {
         delegateBuilder.declareFunction(subroutine, pseudocode)
+    }
+
+    override fun declareEntryOrObject(entryOrObject: KtClassOrObject) {
+        delegateBuilder.declareEntryOrObject(entryOrObject)
     }
 
     override fun repeatPseudocode(startLabel: Label, finishLabel: Label) {

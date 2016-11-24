@@ -118,9 +118,12 @@ public class CompilerConfiguration {
 
     public void setReadOnly(boolean readOnly) {
         if (readOnly != this.readOnly) {
-            checkReadOnly();
             this.readOnly = readOnly;
         }
+    }
+
+    public boolean isReadOnly() {
+        return readOnly;
     }
 
     @NotNull

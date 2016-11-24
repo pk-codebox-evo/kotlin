@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
+ * Copyright 2010-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.codegen.binding;
 import com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.kotlin.codegen.FunctionGenerationStrategy;
 import org.jetbrains.kotlin.codegen.JvmCodegenUtil;
 import org.jetbrains.kotlin.codegen.SamType;
 import org.jetbrains.kotlin.codegen.state.GenerationState;
@@ -65,6 +66,10 @@ public class CodegenBinding {
 
     public static final WritableSlice<VariableDescriptor, VariableDescriptor> LOCAL_VARIABLE_PROPERTY_METADATA =
             Slices.createSimpleSlice();
+
+
+    public static final WritableSlice<KtElement, FunctionGenerationStrategy> CUSTOM_STRATEGY_FOR_INLINE_LAMBDA = Slices.createSimpleSlice();
+    public static final WritableSlice<KtElement, FunctionDescriptor> CUSTOM_DESCRIPTOR_FOR_INLINE_LAMBDA = Slices.createSimpleSlice();
 
     static {
         BasicWritableSlice.initSliceDebugNames(CodegenBinding.class);
@@ -156,7 +161,6 @@ public class CodegenBinding {
             closure.setCaptureThis();
         }
 
-        assert PsiCodegenPredictor.checkPredictedNameFromPsi(classDescriptor, asmType, fileClassesManager);
         trace.record(ASM_TYPE, classDescriptor, asmType);
         trace.record(CLOSURE, classDescriptor, closure);
 

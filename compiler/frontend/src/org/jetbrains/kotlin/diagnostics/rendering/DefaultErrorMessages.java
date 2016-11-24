@@ -21,6 +21,8 @@ import kotlin.jvm.functions.Function1;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
+import org.jetbrains.kotlin.config.LanguageFeature;
+import org.jetbrains.kotlin.config.LanguageVersion;
 import org.jetbrains.kotlin.diagnostics.Diagnostic;
 import org.jetbrains.kotlin.diagnostics.DiagnosticFactory;
 import org.jetbrains.kotlin.diagnostics.Errors;
@@ -110,7 +112,9 @@ public class DefaultErrorMessages {
 
         MAP.put(INACCESSIBLE_TYPE, "Type {0} is inaccessible in this context due to: {1}", RENDER_TYPE, RENDER_COLLECTION_OF_TYPES);
 
-        MAP.put(REDECLARATION, "Redeclaration: {0}", STRING);
+        MAP.put(REDECLARATION, "Conflicting declarations: {0}", commaSeparated(COMPACT_WITH_MODIFIERS));
+        MAP.put(PACKAGE_OR_CLASSIFIER_REDECLARATION, "Redeclaration: {0}", STRING);
+
         MAP.put(NAME_SHADOWING, "Name shadowed: {0}", STRING);
         MAP.put(ACCESSOR_PARAMETER_NAME_SHADOWING, "Accessor parameter name 'field' is shadowed by backing field variable");
 
@@ -157,6 +161,9 @@ public class DefaultErrorMessages {
         MAP.put(INAPPLICABLE_RECEIVER_TARGET, "'@receiver:' annotations could be applied only to extension function or extension property declarations");
         MAP.put(INAPPLICABLE_PARAM_TARGET, "'@param:' annotations could be applied only to primary constructor parameters");
         MAP.put(REDUNDANT_ANNOTATION_TARGET, "Redundant annotation target ''{0}''", STRING);
+
+        MAP.put(ILLEGAL_SINCE_KOTLIN_VALUE, "Invalid @SinceKotlin annotation value (should be 'major.minor' or 'major.minor.patch')");
+        MAP.put(NEWER_VERSION_IN_SINCE_KOTLIN, "The version is greater than the specified API version {0}", STRING);
 
         MAP.put(REDUNDANT_MODIFIER, "Modifier ''{0}'' is redundant because ''{1}'' is present", TO_STRING, TO_STRING);
         MAP.put(REDUNDANT_OPEN_IN_INTERFACE, "Modifier 'open' is redundant for abstract interface members");
@@ -229,6 +236,7 @@ public class DefaultErrorMessages {
         MAP.put(BACKING_FIELD_IN_INTERFACE, "Property in an interface cannot have a backing field");
         MAP.put(MUST_BE_INITIALIZED, "Property must be initialized");
         MAP.put(MUST_BE_INITIALIZED_OR_BE_ABSTRACT, "Property must be initialized or be abstract");
+        MAP.put(UNNECESSARY_LATEINIT, "Lateinit is unnecessary: definitely initialized in constructors");
         MAP.put(PROPERTY_INITIALIZER_IN_INTERFACE, "Property initializers are not allowed in interfaces");
         MAP.put(PRIVATE_PROPERTY_IN_INTERFACE, "Abstract property in an interface cannot be private");
         MAP.put(EXTENSION_PROPERTY_WITH_BACKING_FIELD, "Extension property cannot be initialized because it has no backing field");
@@ -264,8 +272,11 @@ public class DefaultErrorMessages {
 
         MAP.put(UNINITIALIZED_VARIABLE, "Variable ''{0}'' must be initialized", NAME);
         MAP.put(UNINITIALIZED_PARAMETER, "Parameter ''{0}'' is uninitialized here", NAME);
+        MAP.put(UNINITIALIZED_ENUM_ENTRY, "Enum entry ''{0}'' is uninitialized here", NAME);
+        MAP.put(UNINITIALIZED_ENUM_COMPANION, "Companion object of enum class ''{0}'' is uninitialized here", NAME);
         MAP.put(UNUSED_VARIABLE, "Variable ''{0}'' is never used", NAME);
         MAP.put(UNUSED_PARAMETER, "Parameter ''{0}'' is never used", NAME);
+        MAP.put(UNUSED_DESTRUCTURED_PARAMETER_ENTRY, "Destructured parameter ''{0}'' is never used", NAME);
         MAP.put(ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE, "Variable ''{0}'' is assigned but never accessed", NAME);
         MAP.put(VARIABLE_WITH_REDUNDANT_INITIALIZER, "Variable ''{0}'' initializer is redundant", NAME);
         MAP.put(UNUSED_VALUE, "The value ''{0}'' assigned to ''{1}'' is never used", ELEMENT_TEXT, FQ_NAMES_IN_TYPES);
@@ -281,7 +292,6 @@ public class DefaultErrorMessages {
         MAP.put(VARIABLE_EXPECTED, "Variable expected");
 
         MAP.put(VAL_OR_VAR_ON_LOOP_PARAMETER, "''{0}'' on loop parameter is not allowed", TO_STRING);
-        MAP.put(VAL_OR_VAR_ON_LOOP_MULTI_PARAMETER, "''{0}'' on loop multi parameter is not allowed", TO_STRING);
         MAP.put(VAL_OR_VAR_ON_FUN_PARAMETER, "''{0}'' on function parameter is not allowed", TO_STRING);
         MAP.put(VAL_OR_VAR_ON_CATCH_PARAMETER, "''{0}'' on catch parameter is not allowed", TO_STRING);
         MAP.put(VAL_OR_VAR_ON_SECONDARY_CONSTRUCTOR_PARAMETER, "''{0}'' on secondary constructor parameter is not allowed", TO_STRING);
@@ -293,6 +303,8 @@ public class DefaultErrorMessages {
         MAP.put(DEPRECATION, "''{0}'' is deprecated. {1}", DEPRECATION_RENDERER, STRING);
         MAP.put(DEPRECATION_ERROR, "Using ''{0}'' is an error. {1}", DEPRECATION_RENDERER, STRING);
 
+        MAP.put(API_NOT_AVAILABLE, "This declaration is only available since Kotlin {0} and cannot be used with the specified API version {1}", STRING, STRING);
+
         MAP.put(LOCAL_OBJECT_NOT_ALLOWED, "Named object ''{0}'' is a singleton and cannot be local. Try to use anonymous object instead", NAME);
         MAP.put(LOCAL_INTERFACE_NOT_ALLOWED, "''{0}'' is an interface so it cannot be local. Try to use anonymous object or abstract class instead", NAME);
         MAP.put(ENUM_CLASS_CONSTRUCTOR_CALL, "Enum types cannot be instantiated");
@@ -301,6 +313,7 @@ public class DefaultErrorMessages {
         MAP.put(DELEGATION_IN_INTERFACE, "Interfaces cannot use delegation");
         MAP.put(DELEGATION_NOT_TO_INTERFACE, "Only interfaces can be delegated to");
         MAP.put(NO_CONSTRUCTOR, "This class does not have a constructor");
+        MAP.put(RESOLUTION_TO_CLASSIFIER, "{2}", NAME, TO_STRING, STRING);
         MAP.put(NOT_A_CLASS, "Not a class");
         MAP.put(ILLEGAL_ESCAPE_SEQUENCE, "Illegal escape sequence");
 
@@ -384,6 +397,9 @@ public class DefaultErrorMessages {
 
         MAP.put(INAPPLICABLE_MODIFIER, "''{0}'' modifier is inapplicable. The reason is that {1}", TO_STRING, STRING);
 
+        MAP.put(DSL_SCOPE_VIOLATION, "''{0}'' can't be called in this context by implicit receiver. " +
+                                     "Use the explicit one if necessary", COMPACT);
+
         MAP.put(RETURN_IN_FUNCTION_WITH_EXPRESSION_BODY,
                 "Returns are not allowed for functions with expression body. Use block body in '{...}'");
         MAP.put(NO_RETURN_IN_FUNCTION_WITH_BLOCK_BODY, "A 'return' expression required in a function with a block body ('{...}')");
@@ -416,9 +432,10 @@ public class DefaultErrorMessages {
         MAP.put(DYNAMIC_UPPER_BOUND, "Dynamic type can not be used as an upper bound");
         MAP.put(USELESS_ELVIS, "Elvis operator (?:) always returns the left operand of non-nullable type {0}", RENDER_TYPE);
         MAP.put(USELESS_ELVIS_ON_LAMBDA_EXPRESSION, "Left operand of elvis operator (?:) is a lambda expression");
+        MAP.put(USELESS_ELVIS_RIGHT_IS_NULL, "Right operand of elvis operator (?:) is useless if it is null");
         MAP.put(CONFLICTING_UPPER_BOUNDS, "Upper bounds of {0} have empty intersection", NAME);
 
-        MAP.put(UNSUPPORTED_TYPEALIAS, "Type aliases are unsupported (min Kotlin language level: 1.1)");
+        MAP.put(TOPLEVEL_TYPEALIASES_ONLY, "Nested and local type aliases are not supported");
         MAP.put(RECURSIVE_TYPEALIAS_EXPANSION, "Recursive type alias in expansion: {0}", NAME);
         MAP.put(UPPER_BOUND_VIOLATED_IN_TYPEALIAS_EXPANSION,
                 "Type argument resulting from type alias expansion is not within required bounds for ''{2}'': " +
@@ -428,6 +445,8 @@ public class DefaultErrorMessages {
         MAP.put(TYPEALIAS_SHOULD_EXPAND_TO_CLASS, "Type alias expands to {0}, which is not a class, an interface, or an object", RENDER_TYPE);
         MAP.put(TYPEALIAS_EXPANDED_TO_MALFORMED_TYPE, "Type alias expanded to malformed type {0}: {1}", RENDER_TYPE, STRING);
         MAP.put(UNUSED_TYPEALIAS_PARAMETER, "Type alias parameter {0} is not used in the expanded type {1} and does not affect type checking", NAME, RENDER_TYPE);
+        MAP.put(EXPANDED_TYPE_CANNOT_BE_CONSTRUCTED, "Expanded type {0} contains non-invariant projections in top-level arguments and cannot be constructed", RENDER_TYPE);
+        MAP.put(EXPANDED_TYPE_CANNOT_BE_INHERITED, "Expanded type {0} contains non-invariant projections in top-level arguments and cannot be inherited from", RENDER_TYPE);
 
         MAP.put(TOO_MANY_ARGUMENTS, "Too many arguments for {0}", FQ_NAMES_IN_TYPES);
 
@@ -439,6 +458,7 @@ public class DefaultErrorMessages {
         MAP.put(FLOAT_LITERAL_OUT_OF_RANGE, "The value is out of range");
         MAP.put(INCORRECT_CHARACTER_LITERAL, "Incorrect character literal");
         MAP.put(EMPTY_CHARACTER_LITERAL, "Empty character literal");
+        MAP.put(ILLEGAL_UNDERSCORE, "Illegal underscore");
         MAP.put(TOO_MANY_CHARACTERS_IN_CHARACTER_LITERAL, "Too many characters in a character literal ''{0}''", ELEMENT_TEXT);
         MAP.put(ILLEGAL_ESCAPE, "Illegal escape: ''{0}''", ELEMENT_TEXT);
         MAP.put(NULL_FOR_NONNULL_TYPE, "Null can not be a value of a non-null type {0}", RENDER_TYPE);
@@ -498,7 +518,16 @@ public class DefaultErrorMessages {
         MAP.put(UNSAFE_IMPLICIT_INVOKE_CALL, "Reference has a nullable type ''{0}'', use explicit ''?.invoke()'' to make a function-like call instead", RENDER_TYPE);
         MAP.put(AMBIGUOUS_LABEL, "Ambiguous label");
         MAP.put(UNSUPPORTED, "Unsupported [{0}]", STRING);
-        MAP.put(UNSUPPORTED_FEATURE, "{0} are unsupported at this language level", TO_STRING);
+        MAP.put(UNSUPPORTED_FEATURE, "The feature is {0}", new DiagnosticParameterRenderer<LanguageFeature>() {
+            @NotNull
+            @Override
+            public String render(LanguageFeature feature, @NotNull RenderingContext renderingContext) {
+                LanguageVersion version = feature.getSinceVersion();
+                return version != null
+                       ? "only available since Kotlin " + version.getVersionString() + ": " + feature.getPresentableText()
+                       : "experimental and should be turned on explicitly via a command line option or in IDE settings: " + feature.getPresentableText();
+            }
+        });
         MAP.put(EXCEPTION_FROM_ANALYZER, "Internal Error occurred while analyzing this expression:\n{0}", THROWABLE);
         MAP.put(UNNECESSARY_SAFE_CALL, "Unnecessary safe call on a non-null receiver of type {0}", RENDER_TYPE);
         MAP.put(UNEXPECTED_SAFE_CALL, "Safe-call is not allowed here");
@@ -528,21 +557,25 @@ public class DefaultErrorMessages {
 
         MAP.put(MISPLACED_TYPE_PARAMETER_CONSTRAINTS, "If a type parameter has multiple constraints, they all need to be placed in the 'where' clause");
 
+        MultiRenderer<VarianceConflictDiagnosticData> varianceConflictDataRenderer = new MultiRenderer<VarianceConflictDiagnosticData>() {
+            @NotNull
+            @Override
+            public String[] render(@NotNull VarianceConflictDiagnosticData data) {
+                RenderingContext context =
+                        of(data.getTypeParameter(), data.getTypeParameter().getVariance(), data.getOccurrencePosition(),
+                           data.getContainingType());
+                return new String[] {
+                        NAME.render(data.getTypeParameter(), context),
+                        RENDER_POSITION_VARIANCE.render(data.getTypeParameter().getVariance(), context),
+                        RENDER_POSITION_VARIANCE.render(data.getOccurrencePosition(), context),
+                        RENDER_TYPE.render(data.getContainingType(), context)
+                };
+            }
+        };
         MAP.put(TYPE_VARIANCE_CONFLICT, "Type parameter {0} is declared as ''{1}'' but occurs in ''{2}'' position in type {3}",
-                new MultiRenderer<VarianceConflictDiagnosticData>() {
-                    @NotNull
-                    @Override
-                    public String[] render(@NotNull VarianceConflictDiagnosticData data) {
-                        RenderingContext context =
-                                of(data.getTypeParameter(), data.getTypeParameter().getVariance(), data.getOccurrencePosition(), data.getContainingType());
-                        return new String[] {
-                            NAME.render(data.getTypeParameter(), context),
-                            RENDER_POSITION_VARIANCE.render(data.getTypeParameter().getVariance(), context),
-                            RENDER_POSITION_VARIANCE.render(data.getOccurrencePosition(), context),
-                            RENDER_TYPE.render(data.getContainingType(), context)
-                        };
-                    }
-                });
+                varianceConflictDataRenderer);
+        MAP.put(TYPE_VARIANCE_CONFLICT_IN_EXPANDED_TYPE, "Type parameter {0} is declared as ''{1}'' but occurs in ''{2}'' position in abbreviated type {3}",
+                varianceConflictDataRenderer);
 
         MAP.put(FINITE_BOUNDS_VIOLATION, "This type parameter violates the Finite Bound Restriction");
         MAP.put(FINITE_BOUNDS_VIOLATION_IN_JAVA, "Violation of Finite Bound Restriction for {0}", STRING);
@@ -608,6 +641,10 @@ public class DefaultErrorMessages {
                 SHORT_NAMES_IN_TYPES, SHORT_NAMES_IN_TYPES);
         MAP.put(VAR_OVERRIDDEN_BY_VAL_BY_DELEGATION, "Val-property ''{0}'' implicitly overrides a var-property ''{1}'' by delegation",
                 SHORT_NAMES_IN_TYPES, SHORT_NAMES_IN_TYPES);
+        MAP.put(RETURN_TYPE_MISMATCH_BY_DELEGATION, "Type of ''{0}'' is not a subtype of overridden by delegation ''{1}''",
+                SHORT_NAMES_IN_TYPES, SHORT_NAMES_IN_TYPES);
+        MAP.put(PROPERTY_TYPE_MISMATCH_BY_DELEGATION, "Type of property ''{0}'' is not a subtype of overridden by delegation ''{1}''",
+                SHORT_NAMES_IN_TYPES, SHORT_NAMES_IN_TYPES);
 
         MAP.put(VAR_OVERRIDDEN_BY_VAL, "Var-property {0} cannot be overridden by val-property {1}", FQ_NAMES_IN_TYPES, FQ_NAMES_IN_TYPES);
 
@@ -622,8 +659,7 @@ public class DefaultErrorMessages {
         MAP.put(MANY_INTERFACES_MEMBER_NOT_IMPLEMENTED, "{0} must override {1} because it inherits multiple interface methods of it",
                 RENDER_CLASS_OR_OBJECT, FQ_NAMES_IN_TYPES);
 
-        MAP.put(CONFLICTING_OVERLOADS, "''{0}'' conflicts with another declaration in {1}", COMPACT_WITH_MODIFIERS,
-                DECLARATION_NAME_WITH_KIND);
+        MAP.put(CONFLICTING_OVERLOADS, "Conflicting overloads: {0}", commaSeparated(FQ_NAMES_IN_TYPES));
 
         MAP.put(FUNCTION_EXPECTED, "Expression ''{0}''{1} cannot be invoked as a function. " +
                                    "The function ''" + OperatorNameConventions.INVOKE.asString() + "()'' is not found",
@@ -676,6 +712,11 @@ public class DefaultErrorMessages {
 
         String wrongNumberOfTypeArguments = "{0,choice,0#No type arguments|1#One type argument|1<{0,number,integer} type arguments} expected";
         MAP.put(WRONG_NUMBER_OF_TYPE_ARGUMENTS, wrongNumberOfTypeArguments + " for {1}", null, WITHOUT_MODIFIERS);
+
+        MAP.put(
+                OUTER_CLASS_ARGUMENTS_REQUIRED,
+                "Type arguments should be specified for an outer {0}. Use full class name to specify them",
+                RENDER_CLASS_OR_OBJECT_NAME);
         MAP.put(NO_TYPE_ARGUMENTS_ON_RHS, wrongNumberOfTypeArguments + ". Use ''{1}'' if you don''t want to pass type arguments", null, STRING);
         MAP.put(TYPE_ARGUMENTS_NOT_ALLOWED, "Type arguments are not allowed {0}", STRING);
 
@@ -699,6 +740,10 @@ public class DefaultErrorMessages {
         MAP.put(ANNOTATION_PARAMETER_MUST_BE_ENUM_CONST, "An enum annotation parameter must be a enum constant");
         MAP.put(ANNOTATION_PARAMETER_MUST_BE_KCLASS_LITERAL, "An annotation parameter must be a class literal (T::class)");
         MAP.put(ANNOTATION_PARAMETER_DEFAULT_VALUE_MUST_BE_CONSTANT, "Default value of annotation parameter must be a compile-time constant");
+
+        MAP.put(ANNOTATIONS_ON_BLOCK_LEVEL_EXPRESSION_ON_THE_SAME_LINE,
+                "Annotations on block-level expressions are being parsed differently depending on presence of a new line after them. " +
+                "Use new line if whole block-level expression must be annotated or wrap annotated expression in parentheses");
 
         MAP.put(CONST_VAL_NOT_TOP_LEVEL_OR_OBJECT, "Const 'val' are only allowed on top level or in objects");
         MAP.put(CONST_VAL_WITH_DELEGATE, "Const 'val' should not have a delegate");

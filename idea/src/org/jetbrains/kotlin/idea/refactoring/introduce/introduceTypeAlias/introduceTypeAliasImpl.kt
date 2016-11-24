@@ -26,6 +26,8 @@ import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptor
 import org.jetbrains.kotlin.idea.core.CollectingNameValidator
 import org.jetbrains.kotlin.idea.core.KotlinNameSuggester
 import org.jetbrains.kotlin.idea.core.compareDescriptors
+import org.jetbrains.kotlin.idea.core.quoteIfNeeded
+import org.jetbrains.kotlin.idea.refactoring.introduce.insertDeclaration
 import org.jetbrains.kotlin.idea.util.getResolutionScope
 import org.jetbrains.kotlin.idea.util.psi.patternMatching.KotlinPsiRange
 import org.jetbrains.kotlin.idea.util.psi.patternMatching.KotlinPsiUnifier
@@ -149,7 +151,7 @@ fun IntroduceTypeAliasDescriptor.validate(): IntroduceTypeAliasDescriptorWithCon
 }
 
 fun findDuplicates(typeAlias: KtTypeAlias): Map<KotlinPsiRange, () -> Unit> {
-    val aliasName = typeAlias.name ?: return emptyMap()
+    val aliasName = typeAlias.name?.quoteIfNeeded() ?: return emptyMap()
     val typeAliasDescriptor = typeAlias.resolveToDescriptor() as TypeAliasDescriptor
 
     val unifierParameters = typeAliasDescriptor.declaredTypeParameters.map { UnifierParameter(it, null) }
@@ -219,22 +221,6 @@ fun IntroduceTypeAliasDescriptor.generateTypeAlias(previewOnly: Boolean = false)
         }
     }
 
-    fun insertDeclaration(): KtTypeAlias {
-        val targetParent = originalData.targetSibling.parent
-
-        val anchorCandidates = SmartList<PsiElement>()
-        anchorCandidates.add(targetSibling)
-        if (targetSibling is KtEnumEntry) {
-            anchorCandidates.add(targetSibling.siblings().last { it is KtEnumEntry })
-        }
-
-        val anchor = anchorCandidates.minBy { it.startOffset }!!.parentsWithSelf.first { it.parent == targetParent }
-        val targetContainer = anchor.parent!!
-        return (targetContainer.addBefore(typeAlias, anchor) as KtTypeAlias).apply {
-            targetContainer.addBefore(psiFactory.createWhiteSpace("\n\n"), anchor)
-        }
-    }
-
     return if (previewOnly) {
         introduceTypeParameters()
         typeAlias
@@ -242,6 +228,6 @@ fun IntroduceTypeAliasDescriptor.generateTypeAlias(previewOnly: Boolean = false)
     else {
         replaceUsage()
         introduceTypeParameters()
-        insertDeclaration()
+        insertDeclaration(typeAlias, originalData.targetSibling)
     }
 }

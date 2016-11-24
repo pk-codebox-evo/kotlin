@@ -17,6 +17,7 @@
 package org.jetbrains.kotlin.types.expressions;
 
 import com.intellij.psi.tree.IElementType;
+import kotlin.jvm.functions.Function1;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns;
@@ -29,8 +30,6 @@ import org.jetbrains.kotlin.resolve.*;
 import org.jetbrains.kotlin.resolve.calls.context.ContextDependency;
 import org.jetbrains.kotlin.resolve.calls.context.ResolutionContext;
 import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowInfo;
-import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowValue;
-import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowValueFactory;
 import org.jetbrains.kotlin.resolve.scopes.LexicalScope;
 import org.jetbrains.kotlin.resolve.scopes.LexicalScopeKind;
 import org.jetbrains.kotlin.resolve.scopes.LexicalWritableScope;
@@ -92,9 +91,31 @@ public class ExpressionTypingServices {
             @NotNull BindingTrace trace,
             boolean isStatement
     ) {
+        return getTypeInfo(scope, expression, expectedType, dataFlowInfo, trace, isStatement, expression, ContextDependency.INDEPENDENT);
+    }
+
+    @NotNull
+    public KotlinTypeInfo getTypeInfo(
+            @NotNull LexicalScope scope,
+            @NotNull final KtExpression expression,
+            @NotNull KotlinType expectedType,
+            @NotNull DataFlowInfo dataFlowInfo,
+            @NotNull BindingTrace trace,
+            boolean isStatement,
+            @NotNull final KtExpression contextExpression,
+            @NotNull ContextDependency contextDependency
+    ) {
         ExpressionTypingContext context = ExpressionTypingContext.newContext(
-                trace, scope, dataFlowInfo, expectedType
+                trace, scope, dataFlowInfo, expectedType, contextDependency, statementFilter
         );
+        if (contextExpression != expression) {
+            context = context.replaceExpressionContextProvider(new Function1<KtExpression, KtExpression>() {
+                @Override
+                public KtExpression invoke(KtExpression arg) {
+                    return arg == expression ? contextExpression : null;
+                }
+            });
+        }
         return expressionTypingFacade.getTypeInfo(expression, context, isStatement);
     }
 
@@ -165,7 +186,7 @@ public class ExpressionTypingServices {
         DeclarationDescriptor containingDescriptor = context.scope.getOwnerDescriptor();
         TraceBasedLocalRedeclarationChecker redeclarationChecker
                 = new TraceBasedLocalRedeclarationChecker(context.trace, expressionTypingComponents.overloadChecker);
-        LexicalWritableScope scope = new LexicalWritableScope(context.scope, containingDescriptor, false, null, redeclarationChecker,
+        LexicalWritableScope scope = new LexicalWritableScope(context.scope, containingDescriptor, false, redeclarationChecker,
                                                               LexicalScopeKind.CODE_BLOCK);
 
         KotlinTypeInfo r;
@@ -246,13 +267,6 @@ public class ExpressionTypingServices {
                 result = getTypeOfLastExpressionInBlock(
                         statementExpression, newContext.replaceExpectedType(context.expectedType), coercionStrategyForLastExpression,
                         blockLevelVisitor);
-                if (result.getType() != null && statementExpression.getParent() instanceof KtBlockExpression) {
-                    DataFlowValue lastExpressionValue = DataFlowValueFactory.createDataFlowValue(
-                            statementExpression, result.getType(), context);
-                    DataFlowValue blockExpressionValue = DataFlowValueFactory.createDataFlowValue(
-                            (KtBlockExpression) statementExpression.getParent(), result.getType(), context);
-                    result = result.replaceDataFlowInfo(result.getDataFlowInfo().assign(blockExpressionValue, lastExpressionValue));
-                }
             }
             else {
                 result = blockLevelVisitor

@@ -1,78 +1,74 @@
+/*
+ * Copyright 2010-2016 JetBrains s.r.o.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.jetbrains.kotlin.gradle.plugin
 
 import org.gradle.api.Plugin
 import org.gradle.api.Project
-import org.gradle.api.initialization.dsl.ScriptHandler
+import org.gradle.api.internal.file.FileResolver
 import org.gradle.api.logging.Logger
 import org.gradle.api.logging.Logging
+import org.jetbrains.kotlin.gradle.internal.KotlinSourceSetProviderImpl
 import org.jetbrains.kotlin.gradle.tasks.AndroidTasksProvider
 import org.jetbrains.kotlin.gradle.tasks.KotlinTasksProvider
+import java.io.FileNotFoundException
+import java.util.*
+import javax.inject.Inject
 
-// TODO: simplify: the complicated structure is a leftover from dynamic loading of plugin core, could be significantly simplified now
-
-abstract class KotlinBasePluginWrapper: Plugin<Project> {
-
-    val log = Logging.getLogger(this.javaClass)
+abstract class KotlinBasePluginWrapper(protected val fileResolver: FileResolver): Plugin<Project> {
+    private val log = Logging.getLogger(this.javaClass)
+    protected val kotlinPluginVersion = loadKotlinVersionFromResource(log)
 
     override fun apply(project: Project) {
-        val sourceBuildScript = findSourceBuildScript(project)
-        if (sourceBuildScript == null) {
-            log.error("Failed to determine source cofiguration of kotlin plugin. Can not download core. Please verify that this or any parent project " +
-                    "contains 'kotlin-gradle-plugin' in buildscript's classpath configuration.")
-            return
-        }
         // TODO: consider only set if if daemon or parallel compilation are enabled, though this way it should be safe too
         System.setProperty(org.jetbrains.kotlin.cli.common.KOTLIN_COMPILER_ENVIRONMENT_KEEPALIVE_PROPERTY, "true")
+        val kotlinGradleBuildServices = KotlinGradleBuildServices.getInstance(project.gradle)
 
-        val kotlinPluginVersion = loadKotlinVersionFromResource(log)
-        project.extensions.extraProperties?.set("kotlin.gradle.plugin.version", kotlinPluginVersion)
-
-        val plugin = getPlugin(this.javaClass.classLoader, sourceBuildScript)
+        val plugin = getPlugin(kotlinGradleBuildServices)
         plugin.apply(project)
-
-        val cleanUpBuildListener = CleanUpBuildListener(this.javaClass.classLoader, project)
-        cleanUpBuildListener.buildStarted()
-        project.gradle.addBuildListener(cleanUpBuildListener)
     }
 
-    protected abstract fun getPlugin(pluginClassLoader: ClassLoader, scriptHandler: ScriptHandler): Plugin<Project>
-
-    private fun findSourceBuildScript(project: Project): ScriptHandler? {
-        log.kotlinDebug("Looking for proper script handler")
-        var curProject = project
-        while (curProject != curProject.parent) {
-            log.kotlinDebug("Looking in project $project")
-            val scriptHandler = curProject.buildscript
-            val found = scriptHandler.configurations.findByName("classpath")?.firstOrNull { it.name.contains("kotlin-gradle-plugin") } != null
-            if (found) {
-                log.kotlinDebug("Found! returning...")
-                return scriptHandler
-            }
-            log.kotlinDebug("not found, switching to parent")
-            curProject = curProject.parent ?: break
-        }
-        return null
-    }
+    internal abstract fun getPlugin(kotlinGradleBuildServices: KotlinGradleBuildServices): Plugin<Project>
 }
 
-open class KotlinPluginWrapper: KotlinBasePluginWrapper() {
-    override fun getPlugin(pluginClassLoader: ClassLoader, scriptHandler: ScriptHandler) = KotlinPlugin(scriptHandler, KotlinTasksProvider(pluginClassLoader))
+open class KotlinPluginWrapper @Inject constructor(fileResolver: FileResolver): KotlinBasePluginWrapper(fileResolver) {
+    override fun getPlugin(kotlinGradleBuildServices: KotlinGradleBuildServices) =
+            KotlinPlugin(KotlinTasksProvider(), KotlinSourceSetProviderImpl(fileResolver), kotlinPluginVersion, kotlinGradleBuildServices)
 }
 
-open class KotlinAndroidPluginWrapper : KotlinBasePluginWrapper() {
-    override fun getPlugin(pluginClassLoader: ClassLoader, scriptHandler: ScriptHandler) = KotlinAndroidPlugin(scriptHandler, AndroidTasksProvider(pluginClassLoader))
+open class KotlinAndroidPluginWrapper @Inject constructor(fileResolver: FileResolver): KotlinBasePluginWrapper(fileResolver) {
+    override fun getPlugin(kotlinGradleBuildServices: KotlinGradleBuildServices) =
+            KotlinAndroidPlugin(AndroidTasksProvider(), KotlinSourceSetProviderImpl(fileResolver), kotlinPluginVersion, kotlinGradleBuildServices)
 }
 
-open class Kotlin2JsPluginWrapper : KotlinBasePluginWrapper() {
-    override fun getPlugin(pluginClassLoader: ClassLoader, scriptHandler: ScriptHandler) = Kotlin2JsPlugin(scriptHandler, KotlinTasksProvider(pluginClassLoader))
+open class Kotlin2JsPluginWrapper @Inject constructor(fileResolver: FileResolver): KotlinBasePluginWrapper(fileResolver) {
+    override fun getPlugin(kotlinGradleBuildServices: KotlinGradleBuildServices) =
+            Kotlin2JsPlugin(KotlinTasksProvider(), KotlinSourceSetProviderImpl(fileResolver), kotlinPluginVersion)
 }
 
-fun Logger.kotlinDebug(message: String) {
-    this.debug("[KOTLIN] $message")
-}
+private fun Any.loadKotlinVersionFromResource(log: Logger): String {
+    log.kotlinDebug("Loading version information")
+    val props = Properties()
+    val propFileName = "project.properties"
+    val inputStream = javaClass.classLoader!!.getResourceAsStream(propFileName) ?:
+            throw FileNotFoundException("property file '$propFileName' not found in the classpath")
 
-inline fun Logger.kotlinDebug(message: () -> String) {
-    if (isDebugEnabled) {
-        kotlinDebug(message())
-    }
+    props.load(inputStream)
+
+    val projectVersion = props["project.version"] as String
+    log.kotlinDebug("Found project version [$projectVersion]")
+    return projectVersion
 }

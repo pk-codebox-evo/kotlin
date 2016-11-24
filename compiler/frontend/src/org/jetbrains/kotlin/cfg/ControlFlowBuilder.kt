@@ -39,14 +39,17 @@ interface ControlFlowBuilder {
 
     fun exitBlockScope(block: KtElement)
 
-    fun getExitPoint(labelElement: KtElement): Label?
-    fun getConditionEntryPoint(labelElement: KtElement): Label
+    fun getSubroutineExitPoint(labelElement: KtElement): Label?
+    fun getLoopConditionEntryPoint(loop: KtLoopExpression): Label?
+    fun getLoopExitPoint(loop: KtLoopExpression): Label?
 
     // Declarations
     fun declareParameter(parameter: KtParameter)
 
     fun declareVariable(property: KtVariableDeclaration)
     fun declareFunction(subroutine: KtElement, pseudocode: Pseudocode)
+
+    fun declareEntryOrObject(entryOrObject: KtClassOrObject)
 
     // Labels
     fun createUnboundLabel(): Label
@@ -128,6 +131,8 @@ interface ControlFlowBuilder {
             expression: KtExpression,
             operation: PredefinedOperation,
             inputValues: List<PseudoValue>): OperationInstruction
+
+    fun read(element: KtElement, target: AccessTarget, receiverValues: Map<PseudoValue, ReceiverValue>): ReadValueInstruction
 
     fun write(
             assignment: KtElement,

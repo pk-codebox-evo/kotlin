@@ -29,8 +29,8 @@ import java.lang.annotation.Target
 
 class AnnotationConverter(private val converter: Converter) {
     private val annotationsToRemove: Set<String> = (NullableNotNullManager.getInstance(converter.project).notNulls
-            + NullableNotNullManager.getInstance(converter.project).nullables
-            + listOf(CommonClassNames.JAVA_LANG_OVERRIDE, ElementType::class.java.name)).toSet()
+                                                    + NullableNotNullManager.getInstance(converter.project).nullables
+                                                    + listOf(CommonClassNames.JAVA_LANG_OVERRIDE, ElementType::class.java.name, SuppressWarnings::class.java.name)).toSet()
 
     fun isImportNotRequired(fqName: FqName): Boolean {
         val nameAsString = fqName.asString()
@@ -86,7 +86,7 @@ class AnnotationConverter(private val converter: Converter) {
     private fun convertModifiersToAnnotations(owner: PsiModifierListOwner): Annotations {
         val list = MODIFIER_TO_ANNOTATION
                 .filter { owner.hasModifierProperty(it.first) }
-                .map { Annotation(Identifier(it.second).assignNoPrototype(), listOf(), newLineAfter = false).assignNoPrototype() }
+                .map { Annotation(Identifier.withNoPrototype(it.second), listOf(), newLineAfter = false).assignNoPrototype() }
         return Annotations(list).assignNoPrototype()
     }
 
@@ -110,7 +110,7 @@ class AnnotationConverter(private val converter: Converter) {
         val qualifiedName = annotation.qualifiedName
         if (qualifiedName == CommonClassNames.JAVA_LANG_DEPRECATED && annotation.parameterList.attributes.isEmpty()) {
             val deferredExpression = converter.deferredElement<Expression> { LiteralExpression("\"\"").assignNoPrototype() }
-            return Identifier("Deprecated").assignNoPrototype() to listOf(null to deferredExpression) //TODO: insert comment
+            return Identifier.withNoPrototype("Deprecated") to listOf(null to deferredExpression) //TODO: insert comment
         }
         if (qualifiedName == CommonClassNames.JAVA_LANG_ANNOTATION_TARGET) {
             val attributes = annotation.parameterList.attributes
@@ -131,11 +131,12 @@ class AnnotationConverter(private val converter: Converter) {
             val deferredExpressionList = arguments.map {
                 val name = it.name
                 null to converter.deferredElement<Expression> {
-                    QualifiedExpression(Identifier("AnnotationTarget", false).assignNoPrototype(),
-                                        Identifier(name, false).assignNoPrototype())
+                    QualifiedExpression(Identifier.withNoPrototype("AnnotationTarget", isNullable = false),
+                                        Identifier.withNoPrototype(name, isNullable = false),
+                                        null)
                 }
             }
-            return Identifier("Target").assignNoPrototype() to deferredExpressionList
+            return Identifier.withNoPrototype("Target") to deferredExpressionList
         }
 
         val nameRef = annotation.nameReferenceElement
@@ -146,7 +147,7 @@ class AnnotationConverter(private val converter: Converter) {
             val method = annotationClass?.findMethodsByName(parameterName, false)?.firstOrNull()
             val expectedType = method?.returnType
 
-            val attrName = it.name?.let { Identifier(it).assignNoPrototype() }
+            val attrName = it.name?.let { Identifier.withNoPrototype(it) }
             val value = it.value
 
             val isVarArg = parameterName == "value" /* converted to vararg in Kotlin */
@@ -159,19 +160,20 @@ class AnnotationConverter(private val converter: Converter) {
 
     fun convertAnnotationMethodDefault(method: PsiAnnotationMethod): DeferredElement<Expression>? {
         val value = method.defaultValue ?: return null
-        val convertAttributeValue = convertAttributeValue(value, method.returnType, false, false)
-        if (method.returnType is PsiArrayType && value !is PsiArrayInitializerMemberValue) {
+        val returnType = method.returnType
+        if (returnType is PsiArrayType && value !is PsiArrayInitializerMemberValue) {
             return converter.deferredElement { codeConverter ->
-                val convertedType = converter.typeConverter.convertType(method.returnType) as ArrayType
+                val convertedType = converter.typeConverter.convertType(returnType) as ArrayType
+                val convertAttributeValue = convertAttributeValue(value, returnType.componentType, false, false)
                 createArrayExpression(codeConverter, convertAttributeValue.toList(), convertedType, false)
             }
         }
-        return converter.deferredElement(convertAttributeValue.single())
+        return converter.deferredElement(convertAttributeValue(value, returnType, false, false).single())
     }
 
     private fun convertAttributeValue(value: PsiAnnotationMemberValue?, expectedType: PsiType?, isVararg: Boolean, isUnnamed: Boolean): List<(CodeConverter) -> Expression> {
         return when (value) {
-            is PsiExpression -> listOf({ codeConverter -> convertExpressionValue(codeConverter, value, expectedType) })
+            is PsiExpression -> listOf({ codeConverter -> convertExpressionValue(codeConverter, value, expectedType, isVararg) })
 
             is PsiArrayInitializerMemberValue -> {
                 val componentType = (expectedType as? PsiArrayType)?.componentType
@@ -180,7 +182,10 @@ class AnnotationConverter(private val converter: Converter) {
                     componentGenerators
                 }
                 else {
-                    listOf({ codeConverter -> convertArrayInitializerValue(codeConverter, value, componentGenerators, expectedType, isVararg) })
+                    listOf({ codeConverter ->
+                               convertArrayInitializerValue(codeConverter, value.text, componentGenerators, expectedType, isVararg)
+                                       .assignPrototype(value)
+                           })
                 }
             }
 
@@ -194,30 +199,39 @@ class AnnotationConverter(private val converter: Converter) {
         }
     }
 
-    private fun convertExpressionValue(codeConverter: CodeConverter, value: PsiExpression, expectedType: PsiType?): Expression {
+    private fun convertExpressionValue(codeConverter: CodeConverter, value: PsiExpression, expectedType: PsiType?, isVararg: Boolean): Expression {
         val expression = if (value is PsiClassObjectAccessExpression) {
             val type = converter.convertTypeElement(value.operand, Nullability.NotNull)
             ClassLiteralExpression(type)
         }
         else {
             codeConverter.convertExpression(value, expectedType)
+        }.assignPrototype(value)
+
+        if (expectedType is PsiArrayType && !isVararg) {
+            return convertArrayInitializerValue(codeConverter,
+                                                value.text,
+                                                listOf({ codeConverter -> expression }),
+                                                expectedType,
+                                                false
+            ).assignPrototype(value)
         }
-        return expression.assignPrototype(value)
+        return expression
     }
 
     private fun convertArrayInitializerValue(
             codeConverter: CodeConverter,
-            value: PsiArrayInitializerMemberValue,
+            valueText: String,
             componentGenerators: List<(CodeConverter) -> Expression>,
             expectedType: PsiType?,
             isVararg: Boolean
     ): Expression {
         val expectedTypeConverted = converter.typeConverter.convertType(expectedType)
         return if (expectedTypeConverted is ArrayType) {
-            createArrayExpression(codeConverter, componentGenerators, expectedTypeConverted, isVararg).assignPrototype(value)
+            createArrayExpression(codeConverter, componentGenerators, expectedTypeConverted, isVararg)
         }
         else {
-            DummyStringExpression(value.text!!).assignPrototype(value)
+            DummyStringExpression(valueText)
         }
     }
 

@@ -27,7 +27,6 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Key
 import com.intellij.psi.*
-import com.intellij.psi.codeStyle.CodeStyleManager
 import com.intellij.psi.util.PropertyUtil
 import com.intellij.psi.util.PsiTypesUtil
 import com.intellij.spring.CommonSpringModel
@@ -50,8 +49,8 @@ import com.intellij.util.xml.DomElement
 import com.intellij.util.xml.DomUtil
 import org.jetbrains.annotations.NotNull
 import org.jetbrains.annotations.TestOnly
-import org.jetbrains.kotlin.asJava.KtLightClass
-import org.jetbrains.kotlin.asJava.KtLightMethod
+import org.jetbrains.kotlin.asJava.classes.KtLightClass
+import org.jetbrains.kotlin.asJava.elements.KtLightMethod
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.*
@@ -59,11 +58,13 @@ import org.jetbrains.kotlin.idea.completion.BasicLookupElementFactory
 import org.jetbrains.kotlin.idea.completion.InsertHandlerProvider
 import org.jetbrains.kotlin.idea.core.KotlinNameSuggester
 import org.jetbrains.kotlin.idea.core.NewDeclarationNameValidator
+import org.jetbrains.kotlin.idea.core.ShortenReferences
 import org.jetbrains.kotlin.idea.core.getOrCreateCompanionObject
 import org.jetbrains.kotlin.idea.editor.BatchTemplateRunner
+import org.jetbrains.kotlin.idea.spring.beanClass
+import org.jetbrains.kotlin.idea.spring.effectiveBeanClasses
 import org.jetbrains.kotlin.idea.util.CallType
 import org.jetbrains.kotlin.idea.util.IdeDescriptorRenderers
-import org.jetbrains.kotlin.idea.core.ShortenReferences
 import org.jetbrains.kotlin.load.java.propertyNameBySetMethodName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.*
@@ -133,7 +134,7 @@ private fun SpringBean.getFactoryFunctionName(factoryBeanClass: KtClass): String
     factoryMethod.stringValue?.let { if (!it.isBlank()) return it }
 
     val existingNames = factoryBeanClass.declarations.mapNotNull { if (it is KtFunction || it is KtClassOrObject) it.name else null }
-    return KotlinNameSuggester.suggestNameByName("create${beanClass!!.name}") { it !in existingNames }
+    return KotlinNameSuggester.suggestNameByName("create${beanClass()!!.name}") { it !in existingNames }
 }
 
 internal val PsiClass.defaultTypeText: String
@@ -302,8 +303,8 @@ private fun createSetterDependency(
         injectionKind: SpringDependencyInjectionKind
 ): BatchTemplateRunner? {
     val templatesHolder = BatchTemplateRunner(currentBean.manager.project)
-    val currentBeanClass = currentBean.beanClass as? KtLightClass ?: return null
-    val candidateBeanClasses = dependency.effectiveBeanType.ifEmpty { return null }
+    val currentBeanClass = currentBean.beanClass() as? KtLightClass ?: return null
+    val candidateBeanClasses = dependency.effectiveBeanClasses().ifEmpty { return null }
     val setter = getOrCreateSetter(dependency, currentBeanClass, candidateBeanClasses, templatesHolder, injectionKind) ?: return null
     currentBean.addProperty().apply {
         name.ensureXmlElementExists()
@@ -356,7 +357,7 @@ private fun createConstructorWithTemplate(
         dependency: SpringBeanPointer<CommonSpringBean>,
         templatesHolder: BatchTemplateRunner
 ) {
-    val beanClass = currentBean.beanClass as? KtLightClass ?: return
+    val beanClass = currentBean.beanClass() as? KtLightClass ?: return
     val ktBeanClass = beanClass.kotlinOrigin as? KtClass ?: return
 
     try {
@@ -416,8 +417,8 @@ private fun createConstructorDependency(
         dependency: SpringBeanPointer<CommonSpringBean>
 ): BatchTemplateRunner? {
     val templatesHolder = BatchTemplateRunner(currentBean.manager.project)
-    val currentBeanClass = currentBean.beanClass as? KtLightClass ?: return null
-    val candidateBeanClasses = dependency.effectiveBeanType.ifEmpty { return null }
+    val currentBeanClass = currentBean.beanClass() as? KtLightClass ?: return null
+    val candidateBeanClasses = dependency.effectiveBeanClasses().ifEmpty { return null }
     var existedConstructor = findExistedConstructor(currentBean, currentBeanClass, candidateBeanClasses)
     if (existedConstructor == null) {
         if (!ensureFileWritable(currentBeanClass)) return null
@@ -486,7 +487,7 @@ fun generateDependenciesFor(
             .firstOrNull { acceptBean(it, false) }
             ?.let { springBean ->
                 if (!springBean.ensureFileWritable()) return emptyList()
-                if (springBean.beanClass == null) return emptyList()
+                if (springBean.beanClass() == null) return emptyList()
                 val dependencies = chooseDependentBeans(getCandidates(springBean, isSetter), project, isSetter)
                 return dependencies.mapNotNull { generateDependency(springBean, it, injectionKind) }
             }

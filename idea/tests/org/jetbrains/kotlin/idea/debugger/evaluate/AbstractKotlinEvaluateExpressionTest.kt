@@ -33,7 +33,6 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.io.FileUtil
-import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiExpression
 import com.intellij.xdebugger.impl.XDebugSessionImpl
 import com.intellij.xdebugger.impl.breakpoints.XExpressionImpl
@@ -135,6 +134,8 @@ abstract class AbstractKotlinEvaluateExpressionTest : KotlinDebuggerTestBase() {
         doOnBreakpoint {
             val exceptions = linkedMapOf<String, Throwable>()
             try {
+                createMarkers(fileText)
+
                 for ((expression, expected) in expressions) {
                     mayThrow(exceptions, expression) {
                         evaluate(expression, CodeFragmentKind.EXPRESSION, expected)
@@ -194,7 +195,7 @@ abstract class AbstractKotlinEvaluateExpressionTest : KotlinDebuggerTestBase() {
 
     private fun createWatchesView(): XWatchesViewImpl {
         val session = myDebuggerSession.xDebugSession  as XDebugSessionImpl
-        val watchesView = XWatchesViewImpl(session)
+        val watchesView = XWatchesViewImpl(session, false)
         Disposer.register(testRootDisposable, watchesView)
         session.addSessionListener(XDebugViewSessionListener(watchesView), testRootDisposable)
         return watchesView
@@ -286,7 +287,7 @@ abstract class AbstractKotlinEvaluateExpressionTest : KotlinDebuggerTestBase() {
                 node is XStackFrameNode -> (node.valueContainer as? JavaStackFrame)?.descriptor
                 node is XValueGroupNodeImpl -> (node.valueContainer as? JavaStaticGroup)?.descriptor
                 node is WatchesRootNode -> null
-                node is WatchMessageNode -> WatchItemDescriptor(project, TextWithImportsImpl(CodeFragmentKind.EXPRESSION, node.expression.expression))
+                node is WatchNodeImpl -> WatchItemDescriptor(project, TextWithImportsImpl(CodeFragmentKind.EXPRESSION, node.expression.expression))
                 node is MessageTreeNode -> MessageDescriptor(node.text.toString())
                 else -> MessageDescriptor(node.toString())
             }
@@ -428,30 +429,24 @@ abstract class AbstractKotlinEvaluateExpressionTest : KotlinDebuggerTestBase() {
         return mainFile.parentFile?.listFiles()?.filter { it.name.startsWith(mainFileName) && it.name != mainFileName } ?: Collections.emptyList()
     }
 
-    private fun createContextElement(context: SuspendContextImpl): PsiElement {
-        val contextElement = ContextUtil.getContextElement(debuggerContext)!!
-        Assert.assertTrue("KotlinCodeFragmentFactory should be accepted for context element otherwise default evaluator will be called. ContextElement = ${contextElement.text}",
-                          KotlinCodeFragmentFactory().isContextAccepted(contextElement))
+    private fun createMarkers(fileText: String) {
+        val labelsAsText = findLinesWithPrefixesRemoved(fileText, "// DEBUG_LABEL: ")
+        if (labelsAsText.isEmpty()) return
 
-        val labelsAsText = findLinesWithPrefixesRemoved(contextElement.containingFile.text, "// DEBUG_LABEL: ")
-        if (labelsAsText.isEmpty()) return contextElement
+        val markupMap = NodeDescriptorImpl.getMarkupMap(debugProcess)
 
-        val markupMap = hashMapOf<com.sun.jdi.Value, ValueMarkup>()
         for (labelAsText in labelsAsText) {
             val labelParts = labelAsText.split("=")
             assert(labelParts.size == 2) { "Wrong format for DEBUG_LABEL directive: // DEBUG_LABEL: {localVariableName} = {labelText}"}
             val localVariableName = labelParts[0].trim()
             val labelName = labelParts[1].trim()
-            val localVariable = context.frameProxy!!.visibleVariableByName(localVariableName)
+            val localVariable = debuggerContext.frameProxy!!.visibleVariableByName(localVariableName)
             assert(localVariable != null) { "Couldn't find localVariable for label: name = $localVariableName" }
-            val localVariableValue = context.frameProxy!!.getValue(localVariable)
+            val localVariableValue = debuggerContext.frameProxy!!.getValue(localVariable) as? ObjectReference
             assert(localVariableValue != null) { "Local variable $localVariableName should be an ObjectReference" }
             localVariableValue!!
-            markupMap.put(localVariableValue, ValueMarkup(labelName, null, labelName))
+            markupMap?.put(localVariableValue, ValueMarkup(labelName, null, labelName))
         }
-
-        val (text, labels) = KotlinCodeFragmentFactory.createCodeFragmentForLabeledObjects(contextElement.project, markupMap)
-        return KotlinCodeFragmentFactory().createWrappingContext(text, labels, KotlinCodeFragmentFactory.getContextElement(contextElement), project)!!
     }
 
     private fun SuspendContextImpl.evaluate(text: String, codeFragmentKind: CodeFragmentKind, expectedResult: String?) {
@@ -461,9 +456,12 @@ abstract class AbstractKotlinEvaluateExpressionTest : KotlinDebuggerTestBase() {
     private fun SuspendContextImpl.evaluate(item: TextWithImportsImpl, expectedResult: String?) {
         runReadAction {
             val sourcePosition = ContextUtil.getSourcePosition(this)
-            val contextElement = createContextElement(this)
 
-            contextElement.putCopyableUserData(KotlinCodeFragmentFactory.DEBUG_FRAME_FOR_TESTS, this@AbstractKotlinEvaluateExpressionTest.evaluationContext.frameProxy)
+            val contextElement = ContextUtil.getContextElement(debuggerContext)!!
+            Assert.assertTrue("KotlinCodeFragmentFactory should be accepted for context element otherwise default evaluator will be called. ContextElement = ${contextElement.text}",
+                              KotlinCodeFragmentFactory().isContextAccepted(contextElement))
+
+            contextElement.putCopyableUserData(KotlinCodeFragmentFactory.DEBUG_CONTEXT_FOR_TESTS, this@AbstractKotlinEvaluateExpressionTest.debuggerContext)
 
             try {
 

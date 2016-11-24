@@ -1,30 +1,29 @@
-(function(global) {
-    var modules = { kotlin: kotlin };
-    var module = { exports: {} };
 
-    function require(moduleId) {
-        return modules[moduleId];
+var emulatedModules = { kotlin: kotlin };
+var module = { exports: {} };
+
+function require(moduleId) {
+    return emulatedModules[moduleId];
+}
+
+function __beginModule__() {
+    module.exports = {};
+}
+
+function __endModule__(moduleId) {
+    emulatedModules[moduleId] = module.exports;
+}
+
+function define(moduleId, dependencies, body) {
+    var resolvedDependencies = [];
+    emulatedModules[moduleId] = {};
+    for (var i = 0; i < dependencies.length; ++i) {
+        var dependencyName = dependencies[i];
+        resolvedDependencies.push(emulatedModules[dependencyName === 'exports' ? moduleId : dependencyName]);
     }
-
-    function beginModule() {
-        module.exports = {};
+    var result = body.apply(null, resolvedDependencies);
+    if (result != null) {
+        emulatedModules[moduleId] = result;
     }
-
-    function endModule(moduleId) {
-        modules[moduleId] = module.exports;
-    }
-
-    function define(moduleId, dependencies, body) {
-        var resolvedDependencies = [];
-        for (var i = 0; i < dependencies.length; ++i) {
-            resolvedDependencies.push(modules[dependencies[i]]);
-        }
-        modules[moduleId] = body.apply(null, resolvedDependencies);
-    }
-
-    global.require = require;
-    global.define = define;
-    global.__beginModule__ = beginModule;
-    global.__endModule__ = endModule;
-    global.module = module;
-})(this);
+}
+define.amd = {};

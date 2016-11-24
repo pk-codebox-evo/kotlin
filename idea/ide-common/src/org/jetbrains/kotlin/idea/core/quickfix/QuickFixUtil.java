@@ -35,6 +35,7 @@ import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils;
 import org.jetbrains.kotlin.resolve.DescriptorUtils;
 import org.jetbrains.kotlin.resolve.calls.callUtil.CallUtilKt;
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall;
+import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode;
 import org.jetbrains.kotlin.types.DeferredType;
 import org.jetbrains.kotlin.types.KotlinType;
 import org.jetbrains.kotlin.types.checker.KotlinTypeChecker;
@@ -60,7 +61,7 @@ public class QuickFixUtil {
     public static KotlinType getDeclarationReturnType(KtNamedDeclaration declaration) {
         PsiFile file = declaration.getContainingFile();
         if (!(file instanceof KtFile)) return null;
-        DeclarationDescriptor descriptor = ResolutionUtils.resolveToDescriptor(declaration);
+        DeclarationDescriptor descriptor = ResolutionUtils.resolveToDescriptor(declaration, BodyResolveMode.FULL);
         if (!(descriptor instanceof CallableDescriptor)) return null;
         KotlinType type = ((CallableDescriptor) descriptor).getReturnType();
         if (type instanceof DeferredType) {
@@ -142,7 +143,7 @@ public class QuickFixUtil {
             return returnedElement instanceof KtExpression && canEvaluateTo((KtExpression) returnedElement, expression);
         }
         else {
-            if (functionOrGetter instanceof KtWithExpressionInitializer && canEvaluateTo(((KtWithExpressionInitializer) functionOrGetter).getInitializer(), expression)) {
+            if (functionOrGetter instanceof KtDeclarationWithInitializer && canEvaluateTo(((KtDeclarationWithInitializer) functionOrGetter).getInitializer(), expression)) {
                 return true;
             }
             KtReturnExpression returnExpression = PsiTreeUtil.getParentOfType(expression, KtReturnExpression.class);

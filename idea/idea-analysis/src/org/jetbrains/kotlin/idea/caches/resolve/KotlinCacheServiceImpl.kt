@@ -21,22 +21,28 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.projectRoots.Sdk
 import com.intellij.openapi.roots.ProjectRootModificationTracker
 import com.intellij.openapi.util.ModificationTracker
+import com.intellij.psi.PsiCodeFragment
+import com.intellij.psi.PsiFile
 import com.intellij.psi.util.CachedValue
 import com.intellij.psi.util.CachedValueProvider
 import com.intellij.psi.util.CachedValuesManager
 import com.intellij.psi.util.PsiModificationTracker
 import com.intellij.util.containers.SLRUCache
 import org.jetbrains.kotlin.analyzer.EmptyResolverForProject
-import org.jetbrains.kotlin.asJava.outOfBlockModificationCount
 import org.jetbrains.kotlin.builtins.DefaultBuiltIns
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.caches.resolve.KotlinCacheService
+import org.jetbrains.kotlin.config.LanguageFeature
+import org.jetbrains.kotlin.config.LanguageVersionSettings
+import org.jetbrains.kotlin.container.get
 import org.jetbrains.kotlin.container.getService
 import org.jetbrains.kotlin.context.GlobalContext
 import org.jetbrains.kotlin.context.GlobalContextImpl
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptor
+import org.jetbrains.kotlin.idea.core.script.ScriptDependenciesModificationTracker
 import org.jetbrains.kotlin.idea.project.AnalyzerFacadeProvider
 import org.jetbrains.kotlin.idea.project.TargetPlatformDetector
+import org.jetbrains.kotlin.idea.project.outOfBlockModificationCount
 import org.jetbrains.kotlin.idea.resolve.ResolutionFacade
 import org.jetbrains.kotlin.idea.util.ProjectRootsUtil
 import org.jetbrains.kotlin.js.resolve.JsPlatform
@@ -47,8 +53,11 @@ import org.jetbrains.kotlin.resolve.TargetPlatform
 import org.jetbrains.kotlin.resolve.diagnostics.KotlinSuppressCache
 import org.jetbrains.kotlin.resolve.jvm.platform.JvmPlatform
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
+import org.jetbrains.kotlin.script.KotlinScriptExternalDependencies
 import org.jetbrains.kotlin.utils.addToStdlib.firstIsInstanceOrNull
 import org.jetbrains.kotlin.utils.addToStdlib.sumByLong
+import java.lang.AssertionError
+import java.lang.IllegalStateException
 
 internal val LOG = Logger.getInstance(KotlinCacheService::class.java)
 
@@ -66,26 +75,47 @@ class KotlinCacheServiceImpl(val project: Project) : KotlinCacheService {
                 }
             }
 
-    // TODO: soft reference?
-    // TODO: cache by script definition?
-    private val facadeForScriptDependencies by lazy {
-        val globalContext = GlobalContext()
-        ProjectResolutionFacade(
+
+    private val facadesForScriptDependencies: SLRUCache<KotlinScriptExternalDependencies, ProjectResolutionFacade> =
+            object : SLRUCache<KotlinScriptExternalDependencies, ProjectResolutionFacade>(2, 3) {
+                override fun createValue(key: KotlinScriptExternalDependencies?): ProjectResolutionFacade {
+                    return createFacadeForScriptDependencies(ScriptDependenciesModuleInfo(project, key))
+                }
+            }
+
+    private fun getFacadeForScriptDependencies(dependencies: KotlinScriptExternalDependencies?) = synchronized(facadesForScriptDependencies) {
+        facadesForScriptDependencies.get(dependencies)
+    }
+
+    private fun createFacadeForScriptDependencies(
+            dependenciesModuleInfo: ScriptDependenciesModuleInfo,
+            syntheticFiles: Collection<KtFile> = listOf()
+    ): ProjectResolutionFacade {
+        val sdk = findJdk(dependenciesModuleInfo.dependencies, project)
+        val platform = JvmPlatform // TODO: Js scripts?
+        val sdkFacade = GlobalFacade(platform, sdk).facadeForSdk
+        val globalContext = sdkFacade.globalContext.contextWithNewLockAndCompositeExceptionTracker()
+        return ProjectResolutionFacade(
                 "facadeForScriptDependencies",
                 project, globalContext,
                 globalResolveSessionProvider(
                         "dependencies of scripts",
-                        JvmPlatform, // TODO: Js scripts?
-                        null, // TODO: provide sdk via dependencies
-                        allModules = listOf(ScriptDependenciesModuleInfo(project)),
+                        platform,
+                        sdk,
+                        reuseDataFrom = sdkFacade,
+                        allModules = dependenciesModuleInfo.dependencies(),
+                        //TODO: provide correct trackers
                         dependencies = listOf(
-                                LibraryModificationTracker.getInstance(project), //TODO: provide correct trackers
-                                ProjectRootModificationTracker.getInstance(project)
+                                LibraryModificationTracker.getInstance(project),
+                                ProjectRootModificationTracker.getInstance(project),
+                                ScriptDependenciesModificationTracker.getInstance(project)
                         ),
-                        moduleFilter = { true }
+                        moduleFilter = { it == dependenciesModuleInfo },
+                        syntheticFiles = syntheticFiles
                 )
         )
     }
+
 
     private inner class GlobalFacade(platform: TargetPlatform, sdk: Sdk?) {
         private val sdkContext = GlobalContext()
@@ -140,6 +170,10 @@ class KotlinCacheServiceImpl(val project: Project) : KotlinCacheService {
         return globalFacade(platform, ideaModuleInfo.sdk).resolverForModuleInfo(ideaModuleInfo).componentProvider.getService(serviceClass)
     }
 
+    fun <T : Any> tryGetProjectService(platform: TargetPlatform, ideaModuleInfo: IdeaModuleInfo, serviceClass: Class<T>): T? {
+        return globalFacade(platform, ideaModuleInfo.sdk).tryGetResolverForModuleInfo(ideaModuleInfo)?.componentProvider?.getService(serviceClass)
+    }
+
     private fun globalFacade(platform: TargetPlatform, sdk: Sdk?) =
             getOrBuildGlobalFacade(platform, sdk).facadeForModules
 
@@ -192,15 +226,19 @@ class KotlinCacheServiceImpl(val project: Project) : KotlinCacheService {
                 )
             }
 
-            syntheticFileModule is ScriptModuleInfo || syntheticFileModule is ScriptDependenciesModuleInfo -> {
+            syntheticFileModule is ScriptDependenciesModuleInfo -> {
+                createFacadeForScriptDependencies(syntheticFileModule, files)
+            }
+            syntheticFileModule is ScriptModuleInfo -> {
+                val facadeForScriptDependencies = getFacadeForScriptDependencies(syntheticFileModule.externalDependencies)
                 val globalContext = facadeForScriptDependencies.globalContext.contextWithNewLockAndCompositeExceptionTracker()
                 ProjectResolutionFacade(
                         "facadeForSynthetic in ScriptModuleInfo",
                         project, globalContext,
                         makeGlobalResolveSessionProvider(
                                 reuseDataFrom = facadeForScriptDependencies,
-                                moduleFilter = { it == syntheticFileModule },
-                                allModules = syntheticFileModule.dependencies()
+                                allModules = syntheticFileModule.dependencies(),
+                                moduleFilter = { it == syntheticFileModule }
                         )
                 )
             }
@@ -273,10 +311,15 @@ class KotlinCacheServiceImpl(val project: Project) : KotlinCacheService {
     }
 
     private fun getFacadeForSyntheticFiles(files: Set<KtFile>): ProjectResolutionFacade {
-        synchronized(syntheticFileCachesLock) {
+        val cachedValue = synchronized(syntheticFileCachesLock) {
             //NOTE: computations inside createCacheForSyntheticFiles depend on project root structure
             // so we additionally drop the whole slru cache on change
-            return CachedValuesManager.getManager(project).getCachedValue(project, syntheticFilesCacheProvider).get(files)
+            CachedValuesManager.getManager(project).getCachedValue(project, syntheticFilesCacheProvider)
+        }
+        // In Upsource, we create multiple instances of KotlinCacheService, which all access the same CachedValue instance (UP-8046)
+        // To avoid race conditions, we can't use the local lock to access the cached value contents.
+        synchronized(cachedValue) {
+            return cachedValue.get(files)
         }
     }
 
@@ -284,12 +327,25 @@ class KotlinCacheServiceImpl(val project: Project) : KotlinCacheService {
         val syntheticFiles = findSyntheticFiles(files)
         val file = files.first()
         val moduleInfo = file.getModuleInfo()
-        val projectFacade = if (syntheticFiles.isNotEmpty()) {
-            getFacadeForSyntheticFiles(syntheticFiles)
+        if (syntheticFiles.isNotEmpty()) {
+            val projectFacade = getFacadeForSyntheticFiles(syntheticFiles)
+            return ResolutionFacadeImpl(projectFacade, moduleInfo)
         }
         else {
-            globalFacade(TargetPlatformDetector.getPlatform(file), moduleInfo.sdk)
+            val platform = TargetPlatformDetector.getPlatform(file)
+            return getResolutionFacadeByModuleInfo(moduleInfo, platform)
         }
+    }
+
+    override fun getResolutionFacadeByFile(file: PsiFile, platform: TargetPlatform): ResolutionFacade {
+        assert(file !is PsiCodeFragment)
+        assert(ProjectRootsUtil.isInProjectSource(file))
+        val moduleInfo = file.getModuleInfo()
+        return getResolutionFacadeByModuleInfo(moduleInfo, platform)
+    }
+
+    private fun getResolutionFacadeByModuleInfo(moduleInfo: IdeaModuleInfo, platform: TargetPlatform): ResolutionFacade {
+        val projectFacade = globalFacade(platform, moduleInfo.sdk)
         return ResolutionFacadeImpl(projectFacade, moduleInfo)
     }
 
@@ -340,9 +396,12 @@ private fun globalResolveSessionProvider(
 
     if (newBuiltIns is JvmBuiltIns) {
         val sdkInfo = SdkInfo(project, sdk!!)
-        newBuiltIns.setOwnerModuleDescriptor(moduleResolverProvider.resolverForProject.descriptorForModule(sdkInfo))
+        newBuiltIns.initialize(
+                moduleResolverProvider.resolverForProject.descriptorForModule(sdkInfo),
+                moduleResolverProvider.resolverForProject.resolverForModule(sdkInfo)
+                        .componentProvider.get<LanguageVersionSettings>()
+                        .supportsFeature(LanguageFeature.AdditionalBuiltInsMembers))
     }
 
     moduleResolverProvider
 }
-

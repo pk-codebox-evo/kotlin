@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.idea.codeInsight;
 import com.intellij.testFramework.TestDataPath;
 import org.jetbrains.kotlin.test.JUnit3RunnerWithInners;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
+import org.jetbrains.kotlin.test.TargetBackend;
 import org.jetbrains.kotlin.test.TestMetadata;
 import org.junit.runner.RunWith;
 
@@ -32,7 +33,7 @@ import java.util.regex.Pattern;
 @RunWith(JUnit3RunnerWithInners.class)
 public class OutOfBlockModificationTestGenerated extends AbstractOutOfBlockModificationTest {
     public void testAllFilesPresentInOutOfBlock() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/codeInsight/outOfBlock"), Pattern.compile("^(.+)\\.kt$"), true);
+        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/codeInsight/outOfBlock"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
     }
 
     @TestMetadata("Class_Class_FunNoType_Block.kt")
@@ -188,6 +189,24 @@ public class OutOfBlockModificationTestGenerated extends AbstractOutOfBlockModif
     @TestMetadata("InPropertyWithInference.kt")
     public void testInPropertyWithInference() throws Exception {
         String fileName = KotlinTestUtils.navigationMetadata("idea/testData/codeInsight/outOfBlock/InPropertyWithInference.kt");
+        doTest(fileName);
+    }
+
+    @TestMetadata("InSuperTypeCallCallInLambdaInCall.kt")
+    public void testInSuperTypeCallCallInLambdaInCall() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("idea/testData/codeInsight/outOfBlock/InSuperTypeCallCallInLambdaInCall.kt");
+        doTest(fileName);
+    }
+
+    @TestMetadata("InSuperTypeCallInLambaInBody.kt")
+    public void testInSuperTypeCallInLambaInBody() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("idea/testData/codeInsight/outOfBlock/InSuperTypeCallInLambaInBody.kt");
+        doTest(fileName);
+    }
+
+    @TestMetadata("InSuperTypeCallInLambdaParameters.kt")
+    public void testInSuperTypeCallInLambdaParameters() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("idea/testData/codeInsight/outOfBlock/InSuperTypeCallInLambdaParameters.kt");
         doTest(fileName);
     }
 

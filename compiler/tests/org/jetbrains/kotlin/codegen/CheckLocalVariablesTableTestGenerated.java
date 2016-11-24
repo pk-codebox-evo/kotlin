@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.codegen;
 import com.intellij.testFramework.TestDataPath;
 import org.jetbrains.kotlin.test.JUnit3RunnerWithInners;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
+import org.jetbrains.kotlin.test.TargetBackend;
 import org.jetbrains.kotlin.test.TestMetadata;
 import org.junit.runner.RunWith;
 
@@ -32,7 +33,7 @@ import java.util.regex.Pattern;
 @RunWith(JUnit3RunnerWithInners.class)
 public class CheckLocalVariablesTableTestGenerated extends AbstractCheckLocalVariablesTableTest {
     public void testAllFilesPresentInCheckLocalVariablesTable() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/checkLocalVariablesTable"), Pattern.compile("^(.+)\\.kt$"), true);
+        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/checkLocalVariablesTable"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
     }
 
     @TestMetadata("catchClause.kt")
@@ -44,6 +45,18 @@ public class CheckLocalVariablesTableTestGenerated extends AbstractCheckLocalVar
     @TestMetadata("copyFunction.kt")
     public void testCopyFunction() throws Exception {
         String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/checkLocalVariablesTable/copyFunction.kt");
+        doTest(fileName);
+    }
+
+    @TestMetadata("destructuringInLambdas.kt")
+    public void testDestructuringInLambdas() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/checkLocalVariablesTable/destructuringInLambdas.kt");
+        doTest(fileName);
+    }
+
+    @TestMetadata("destructuringInlineLambda.kt")
+    public void testDestructuringInlineLambda() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/checkLocalVariablesTable/destructuringInlineLambda.kt");
         doTest(fileName);
     }
 
@@ -104,6 +117,12 @@ public class CheckLocalVariablesTableTestGenerated extends AbstractCheckLocalVar
     @TestMetadata("localFun.kt")
     public void testLocalFun() throws Exception {
         String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/checkLocalVariablesTable/localFun.kt");
+        doTest(fileName);
+    }
+
+    @TestMetadata("underscoreNames.kt")
+    public void testUnderscoreNames() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/checkLocalVariablesTable/underscoreNames.kt");
         doTest(fileName);
     }
 }

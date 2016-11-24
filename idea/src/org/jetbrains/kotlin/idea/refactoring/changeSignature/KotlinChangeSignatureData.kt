@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2014 JetBrains s.r.o.
+ * Copyright 2010-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,28 +21,20 @@ import com.intellij.psi.search.searches.OverridingMethodsSearch
 import com.intellij.refactoring.changeSignature.MethodDescriptor
 import com.intellij.refactoring.changeSignature.OverriderUsageInfo
 import com.intellij.usageView.UsageInfo
-import org.jetbrains.kotlin.asJava.KtLightMethod
+import org.jetbrains.kotlin.asJava.elements.KtLightMethod
 import org.jetbrains.kotlin.asJava.namedUnwrappedElement
 import org.jetbrains.kotlin.asJava.toLightMethods
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.impl.AnonymousFunctionDescriptor
-import org.jetbrains.kotlin.idea.caches.resolve.analyze
-import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptor
 import org.jetbrains.kotlin.idea.codeInsight.DescriptorToSourceUtilsIde
-import org.jetbrains.kotlin.idea.core.CollectingNameValidator
-import org.jetbrains.kotlin.idea.core.KotlinNameSuggester
-import org.jetbrains.kotlin.idea.util.getResolutionScope
 import org.jetbrains.kotlin.idea.refactoring.changeSignature.usages.KotlinCallableDefinitionUsage
 import org.jetbrains.kotlin.idea.util.IdeDescriptorRenderers
-import org.jetbrains.kotlin.incremental.components.NoLookupLocation
-import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.KtCallableDeclaration
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtFunction
 import org.jetbrains.kotlin.psi.KtNamedDeclaration
 import org.jetbrains.kotlin.resolve.DescriptorUtils
-import org.jetbrains.kotlin.resolve.scopes.utils.findVariable
 import java.util.*
 
 class KotlinChangeSignatureData(
@@ -80,16 +72,8 @@ class KotlinChangeSignatureData(
     }
 
     private fun createReceiverInfoIfNeeded(): KotlinParameterInfo? {
-        val callable = baseDeclaration as? KtCallableDeclaration ?: return null
-        val bodyScope = (callable as? KtFunction)?.bodyExpression?.let { it.getResolutionScope(it.analyze(), it.getResolutionFacade()) }
-        val paramNames = baseDescriptor.valueParameters.map { it.name.asString() }
-        val validator = bodyScope?.let { bodyScope ->
-            CollectingNameValidator(paramNames) {
-                bodyScope.findVariable(Name.identifier(it), NoLookupLocation.FROM_IDE) == null
-            }
-        } ?: CollectingNameValidator(paramNames)
         val receiverType = baseDescriptor.extensionReceiverParameter?.type ?: return null
-        val receiverName = KotlinNameSuggester.suggestNamesByType(receiverType, validator, "receiver").first()
+        val receiverName = suggestReceiverNames(baseDeclaration.project, baseDescriptor).first()
         val receiverTypeText = (baseDeclaration as? KtCallableDeclaration)?.receiverTypeReference?.text
                                ?: IdeDescriptorRenderers.SOURCE_CODE_SHORT_NAMES_IN_TYPES.renderType(receiverType)
         return KotlinParameterInfo(callableDescriptor = baseDescriptor,

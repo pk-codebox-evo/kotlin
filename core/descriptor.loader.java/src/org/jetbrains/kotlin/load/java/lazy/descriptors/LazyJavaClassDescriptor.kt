@@ -61,6 +61,10 @@ class LazyJavaClassDescriptor(
 
     init {
         c.components.javaResolverCache.recordClass(jClass, this)
+
+        assert(jClass.lightClassOriginKind == null) {
+            "Creating LazyJavaClassDescriptor for light class $jClass"
+        }
     }
 
     private val kind = when {
@@ -104,7 +108,7 @@ class LazyJavaClassDescriptor(
     private val staticScope = LazyJavaStaticClassScope(c, jClass, this)
     override fun getStaticScope(): MemberScope = staticScope
 
-    override fun getUnsubstitutedPrimaryConstructor(): ConstructorDescriptor? = null
+    override fun getUnsubstitutedPrimaryConstructor(): ClassConstructorDescriptor? = null
 
     override fun getCompanionObjectDescriptor(): ClassDescriptor? = null
 
@@ -211,8 +215,6 @@ class LazyJavaClassDescriptor(
 
         override val supertypeLoopChecker: SupertypeLoopChecker
             get() = c.components.supertypeLoopChecker
-
-        override val annotations: Annotations get() = Annotations.EMPTY
 
         override fun isFinal(): Boolean = isFinalClass
 

@@ -16,11 +16,13 @@
 
 package org.jetbrains.kotlin.resolve.calls
 
+import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.builtins.ReflectionTypes
 import org.jetbrains.kotlin.builtins.isFunctionTypeOrSubtype
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor
 import org.jetbrains.kotlin.descriptors.ValueParameterDescriptor
+import org.jetbrains.kotlin.descriptors.impl.TypeAliasConstructorDescriptor
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.FunctionDescriptorUtil
 import org.jetbrains.kotlin.resolve.calls.callResolverUtil.*
@@ -37,6 +39,7 @@ import org.jetbrains.kotlin.resolve.calls.inference.*
 import org.jetbrains.kotlin.resolve.calls.inference.constraintPosition.ConstraintPosition
 import org.jetbrains.kotlin.resolve.calls.inference.constraintPosition.ConstraintPositionKind.RECEIVER_POSITION
 import org.jetbrains.kotlin.resolve.calls.inference.constraintPosition.ConstraintPositionKind.VALUE_PARAMETER_POSITION
+import org.jetbrains.kotlin.resolve.calls.inference.constraintPosition.ValidityConstraintForConstituentType
 import org.jetbrains.kotlin.resolve.calls.resolvedCallUtil.makeNullableTypeIfSafeReceiver
 import org.jetbrains.kotlin.resolve.calls.results.ResolutionStatus
 import org.jetbrains.kotlin.resolve.calls.results.ResolutionStatus.INCOMPLETE_TYPE_INFERENCE
@@ -74,6 +77,11 @@ class GenericCandidateResolver(private val argumentTypeResolver: ArgumentTypeRes
             }
         }
 
+        if (candidate is TypeAliasConstructorDescriptor) {
+            val substitutedReturnType = builder.compositeSubstitutor().safeSubstitute(candidate.returnType, Variance.INVARIANT)
+            addValidityConstraintsForConstituentTypes(builder, substitutedReturnType)
+        }
+
         // Receiver
         // Error is already reported if something is missing
         val receiverArgument = candidateCall.extensionReceiver
@@ -103,6 +111,41 @@ class GenericCandidateResolver(private val argumentTypeResolver: ArgumentTypeRes
             return INCOMPLETE_TYPE_INFERENCE
         }
         return OTHER_ERROR
+    }
+
+    private fun addValidityConstraintsForConstituentTypes(builder: ConstraintSystem.Builder, type: KotlinType) {
+        val typeConstructor = type.constructor
+        if (typeConstructor.declarationDescriptor is TypeParameterDescriptor) return
+
+        val boundsSubstitutor = TypeSubstitutor.create(type)
+
+        type.arguments.forEachIndexed forEachArgument@{ i, typeProjection ->
+            if (typeProjection.isStarProjection) return@forEachArgument // continue
+
+            val typeParameter = typeConstructor.parameters[i]
+            addValidityConstraintsForTypeArgument(builder, typeProjection, typeParameter, boundsSubstitutor)
+
+            addValidityConstraintsForConstituentTypes(builder, typeProjection.type)
+        }
+    }
+
+    private fun addValidityConstraintsForTypeArgument(
+            builder: ConstraintSystem.Builder,
+            substitutedArgument: TypeProjection,
+            typeParameter: TypeParameterDescriptor,
+            boundsSubstitutor: TypeSubstitutor
+    ) {
+        val substitutedType = substitutedArgument.type
+        for (upperBound in typeParameter.upperBounds) {
+            val substitutedUpperBound = boundsSubstitutor.safeSubstitute(upperBound, Variance.INVARIANT).upperIfFlexible()
+            val constraintPosition = ValidityConstraintForConstituentType(substitutedType, typeParameter, substitutedUpperBound)
+
+            // Do not add extra constraints if upper bound is 'Any?';
+            // otherwise it will be treated incorrectly in nested calls processing.
+            if (KotlinBuiltIns.isNullableAny(substitutedUpperBound)) continue
+
+            builder.addSubtypeConstraint(substitutedType, substitutedUpperBound, constraintPosition)
+        }
     }
 
     // Creates a substitutor which maps types to their representation in the constraint system.
@@ -195,7 +238,7 @@ class GenericCandidateResolver(private val argumentTypeResolver: ArgumentTypeRes
         if (deparenthesizedArgument == null || type == null) return type
 
         val dataFlowValue = DataFlowValueFactory.createDataFlowValue(deparenthesizedArgument, type, context)
-        if (!dataFlowValue.isPredictable) return type
+        if (!dataFlowValue.isStable) return type
 
         val possibleTypes = context.dataFlowInfo.getCollectedTypes(dataFlowValue)
         if (possibleTypes.isEmpty()) return type
@@ -254,7 +297,14 @@ class GenericCandidateResolver(private val argumentTypeResolver: ArgumentTypeRes
         val argumentExpression = valueArgument.getArgumentExpression() ?: return
 
         val effectiveExpectedType = getEffectiveExpectedType(valueParameterDescriptor, valueArgument)
-        var expectedType = constraintSystem.build().currentSubstitutor.substitute(effectiveExpectedType, Variance.INVARIANT)
+
+        val currentSubstitutor = constraintSystem.build().currentSubstitutor
+        val newSubstitution = object : DelegatedTypeSubstitution(currentSubstitutor.substitution) {
+            override fun approximateContravariantCapturedTypes() = true
+        }
+
+        var expectedType = newSubstitution.buildSubstitutor().substitute(effectiveExpectedType, Variance.IN_VARIANCE)
+
         if (expectedType == null || TypeUtils.isDontCarePlaceholder(expectedType)) {
             expectedType = argumentTypeResolver.getShapeTypeOfFunctionLiteral(functionLiteral, context.scope, context.trace, false)
         }

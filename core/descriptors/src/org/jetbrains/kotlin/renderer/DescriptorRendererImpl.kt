@@ -36,6 +36,7 @@ import org.jetbrains.kotlin.serialization.deserialization.NotFoundClasses
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.ErrorUtils.UninferredParameterTypeConstructor
 import org.jetbrains.kotlin.types.TypeUtils.CANT_INFER_FUNCTION_PARAM_TYPE
+import java.lang.UnsupportedOperationException
 import java.util.*
 
 internal class DescriptorRendererImpl(
@@ -43,6 +44,13 @@ internal class DescriptorRendererImpl(
 ) : DescriptorRenderer(), DescriptorRendererOptions by options/* this gives access to options without qualifier */ {
     init {
         assert(options.isLocked)
+    }
+
+    private val functionTypeAnnotationsRenderer: DescriptorRendererImpl by lazy {
+        this.withOptions { excludedTypeAnnotationClasses += listOf(KotlinBuiltIns.FQ_NAMES.extensionFunctionType) } as DescriptorRendererImpl
+    }
+    private val functionTypeParameterTypesRenderer: DescriptorRenderer by lazy {
+        this.withOptions { excludedTypeAnnotationClasses += listOf(KotlinBuiltIns.FQ_NAMES.parameterName) }
     }
 
     /* FORMATTING */
@@ -118,51 +126,73 @@ internal class DescriptorRendererImpl(
     }
 
     /* TYPES RENDERING */
-    override fun renderType(type: KotlinType): String {
-        return renderNormalizedType(typeNormalizer(type))
+    override fun renderType(type: KotlinType): String = buildString {
+        renderNormalizedType(typeNormalizer(type))
     }
 
-    private fun renderNormalizedType(type: KotlinType): String {
-        val abbreviated = (type.unwrap() as? AbbreviatedType)
-
+    private fun StringBuilder.renderNormalizedType(type: KotlinType) {
+        val abbreviated = type.unwrap() as? AbbreviatedType
         if (abbreviated != null) {
             // TODO nullability is lost for abbreviated type?
-            val abbreviatedRendered = renderNormalizedTypeAsIs(abbreviated.abbreviation)
-            val unabbreviatedRendered = renderNormalizedTypeAsIs(abbreviated.expandedType)
-            return "$abbreviatedRendered /* = $unabbreviatedRendered */"
+            renderNormalizedTypeAsIs(abbreviated.abbreviation)
+            if (renderUnabbreviatedType) {
+                renderAbbreviatedTypeExpansion(abbreviated)
+            }
+            return
         }
 
-        return renderNormalizedTypeAsIs(type)
+        renderNormalizedTypeAsIs(type)
     }
 
-    private fun renderNormalizedTypeAsIs(type: KotlinType): String {
+    private fun StringBuilder.renderAbbreviatedTypeExpansion(abbreviated: AbbreviatedType) {
+        if (textFormat == RenderingFormat.HTML) {
+            append("<font color=\"808080\"><i>")
+        }
+        append(" /* = ")
+        renderNormalizedTypeAsIs(abbreviated.expandedType)
+        append(" */")
+        if (textFormat == RenderingFormat.HTML) {
+            append("</i></font>")
+        }
+    }
+
+    private fun StringBuilder.renderNormalizedTypeAsIs(type: KotlinType) {
         if (type is WrappedType && debugMode && !type.isComputed()) {
-            return "<Not computed yet>"
+            append("<Not computed yet>")
+            return
         }
         val unwrappedType = type.unwrap()
-        return when (unwrappedType) {
-            is FlexibleType -> unwrappedType.render(this, this)
+        when (unwrappedType) {
+            is FlexibleType -> append(unwrappedType.render(this@DescriptorRendererImpl, this@DescriptorRendererImpl))
             is SimpleType -> renderSimpleType(unwrappedType)
         }
     }
 
-    private fun renderSimpleType(type: SimpleType): String {
+    private fun StringBuilder.renderSimpleType(type: SimpleType) {
         if (type == CANT_INFER_FUNCTION_PARAM_TYPE || TypeUtils.isDontCarePlaceholder(type)) {
-            return "???"
+            append("???")
+            return
         }
         if (ErrorUtils.isUninferredParameter(type)) {
             if (uninferredTypeParameterAsName) {
-                return renderError((type.constructor as UninferredParameterTypeConstructor).typeParameterDescriptor.name.toString())
+                append(renderError((type.constructor as UninferredParameterTypeConstructor).typeParameterDescriptor.name.toString()))
             }
-            return "???"
+            else {
+                append("???")
+            }
+            return
         }
+
         if (type.isError) {
-            return renderDefaultType(type)
+            renderDefaultType(type)
+            return
         }
         if (shouldRenderAsPrettyFunctionType(type)) {
-            return renderFunctionType(type)
+            renderFunctionType(type)
         }
-        return renderDefaultType(type)
+        else {
+            renderDefaultType(type)
+        }
     }
 
     private fun shouldRenderAsPrettyFunctionType(type: KotlinType): Boolean {
@@ -199,58 +229,50 @@ internal class DescriptorRendererImpl(
         if (typeArguments.isEmpty()) return ""
         return buildString {
             append(lt())
-            appendTypeProjections(typeArguments, this)
+            this.appendTypeProjections(typeArguments)
             append(gt())
         }
     }
 
-    private fun renderDefaultType(type: KotlinType): String {
-        val sb = StringBuilder()
-
-        renderAnnotations(type, sb)
+    private fun StringBuilder.renderDefaultType(type: KotlinType) {
+        this.renderAnnotations(type)
 
         if (type.isError) {
-            sb.append(type.constructor.toString()) // Debug name of an error type is more informative
-            sb.append(renderTypeArguments(type.arguments))
+            append(type.constructor.toString()) // Debug name of an error type is more informative
+            append(renderTypeArguments(type.arguments))
         }
         else {
-            sb.append(renderTypeConstructorAndArguments(type))
+            renderTypeConstructorAndArguments(type)
         }
 
         if (type.isMarkedNullable) {
-            sb.append("?")
+            append("?")
         }
-        return sb.toString()
     }
 
-    private fun renderTypeConstructorAndArguments(
+    private fun StringBuilder.renderTypeConstructorAndArguments(
             type: KotlinType,
             typeConstructor: TypeConstructor = type.constructor
-    ): String =
-        buildString {
-
-            val possiblyInnerType = type.buildPossiblyInnerType()
-            if (possiblyInnerType == null) {
-                append(renderTypeConstructor(typeConstructor))
-                append(renderTypeArguments(type.arguments))
-                return@buildString
-            }
-
-            append(renderPossiblyInnerType(possiblyInnerType))
+    ) {
+        val possiblyInnerType = type.buildPossiblyInnerType()
+        if (possiblyInnerType == null) {
+            append(renderTypeConstructor(typeConstructor))
+            append(renderTypeArguments(type.arguments))
+            return
         }
 
-    private fun renderPossiblyInnerType(possiblyInnerType: PossiblyInnerType): String =
-        buildString {
-            possiblyInnerType.outerType?.let {
-                append(renderPossiblyInnerType(it))
-                append('.')
-                append(renderName(possiblyInnerType.classifierDescriptor.name))
-            } ?: append(renderTypeConstructor(possiblyInnerType.classifierDescriptor.typeConstructor))
+        renderPossiblyInnerType(possiblyInnerType)
+    }
 
-            append(renderTypeArguments(possiblyInnerType.arguments))
-        }
+    private fun StringBuilder.renderPossiblyInnerType(possiblyInnerType: PossiblyInnerType) {
+        possiblyInnerType.outerType?.let {
+            renderPossiblyInnerType(it)
+            append('.')
+            append(renderName(possiblyInnerType.classifierDescriptor.name))
+        } ?: append(renderTypeConstructor(possiblyInnerType.classifierDescriptor.typeConstructor))
 
-
+        append(renderTypeArguments(possiblyInnerType.arguments))
+    }
 
     override fun renderTypeConstructor(typeConstructor: TypeConstructor): String {
         val cd = typeConstructor.declarationDescriptor
@@ -262,10 +284,10 @@ internal class DescriptorRendererImpl(
     }
 
     override fun renderTypeProjection(typeProjection: TypeProjection) = buildString {
-        appendTypeProjections(listOf(typeProjection), this)
+        appendTypeProjections(listOf(typeProjection))
     }
 
-    private fun appendTypeProjections(typeProjections: List<TypeProjection>, builder: StringBuilder) {
+    private fun StringBuilder.appendTypeProjections(typeProjections: List<TypeProjection>) {
         typeProjections.map {
             if (it.isStarProjection) {
                 "*"
@@ -274,75 +296,103 @@ internal class DescriptorRendererImpl(
                 val type = renderType(it.type)
                 if (it.projectionKind == Variance.INVARIANT) type else "${it.projectionKind} $type"
             }
-        }.joinTo(builder, ", ")
+        }.joinTo(this, ", ")
     }
 
-    private fun renderFunctionType(type: KotlinType): String {
-        return buildString {
-            val isNullable = type.isMarkedNullable
-            if (isNullable) append("(")
+    private fun StringBuilder.renderFunctionType(type: KotlinType) {
+        val lengthBefore = length
+        // we need special renderer to skip @ExtensionFunctionType
+        with(functionTypeAnnotationsRenderer) {
+            renderAnnotations(type)
+        }
+        val hasAnnotations = length != lengthBefore
 
-            val receiverType = getReceiverTypeFromFunctionType(type)
-            if (receiverType != null) {
-                val surroundReceiver = shouldRenderAsPrettyFunctionType(receiverType) && !receiverType.isMarkedNullable
-                if (surroundReceiver) {
-                    append("(")
-                }
-                append(renderNormalizedType(receiverType))
-                if (surroundReceiver) {
-                    append(")")
-                }
-                append(".")
+        val isNullable = type.isMarkedNullable
+        val receiverType = type.getReceiverTypeFromFunctionType()
+
+        val needParenthesis = isNullable || (hasAnnotations && receiverType != null)
+
+        if (needParenthesis && hasAnnotations) {
+            assert(last() == ' ')
+            if (get(lastIndex - 1) != ')') {
+                // last annotation rendered without parenthesis - need to add them otherwise parsing will be incorrect
+                insert(lastIndex, "()")
+            }
+        }
+
+        if (needParenthesis) append("(")
+
+        if (receiverType != null) {
+            val surroundReceiver = shouldRenderAsPrettyFunctionType(receiverType) && !receiverType.isMarkedNullable
+            if (surroundReceiver) {
+                append("(")
+            }
+            renderNormalizedType(receiverType)
+            if (surroundReceiver) {
+                append(")")
+            }
+            append(".")
+        }
+
+        append("(")
+
+        val parameterTypes = type.getValueParameterTypesFromFunctionType()
+        for ((index, typeProjection) in parameterTypes.withIndex()) {
+            if (index > 0) append(", ")
+
+            val name = if (parameterNamesInFunctionalTypes) typeProjection.type.extractParameterNameFromFunctionTypeArgument() else null
+            if (name != null) {
+                append(renderName(name))
+                append(": ")
             }
 
-            append("(")
-            appendTypeProjections(getValueParameterTypesFromFunctionType(type), this)
-            append(") ").append(arrow()).append(" ")
-            append(renderNormalizedType(getReturnTypeFromFunctionType(type)))
-
-            if (isNullable) append(")?")
+            append(functionTypeParameterTypesRenderer.renderTypeProjection(typeProjection))
         }
+
+        append(") ").append(arrow()).append(" ")
+        renderNormalizedType(type.getReturnTypeFromFunctionType())
+
+        if (needParenthesis) append(")")
+
+        if (isNullable) append("?")
     }
 
 
     /* METHODS FOR ALL KINDS OF DESCRIPTORS */
-    private fun appendDefinedIn(descriptor: DeclarationDescriptor, builder: StringBuilder) {
+    private fun StringBuilder.appendDefinedIn(descriptor: DeclarationDescriptor) {
         if (descriptor is PackageFragmentDescriptor || descriptor is PackageViewDescriptor) {
             return
         }
         if (descriptor is ModuleDescriptor) {
-            builder.append(" is a module")
+            append(" is a module")
             return
         }
 
         val containingDeclaration = descriptor.containingDeclaration
         if (containingDeclaration != null && containingDeclaration !is ModuleDescriptor) {
-            builder.append(" ").append(renderMessage("defined in")).append(" ")
+            append(" ").append(renderMessage("defined in")).append(" ")
             val fqName = DescriptorUtils.getFqName(containingDeclaration)
-            builder.append(if (fqName.isRoot) "root package" else renderFqName(fqName))
+            append(if (fqName.isRoot) "root package" else renderFqName(fqName))
         }
     }
-    private fun renderAnnotations(annotated: Annotated, builder: StringBuilder) {
+
+    private fun StringBuilder.renderAnnotations(annotated: Annotated) {
         if (DescriptorRendererModifier.ANNOTATIONS !in modifiers) return
 
         val excluded = if (annotated is KotlinType) excludedTypeAnnotationClasses else excludedAnnotationClasses
 
-        val annotationsBuilder = StringBuilder().apply {
-            // Sort is needed just to fix some order when annotations resolved from modifiers
-            // See AnnotationResolver.resolveAndAppendAnnotationsFromModifiers for clarification
-            // This hack can be removed when modifiers will be resolved without annotations
+        // Sort is needed just to fix some order when annotations resolved from modifiers
+        // See AnnotationResolver.resolveAndAppendAnnotationsFromModifiers for clarification
+        // This hack can be removed when modifiers will be resolved without annotations
 
-            val sortedAnnotations = annotated.annotations.getAllAnnotations()
-            for ((annotation, target) in sortedAnnotations) {
-                val annotationClass = annotation.type.constructor.declarationDescriptor as ClassDescriptor
+        val sortedAnnotations = annotated.annotations.getAllAnnotations()
+        for ((annotation, target) in sortedAnnotations) {
+            val annotationClass = annotation.type.constructor.declarationDescriptor as ClassDescriptor
 
-                if (!excluded.contains(DescriptorUtils.getFqNameSafe(annotationClass))) {
-                    append(renderAnnotation(annotation, target)).append(" ")
-                }
+            if (!excluded.contains(DescriptorUtils.getFqNameSafe(annotationClass))) {
+                append(renderAnnotation(annotation, target)).append(" ")
             }
         }
-
-        builder.append(annotationsBuilder)
     }
 
     override fun renderAnnotation(annotation: AnnotationDescriptor, target: AnnotationUseSiteTarget?): String {
@@ -353,11 +403,16 @@ internal class DescriptorRendererImpl(
             }
             val annotationType = annotation.type
             append(renderType(annotationType))
-            if (verbose) {
-                renderAndSortAnnotationArguments(annotation).joinTo(this, ", ", "(", ")")
-                if (annotationType.isError || annotationType.constructor.declarationDescriptor is NotFoundClasses.MockClassDescriptor) {
-                    append(" /* annotation class not found */")
+
+            if (includeAnnotationArguments) {
+                val arguments = renderAndSortAnnotationArguments(annotation)
+                if (arguments.isNotEmpty()) {
+                    arguments.joinTo(this, ", ", "(", ")")
                 }
+            }
+
+            if (verbose && (annotationType.isError || annotationType.constructor.declarationDescriptor is NotFoundClasses.MockClassDescriptor)) {
+                append(" /* annotation class not found */")
             }
         }
     }
@@ -478,7 +533,7 @@ internal class DescriptorRendererImpl(
             declarationDescriptor.accept(RenderDeclarationDescriptorVisitor(), this)
 
             if (withDefinedIn) {
-                appendDefinedIn(declarationDescriptor, this)
+                appendDefinedIn(declarationDescriptor)
             }
         }
     }
@@ -502,7 +557,7 @@ internal class DescriptorRendererImpl(
             builder.append(renderKeyword(variance)).append(" ")
         }
 
-        renderAnnotations(typeParameter, builder)
+        builder.renderAnnotations(typeParameter)
 
         renderName(typeParameter, builder)
         val upperBoundsCount = typeParameter.upperBounds.size
@@ -564,10 +619,14 @@ internal class DescriptorRendererImpl(
     /* FUNCTIONS */
     private fun renderFunction(function: FunctionDescriptor, builder: StringBuilder) {
         if (!startFromName) {
-            renderAnnotations(function, builder)
+            builder.renderAnnotations(function)
             renderVisibility(function.visibility, builder)
             renderModalityForCallable(function, builder)
-            renderAdditionalModifiers(function, builder)
+
+            if (includeAdditionalModifiers) {
+                renderAdditionalModifiers(function, builder)
+            }
+
             renderOverride(function, builder)
             renderMemberKind(function, builder)
 
@@ -622,14 +681,18 @@ internal class DescriptorRendererImpl(
     }
 
     private fun renderConstructor(constructor: ConstructorDescriptor, builder: StringBuilder) {
-        renderAnnotations(constructor, builder)
+        builder.renderAnnotations(constructor)
         renderVisibility(constructor.visibility, builder)
         renderMemberKind(constructor, builder)
 
-        builder.append(renderKeyword("constructor"))
+        if (renderConstructorKeyword) {
+            builder.append(renderKeyword("constructor"))
+        }
         if (secondaryConstructorsAsPrimary) {
             val classDescriptor = constructor.containingDeclaration
-            builder.append(" ")
+            if (renderConstructorKeyword) {
+                builder.append(" ")
+            }
             renderName(classDescriptor, builder)
             renderTypeParameters(constructor.typeParameters, builder, false)
         }
@@ -692,7 +755,7 @@ internal class DescriptorRendererImpl(
             builder.append("/*").append(valueParameter.index).append("*/ ")
         }
 
-        renderAnnotations(valueParameter, builder)
+        builder.renderAnnotations(valueParameter)
 
         if (valueParameter.isCrossinline) {
             builder.append("crossinline ")
@@ -749,7 +812,7 @@ internal class DescriptorRendererImpl(
 
     private fun renderProperty(property: PropertyDescriptor, builder: StringBuilder) {
         if (!startFromName) {
-            renderAnnotations(property, builder)
+            builder.renderAnnotations(property)
             renderVisibility(property.visibility, builder)
 
             if (property.isConst) {
@@ -784,7 +847,7 @@ internal class DescriptorRendererImpl(
     }
 
     private fun renderTypeAlias(typeAlias: TypeAliasDescriptor, builder: StringBuilder) {
-        renderAnnotations(typeAlias, builder)
+        builder.renderAnnotations(typeAlias)
         renderVisibility(typeAlias.visibility, builder)
         builder.append(renderKeyword("typealias")).append(" ")
         renderName(typeAlias, builder)
@@ -811,7 +874,7 @@ internal class DescriptorRendererImpl(
         val isEnumEntry = klass.kind == ClassKind.ENUM_ENTRY
 
         if (!startFromName) {
-            renderAnnotations(klass, builder)
+            builder.renderAnnotations(klass)
             if (!isEnumEntry) {
                 renderVisibility(klass.visibility, builder)
             }
@@ -842,7 +905,7 @@ internal class DescriptorRendererImpl(
             val primaryConstructor = klass.unsubstitutedPrimaryConstructor
             if (primaryConstructor != null) {
                 builder.append(" ")
-                renderAnnotations(primaryConstructor, builder)
+                builder.renderAnnotations(primaryConstructor)
                 renderVisibility(primaryConstructor.visibility, builder)
                 builder.append("constructor")
                 renderValueParameters(primaryConstructor.valueParameters, primaryConstructor.hasSynthesizedParameterNames(), builder)
@@ -868,7 +931,7 @@ internal class DescriptorRendererImpl(
     }
 
     private fun renderClassKindPrefix(klass: ClassDescriptor, builder: StringBuilder) {
-        builder.append(renderKeyword(DescriptorRenderer.getClassKindPrefix(klass)))
+        builder.append(renderKeyword(DescriptorRenderer.getClassifierKindPrefix(klass)))
     }
 
 

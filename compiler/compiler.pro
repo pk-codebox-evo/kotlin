@@ -16,6 +16,7 @@
 !org/apache/log4j/or/jms/MessageRenderer*,
 !org/jdom/xpath/Jaxen*,
 !org/mozilla/javascript/xml/impl/xmlbeans/**,
+!net/sf/cglib/**,
 !META-INF/maven**,
 **.class,**.properties,**.kt,**.kotlin_*,**.jnilib,**.so,**.dll,
 META-INF/services/**,META-INF/native/**,META-INF/extensions/**,META-INF/MANIFEST.MF,
@@ -40,11 +41,16 @@ messages/**)
 -dontwarn com.sun.jna.NativeString
 -dontwarn com.sun.jna.WString
 -dontwarn com.intellij.psi.util.PsiClassUtil
+-dontwarn org.apache.hadoop.io.compress.*
+-dontwarn com.google.j2objc.annotations.Weak
+-dontwarn org.iq80.snappy.HadoopSnappyCodec$SnappyCompressionInputStream
+-dontwarn org.iq80.snappy.HadoopSnappyCodec$SnappyCompressionOutputStream
 
 -libraryjars '<rtjar>'
 -libraryjars '<jssejar>'
 -libraryjars '<bootstrap.runtime>'
 -libraryjars '<bootstrap.reflect>'
+-libraryjars '<bootstrap.script.runtime>'
 
 -target 1.6
 -dontoptimize
@@ -78,6 +84,8 @@ messages/**)
     public protected *;
 }
 
+-keep class org.jetbrains.kotlin.container.** { *; }
+
 -keep class org.jetbrains.kotlin.codegen.intrinsics.IntrinsicArrayConstructorsKt { *; }
 
 -keep class org.jetbrains.org.objectweb.asm.Opcodes { *; }
@@ -88,6 +96,10 @@ messages/**)
 
 -keepclassmembers class com.intellij.openapi.vfs.VirtualFile {
     public InputStream getInputStream();
+}
+
+-keep class com.intellij.openapi.vfs.StandardFileSystems {
+    public static *;
 }
 
 # needed for jar cache cleanup in the gradle plugin and compile daemon
@@ -123,7 +135,6 @@ messages/**)
 -keep class com.intellij.util.io.IOUtil { public *; }
 -keep class com.intellij.openapi.util.io.FileUtil { public *; }
 -keep class com.intellij.util.SystemProperties { public *; }
--keep class jsr166e.extra.SequenceLock { *; }
 -keep class com.intellij.util.containers.hash.LinkedHashMap { *; }
 -keep class com.intellij.util.containers.ConcurrentIntObjectMap { *; }
 -keep class com.intellij.util.containers.ComparatorUtil { *; }

@@ -30,7 +30,7 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.builtins.FunctionTypesKt;
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns;
 import org.jetbrains.kotlin.config.LanguageFeature;
-import org.jetbrains.kotlin.config.LanguageFeatureSettings;
+import org.jetbrains.kotlin.config.LanguageVersionSettings;
 import org.jetbrains.kotlin.descriptors.*;
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationSplitter;
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationUseSiteTarget;
@@ -46,18 +46,18 @@ import org.jetbrains.kotlin.psi.*;
 import org.jetbrains.kotlin.psi.psiUtil.PsiUtilsKt;
 import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowInfo;
 import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowInfoFactory;
-import org.jetbrains.kotlin.resolve.dataClassUtils.DataClassUtilsKt;
+import org.jetbrains.kotlin.resolve.calls.util.UnderscoreUtilKt;
 import org.jetbrains.kotlin.resolve.lazy.ForceResolveUtil;
 import org.jetbrains.kotlin.resolve.lazy.descriptors.LazyTypeAliasDescriptor;
 import org.jetbrains.kotlin.resolve.scopes.*;
+import org.jetbrains.kotlin.resolve.scopes.receivers.TransientReceiver;
 import org.jetbrains.kotlin.resolve.scopes.utils.ScopeUtilsKt;
 import org.jetbrains.kotlin.resolve.source.KotlinSourceElementKt;
 import org.jetbrains.kotlin.storage.StorageManager;
 import org.jetbrains.kotlin.types.*;
 import org.jetbrains.kotlin.types.checker.KotlinTypeChecker;
-import org.jetbrains.kotlin.types.expressions.ExpressionTypingServices;
-import org.jetbrains.kotlin.types.expressions.FunctionsTypingVisitor;
-import org.jetbrains.kotlin.types.expressions.PreliminaryDeclarationVisitor;
+import org.jetbrains.kotlin.types.expressions.*;
+import org.jetbrains.kotlin.types.typeUtil.TypeUtilsKt;
 
 import java.util.*;
 
@@ -70,18 +70,18 @@ import static org.jetbrains.kotlin.resolve.ModifiersChecker.resolveMemberModalit
 import static org.jetbrains.kotlin.resolve.ModifiersChecker.resolveVisibilityFromModifiers;
 
 public class DescriptorResolver {
-    public static final Name COPY_METHOD_NAME = Name.identifier("copy");
-
-    @NotNull private final TypeResolver typeResolver;
-    @NotNull private final AnnotationResolver annotationResolver;
-    @NotNull private final StorageManager storageManager;
-    @NotNull private final KotlinBuiltIns builtIns;
-    @NotNull private final SupertypeLoopChecker supertypeLoopsResolver;
-    @NotNull private final VariableTypeResolver variableTypeResolver;
-    @NotNull private final ExpressionTypingServices expressionTypingServices;
-    @NotNull private final OverloadChecker overloadChecker;
-    @NotNull private final LanguageFeatureSettings languageFeatureSettings;
-    @NotNull private final FunctionsTypingVisitor functionsTypingVisitor;
+    private final TypeResolver typeResolver;
+    private final AnnotationResolver annotationResolver;
+    private final StorageManager storageManager;
+    private final KotlinBuiltIns builtIns;
+    private final SupertypeLoopChecker supertypeLoopsResolver;
+    private final VariableTypeAndInitializerResolver variableTypeAndInitializerResolver;
+    private final ExpressionTypingServices expressionTypingServices;
+    private final OverloadChecker overloadChecker;
+    private final LanguageVersionSettings languageVersionSettings;
+    private final FunctionsTypingVisitor functionsTypingVisitor;
+    private final DestructuringDeclarationResolver destructuringDeclarationResolver;
+    private final ModifiersChecker modifiersChecker;
 
     public DescriptorResolver(
             @NotNull AnnotationResolver annotationResolver,
@@ -89,22 +89,26 @@ public class DescriptorResolver {
             @NotNull StorageManager storageManager,
             @NotNull TypeResolver typeResolver,
             @NotNull SupertypeLoopChecker supertypeLoopsResolver,
-            @NotNull VariableTypeResolver variableTypeResolver,
+            @NotNull VariableTypeAndInitializerResolver variableTypeAndInitializerResolver,
             @NotNull ExpressionTypingServices expressionTypingServices,
             @NotNull OverloadChecker overloadChecker,
-            @NotNull LanguageFeatureSettings languageFeatureSettings,
-            @NotNull FunctionsTypingVisitor functionsTypingVisitor
+            @NotNull LanguageVersionSettings languageVersionSettings,
+            @NotNull FunctionsTypingVisitor functionsTypingVisitor,
+            @NotNull DestructuringDeclarationResolver destructuringDeclarationResolver,
+            @NotNull ModifiersChecker modifiersChecker
     ) {
         this.annotationResolver = annotationResolver;
         this.builtIns = builtIns;
         this.storageManager = storageManager;
         this.typeResolver = typeResolver;
         this.supertypeLoopsResolver = supertypeLoopsResolver;
-        this.variableTypeResolver = variableTypeResolver;
+        this.variableTypeAndInitializerResolver = variableTypeAndInitializerResolver;
         this.expressionTypingServices = expressionTypingServices;
         this.overloadChecker = overloadChecker;
-        this.languageFeatureSettings = languageFeatureSettings;
+        this.languageVersionSettings = languageVersionSettings;
         this.functionsTypingVisitor = functionsTypingVisitor;
+        this.destructuringDeclarationResolver = destructuringDeclarationResolver;
+        this.modifiersChecker = modifiersChecker;
     }
 
     public List<KotlinType> resolveSupertypes(
@@ -192,7 +196,7 @@ public class DescriptorResolver {
                 else {
                     result.add(supertype);
                     KtTypeElement bareSuperType = checkNullableSupertypeAndStripQuestionMarks(trace, typeReference.getTypeElement());
-                    checkProjectionsInImmediateArguments(trace, bareSuperType);
+                    checkProjectionsInImmediateArguments(trace, bareSuperType, supertype);
                 }
             }
             else {
@@ -215,101 +219,33 @@ public class DescriptorResolver {
         return typeElement;
     }
 
-    private static void checkProjectionsInImmediateArguments(@NotNull BindingTrace trace, @Nullable KtTypeElement typeElement) {
+    private static void checkProjectionsInImmediateArguments(
+            @NotNull BindingTrace trace,
+            @Nullable KtTypeElement typeElement,
+            @NotNull KotlinType type
+    ) {
+        if (typeElement == null) return;
+
+        boolean hasProjectionsInWrittenArguments = false;
         if (typeElement instanceof KtUserType) {
             KtUserType userType = (KtUserType) typeElement;
             List<KtTypeProjection> typeArguments = userType.getTypeArguments();
             for (KtTypeProjection typeArgument : typeArguments) {
                 if (typeArgument.getProjectionKind() != KtProjectionKind.NONE) {
                     trace.report(PROJECTION_IN_IMMEDIATE_ARGUMENT_TO_SUPERTYPE.on(typeArgument));
+                    hasProjectionsInWrittenArguments = true;
                 }
             }
         }
-    }
 
-    @NotNull
-    public static SimpleFunctionDescriptor createComponentFunctionDescriptor(
-            int parameterIndex,
-            @NotNull PropertyDescriptor property,
-            @NotNull ValueParameterDescriptor parameter,
-            @NotNull ClassDescriptor classDescriptor,
-            @NotNull BindingTrace trace
-    ) {
-        Name functionName = DataClassUtilsKt.createComponentName(parameterIndex);
-        KotlinType returnType = property.getType();
-
-        SimpleFunctionDescriptorImpl functionDescriptor = SimpleFunctionDescriptorImpl.create(
-                classDescriptor,
-                Annotations.Companion.getEMPTY(),
-                functionName,
-                CallableMemberDescriptor.Kind.SYNTHESIZED,
-                parameter.getSource()
-        );
-
-        functionDescriptor.initialize(
-                null,
-                classDescriptor.getThisAsReceiverParameter(),
-                Collections.<TypeParameterDescriptor>emptyList(),
-                Collections.<ValueParameterDescriptor>emptyList(),
-                returnType,
-                Modality.FINAL,
-                property.getVisibility()
-        );
-        functionDescriptor.setOperator(true);
-
-        trace.record(BindingContext.DATA_CLASS_COMPONENT_FUNCTION, parameter, functionDescriptor);
-
-        return functionDescriptor;
-    }
-
-    @NotNull
-    public static SimpleFunctionDescriptor createCopyFunctionDescriptor(
-            @NotNull Collection<ValueParameterDescriptor> constructorParameters,
-            @NotNull ClassDescriptor classDescriptor,
-            @NotNull BindingTrace trace
-    ) {
-        KotlinType returnType = classDescriptor.getDefaultType();
-
-        SimpleFunctionDescriptorImpl functionDescriptor = SimpleFunctionDescriptorImpl.create(
-                classDescriptor,
-                Annotations.Companion.getEMPTY(),
-                COPY_METHOD_NAME,
-                CallableMemberDescriptor.Kind.SYNTHESIZED,
-                classDescriptor.getSource()
-        );
-
-        List<ValueParameterDescriptor> parameterDescriptors = Lists.newArrayList();
-
-        for (ValueParameterDescriptor parameter : constructorParameters) {
-            PropertyDescriptor propertyDescriptor = trace.getBindingContext().get(BindingContext.VALUE_PARAMETER_AS_PROPERTY, parameter);
-            // If parameter hasn't corresponding property, so it mustn't have default value as a parameter in copy function for data class
-            boolean declaresDefaultValue = propertyDescriptor != null;
-            ValueParameterDescriptorImpl parameterDescriptor =
-                    new ValueParameterDescriptorImpl(functionDescriptor, null, parameter.getIndex(), parameter.getAnnotations(),
-                                                     parameter.getName(), parameter.getType(),
-                                                     declaresDefaultValue,
-                                                     parameter.isCrossinline(),
-                                                     parameter.isNoinline(),
-                                                     parameter.isCoroutine(),
-                                                     parameter.getVarargElementType(), parameter.getSource());
-            parameterDescriptors.add(parameterDescriptor);
-            if (declaresDefaultValue) {
-                trace.record(BindingContext.VALUE_PARAMETER_AS_PROPERTY, parameterDescriptor, propertyDescriptor);
+        // If we have an abbreviated type (written with a type alias), it still can contain type projections in top-level arguments.
+        if (!type.isError() && SpecialTypesKt.getAbbreviatedType(type) != null && !hasProjectionsInWrittenArguments) {
+            // Only interface inheritance should be checked here.
+            // Corresponding check for classes is performed for type alias constructor calls in CandidateResolver.
+            if (TypeUtilsKt.isInterface(type) && TypeUtilsKt.containsTypeProjectionsInTopLevelArguments(type)) {
+                trace.report(EXPANDED_TYPE_CANNOT_BE_INHERITED.on(typeElement, type));
             }
         }
-
-        functionDescriptor.initialize(
-                null,
-                classDescriptor.getThisAsReceiverParameter(),
-                Collections.<TypeParameterDescriptor>emptyList(),
-                parameterDescriptors,
-                returnType,
-                Modality.FINAL,
-                Visibilities.PUBLIC
-        );
-
-        trace.record(BindingContext.DATA_CLASS_COPY_FUNCTION, classDescriptor, functionDescriptor);
-        return functionDescriptor;
     }
 
     public static Visibility getDefaultVisibility(KtModifierListOwner modifierListOwner, DeclarationDescriptor containingDescriptor) {
@@ -345,7 +281,9 @@ public class DescriptorResolver {
 
     @NotNull
     public ValueParameterDescriptorImpl resolveValueParameterDescriptor(
-            LexicalScope scope, FunctionDescriptor owner, KtParameter valueParameter, int index, KotlinType type, BindingTrace trace
+            @NotNull final LexicalScope scope, @NotNull final FunctionDescriptor owner,
+            @NotNull KtParameter valueParameter, int index,
+            @NotNull final KotlinType type, @NotNull final BindingTrace trace
     ) {
         KotlinType varargElementType = null;
         KotlinType variableType = type;
@@ -371,19 +309,69 @@ public class DescriptorResolver {
             }
         }
 
-        ValueParameterDescriptorImpl valueParameterDescriptor = new ValueParameterDescriptorImpl(
+        final KtDestructuringDeclaration destructuringDeclaration = valueParameter.getDestructuringDeclaration();
+
+        Function0<List<VariableDescriptor>> destructuringVariables;
+        if (destructuringDeclaration != null) {
+            if (!languageVersionSettings.supportsFeature(LanguageFeature.DestructuringLambdaParameters)) {
+                trace.report(Errors.UNSUPPORTED_FEATURE.on(valueParameter, LanguageFeature.DestructuringLambdaParameters));
+            }
+
+            destructuringVariables = new Function0<List<VariableDescriptor>>() {
+                @Override
+                public List<VariableDescriptor> invoke() {
+                    assert owner.getDispatchReceiverParameter() == null
+                            : "Destructuring declarations are only be parsed for lambdas, and they must not have a dispatch receiver";
+                    LexicalScope scopeWithReceiver =
+                            ScopeUtilsKt.addImplicitReceiver(scope, owner.getExtensionReceiverParameter());
+
+                    List<VariableDescriptor> result =
+                            destructuringDeclarationResolver.resolveLocalVariablesFromDestructuringDeclaration(
+                                    scope,
+                                    destructuringDeclaration, new TransientReceiver(type), /* initializer = */ null,
+                                    ExpressionTypingContext.newContext(
+                                            trace, scopeWithReceiver, DataFlowInfoFactory.EMPTY, TypeUtils.NO_EXPECTED_TYPE
+                                    )
+                            );
+
+                    modifiersChecker.withTrace(trace).checkModifiersForDestructuringDeclaration(destructuringDeclaration);
+                    return result;
+                }
+            };
+        }
+        else {
+            destructuringVariables = null;
+        }
+
+        Name parameterName;
+
+        if (destructuringDeclaration == null) {
+            // NB: val/var for parameter is only allowed in primary constructors where single underscore names are still prohibited.
+            // The problem with val/var is that when lazy resolve try to find their descriptor, it searches through the member scope
+            // of containing class where, it can not find a descriptor with special name.
+            // Thus, to preserve behavior, we don't use a special name for val/var.
+            parameterName = !valueParameter.hasValOrVar() && UnderscoreUtilKt.isSingleUnderscore(valueParameter)
+                            ? Name.special("<anonymous parameter " + index + ">")
+                            : KtPsiUtil.safeName(valueParameter.getName());
+        }
+        else {
+            parameterName = Name.special("<name for destructuring parameter " + index + ">");
+        }
+
+        ValueParameterDescriptorImpl valueParameterDescriptor = ValueParameterDescriptorImpl.createWithDestructuringDeclarations(
                 owner,
                 null,
                 index,
                 valueParameterAnnotations,
-                KtPsiUtil.safeName(valueParameter.getName()),
+                parameterName,
                 variableType,
                 valueParameter.hasDefaultValue(),
                 valueParameter.hasModifier(CROSSINLINE_KEYWORD),
                 valueParameter.hasModifier(NOINLINE_KEYWORD),
                 valueParameter.hasModifier(COROUTINE_KEYWORD),
                 varargElementType,
-                KotlinSourceElementKt.toSourceElement(valueParameter)
+                KotlinSourceElementKt.toSourceElement(valueParameter),
+                destructuringVariables
         );
 
         trace.record(BindingContext.VALUE_PARAMETER, valueParameter, valueParameterDescriptor);
@@ -460,12 +448,12 @@ public class DescriptorResolver {
     }
 
     @NotNull
-    public static ConstructorDescriptorImpl createAndRecordPrimaryConstructorForObject(
+    public static ClassConstructorDescriptorImpl createAndRecordPrimaryConstructorForObject(
             @Nullable KtClassOrObject object,
             @NotNull ClassDescriptor classDescriptor,
             @NotNull BindingTrace trace
     ) {
-        ConstructorDescriptorImpl constructorDescriptor =
+        ClassConstructorDescriptorImpl constructorDescriptor =
                 DescriptorFactory.createPrimaryConstructorForObject(classDescriptor, KotlinSourceElementKt.toSourceElement(object));
         if (object != null) {
             KtPrimaryConstructor primaryConstructor = object.getPrimaryConstructor();
@@ -691,6 +679,10 @@ public class DescriptorResolver {
             @NotNull KtTypeAlias typeAlias,
             @NotNull final BindingTrace trace
     ) {
+        if (!(containingDeclaration instanceof PackageFragmentDescriptor)) {
+            trace.report(TOPLEVEL_TYPEALIASES_ONLY.on(typeAlias));
+        }
+
         KtModifierList modifierList = typeAlias.getModifierList();
         Visibility visibility = resolveVisibilityFromModifiers(typeAlias, getDefaultVisibility(typeAlias, containingDeclaration));
 
@@ -710,7 +702,7 @@ public class DescriptorResolver {
             }
             else {
                 LexicalWritableScope writableScope = new LexicalWritableScope(
-                        scope, containingDeclaration, false, null, new TraceBasedLocalRedeclarationChecker(trace, overloadChecker),
+                        scope, containingDeclaration, false, new TraceBasedLocalRedeclarationChecker(trace, overloadChecker),
                         LexicalScopeKind.TYPE_ALIAS_HEADER);
                 typeParameterDescriptors = resolveTypeParametersForDescriptor(
                         typeAliasDescriptor, writableScope, scope, typeParameters, trace);
@@ -728,10 +720,10 @@ public class DescriptorResolver {
                     ErrorUtils.createErrorType(name.asString()),
                     ErrorUtils.createErrorType(name.asString()));
         }
-        else if (!languageFeatureSettings.supportsFeature(LanguageFeature.TypeAliases)) {
+        else if (!languageVersionSettings.supportsFeature(LanguageFeature.TypeAliases)) {
             typeResolver.resolveAbbreviatedType(scopeWithTypeParameters, typeReference, trace);
             PsiElement typeAliasKeyword = typeAlias.getTypeAliasKeyword();
-            trace.report(UNSUPPORTED_TYPEALIAS.on(typeAliasKeyword != null ? typeAliasKeyword : typeAlias));
+            trace.report(UNSUPPORTED_FEATURE.on(typeAliasKeyword != null ? typeAliasKeyword : typeAlias, LanguageFeature.TypeAliases));
             typeAliasDescriptor.initialize(
                     typeParameterDescriptors,
                     ErrorUtils.createErrorType(name.asString()),
@@ -740,18 +732,25 @@ public class DescriptorResolver {
         else {
             typeAliasDescriptor.initialize(
                     typeParameterDescriptors,
-                    storageManager.createLazyValue(new Function0<SimpleType>() {
-                        @Override
-                        public SimpleType invoke() {
-                            return typeResolver.resolveAbbreviatedType(scopeWithTypeParameters, typeReference, trace);
-                        }
-                    }),
-                    storageManager.createLazyValue(new Function0<SimpleType>() {
-                        @Override
-                        public SimpleType invoke() {
-                            return typeResolver.resolveExpandedTypeForTypeAlias(typeAliasDescriptor);
-                        }
-                    }));
+                    storageManager.createRecursionTolerantLazyValue(
+                            new Function0<SimpleType>() {
+                                @Override
+                                public SimpleType invoke() {
+                                    return typeResolver.resolveAbbreviatedType(scopeWithTypeParameters, typeReference, trace);
+                                }
+                            },
+                            ErrorUtils.createErrorType("Recursive type alias expansion for " + typeAliasDescriptor.getName().asString())
+                    ),
+                    storageManager.createRecursionTolerantLazyValue(
+                            new Function0<SimpleType>() {
+                                @Override
+                                public SimpleType invoke() {
+                                    return typeResolver.resolveExpandedTypeForTypeAlias(typeAliasDescriptor);
+                                }
+                            },
+                            ErrorUtils.createErrorType("Recursive type alias expansion for " + typeAliasDescriptor.getName().asString())
+                    )
+            );
         }
 
         trace.record(TYPE_ALIAS, typeAlias, typeAliasDescriptor);
@@ -825,7 +824,7 @@ public class DescriptorResolver {
             }
             else {
                 LexicalWritableScope writableScope = new LexicalWritableScope(
-                        scope, containingDeclaration, false, null, new TraceBasedLocalRedeclarationChecker(trace, overloadChecker),
+                        scope, containingDeclaration, false, new TraceBasedLocalRedeclarationChecker(trace, overloadChecker),
                         LexicalScopeKind.PROPERTY_HEADER);
                 typeParameterDescriptors = resolveTypeParametersForDescriptor(
                         propertyDescriptor, writableScope, scope, typeParameters, trace);
@@ -843,16 +842,26 @@ public class DescriptorResolver {
         ReceiverParameterDescriptor receiverDescriptor =
                 DescriptorFactory.createExtensionReceiverParameterForCallable(propertyDescriptor, receiverType);
 
-        KotlinType type = variableTypeResolver.process(
-                propertyDescriptor, ScopeUtils.makeScopeForPropertyInitializer(scopeWithTypeParameters, propertyDescriptor),
-                property, dataFlowInfo, true, trace
+        LexicalScope scopeForInitializer = ScopeUtils.makeScopeForPropertyInitializer(scopeWithTypeParameters, propertyDescriptor);
+        KotlinType typeIfKnown = variableTypeAndInitializerResolver.resolveTypeNullable(
+                propertyDescriptor, scopeForInitializer,
+                property, dataFlowInfo, /* local = */ trace, false
+        );
+
+        PropertyGetterDescriptorImpl getter = resolvePropertyGetterDescriptor(
+                scopeWithTypeParameters, property, propertyDescriptor, annotationSplitter, trace, typeIfKnown);
+
+        KotlinType type = typeIfKnown != null ? typeIfKnown : getter.getReturnType();
+
+        assert type != null : "At least getter type must be initialized via resolvePropertyGetterDescriptor";
+
+        variableTypeAndInitializerResolver.setConstantForVariableIfNeeded(
+                propertyDescriptor, scopeForInitializer, property, dataFlowInfo, type, trace
         );
 
         propertyDescriptor.setType(type, typeParameterDescriptors, getDispatchReceiverParameterIfNeeded(containingDeclaration),
                                    receiverDescriptor);
 
-        PropertyGetterDescriptorImpl getter = resolvePropertyGetterDescriptor(
-                scopeWithTypeParameters, property, propertyDescriptor, annotationSplitter, trace);
         PropertySetterDescriptor setter = resolvePropertySetterDescriptor(
                 scopeWithTypeParameters, property, propertyDescriptor, annotationSplitter, trace);
 
@@ -951,13 +960,8 @@ public class DescriptorResolver {
                 else {
                     type = typeResolver.resolveType(scopeWithTypeParameters, typeReference, trace, true);
                     KotlinType inType = propertyDescriptor.getType();
-                    if (inType != null) {
-                        if (!TypeUtils.equalTypes(type, inType)) {
-                            trace.report(WRONG_SETTER_PARAMETER_TYPE.on(typeReference, inType, type));
-                        }
-                    }
-                    else {
-                        // TODO : the same check may be needed later???
+                    if (!TypeUtils.equalTypes(type, inType)) {
+                        trace.report(WRONG_SETTER_PARAMETER_TYPE.on(typeReference, inType, type));
                     }
                 }
 
@@ -993,10 +997,12 @@ public class DescriptorResolver {
             @NotNull KtProperty property,
             @NotNull PropertyDescriptor propertyDescriptor,
             @NotNull AnnotationSplitter annotationSplitter,
-            BindingTrace trace
+            BindingTrace trace,
+            @Nullable KotlinType propertyTypeIfKnown
     ) {
         PropertyGetterDescriptorImpl getterDescriptor;
         KtPropertyAccessor getter = property.getGetter();
+        KotlinType getterType;
         if (getter != null) {
             Annotations getterAnnotations = new CompositeAnnotations(CollectionsKt.listOf(
                     annotationSplitter.getAnnotationsForTarget(PROPERTY_GETTER),
@@ -1010,33 +1016,34 @@ public class DescriptorResolver {
                     property.hasModifier(KtTokens.INLINE_KEYWORD) || getter.hasModifier(KtTokens.INLINE_KEYWORD),
                     CallableMemberDescriptor.Kind.DECLARATION, null, KotlinSourceElementKt.toSourceElement(getter)
             );
-            KotlinType returnType =
-                    determineGetterReturnType(scopeWithTypeParameters, trace, getterDescriptor, getter, propertyDescriptor.getType());
-            getterDescriptor.initialize(returnType);
+            getterType = determineGetterReturnType(scopeWithTypeParameters, trace, getterDescriptor, getter, propertyTypeIfKnown);
             trace.record(BindingContext.PROPERTY_ACCESSOR, getter, getterDescriptor);
         }
         else {
             Annotations getterAnnotations = annotationSplitter.getAnnotationsForTarget(PROPERTY_GETTER);
             getterDescriptor = DescriptorFactory.createGetter(propertyDescriptor, getterAnnotations, !property.hasDelegate(),
                                                               /* isExternal = */ false, property.hasModifier(KtTokens.INLINE_KEYWORD));
-            getterDescriptor.initialize(propertyDescriptor.getType());
+            getterType = propertyTypeIfKnown;
         }
+
+        getterDescriptor.initialize(getterType != null ? getterType : VariableTypeAndInitializerResolver.STUB_FOR_PROPERTY_WITHOUT_TYPE);
+
         return getterDescriptor;
     }
 
-    @NotNull
+    @Nullable
     private KotlinType determineGetterReturnType(
             @NotNull LexicalScope scope,
             @NotNull BindingTrace trace,
             @NotNull PropertyGetterDescriptor getterDescriptor,
             @NotNull KtPropertyAccessor getter,
-            @NotNull KotlinType propertyType
+            @Nullable KotlinType propertyTypeIfKnown
     ) {
         KtTypeReference returnTypeReference = getter.getReturnTypeReference();
         if (returnTypeReference != null) {
             KotlinType explicitReturnType = typeResolver.resolveType(scope, returnTypeReference, trace, true);
-            if (!TypeUtils.equalTypes(explicitReturnType, propertyType)) {
-                trace.report(WRONG_GETTER_RETURN_TYPE.on(returnTypeReference, propertyType, explicitReturnType));
+            if (propertyTypeIfKnown != null && !TypeUtils.equalTypes(explicitReturnType, propertyTypeIfKnown)) {
+                trace.report(WRONG_GETTER_RETURN_TYPE.on(returnTypeReference, propertyTypeIfKnown, explicitReturnType));
             }
             return explicitReturnType;
         }
@@ -1047,18 +1054,14 @@ public class DescriptorResolver {
         KtProperty property = getter.getProperty();
         if (!property.hasDelegateExpressionOrInitializer() && property.getTypeReference() == null &&
             getter.hasBody() && !getter.hasBlockBody()) {
-            return inferReturnTypeFromExpressionBody(
-                    storageManager, expressionTypingServices, trace, scope, DataFlowInfoFactory.EMPTY, getter, getterDescriptor
-            );
+            return inferReturnTypeFromExpressionBody(trace, scope, DataFlowInfoFactory.EMPTY, getter, getterDescriptor);
         }
 
-        return propertyType;
+        return propertyTypeIfKnown;
     }
 
     @NotNull
     /*package*/ DeferredType inferReturnTypeFromExpressionBody(
-            @NotNull StorageManager storageManager,
-            @NotNull final ExpressionTypingServices expressionTypingServices,
             @NotNull final BindingTrace trace,
             @NotNull final LexicalScope scope,
             @NotNull final DataFlowInfo dataFlowInfo,

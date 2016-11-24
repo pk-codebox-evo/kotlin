@@ -28,18 +28,26 @@ public class K2JVMCompilerArguments extends CommonCompilerArguments {
     @ValueDescription("<path>")
     public String classpath;
 
+    @GradleOption(DefaultValues.BooleanFalseDefault.class)
     @Argument(value = "include-runtime", description = "Include Kotlin runtime in to resulting .jar")
     public boolean includeRuntime;
 
+    @GradleOption(DefaultValues.StringNullDefault.class)
     @Argument(value = "jdk-home", description = "Path to JDK home directory to include into classpath, if differs from default JAVA_HOME")
     @ValueDescription("<path>")
     public String jdkHome;
 
+    @GradleOption(DefaultValues.BooleanFalseDefault.class)
     @Argument(value = "no-jdk", description = "Don't include Java runtime into classpath")
     public boolean noJdk;
 
+    @GradleOption(DefaultValues.BooleanTrueDefault.class)
     @Argument(value = "no-stdlib", description = "Don't include Kotlin runtime into classpath")
     public boolean noStdlib;
+
+    @GradleOption(DefaultValues.BooleanTrueDefault.class)
+    @Argument(value = "no-reflect", description = "Don't include Kotlin reflection implementation into classpath")
+    public boolean noReflect;
 
     @Argument(value = "module", description = "Path to the module file to compile")
     @ValueDescription("<path>")
@@ -48,6 +56,10 @@ public class K2JVMCompilerArguments extends CommonCompilerArguments {
     @Argument(value = "script", description = "Evaluate the script file")
     public boolean script;
 
+    @Argument(value = "script-templates", description = "Script definition template classes")
+    @ValueDescription("<fully qualified class name[,]>")
+    public String[] scriptTemplates;
+
     @Argument(value = "kotlin-home", description = "Path to Kotlin compiler home directory, used for runtime libraries discovery")
     @ValueDescription("<path>")
     public String kotlinHome;
@@ -55,9 +67,14 @@ public class K2JVMCompilerArguments extends CommonCompilerArguments {
     @Argument(value = "module-name", description = "Module name")
     public String moduleName;
 
+    @GradleOption(DefaultValues.JvmTargetVersions.class)
     @Argument(value = "jvm-target", description = "Target version of the generated JVM bytecode (1.6 or 1.8), default is 1.6")
     @ValueDescription("<version>")
     public String jvmTarget;
+
+    @GradleOption(DefaultValues.BooleanFalseDefault.class)
+    @Argument(value = "java-parameters", description = "Generate metadata for Java 1.8 reflection on method parameters")
+    public boolean javaParameters;
 
     // Advanced options
     @Argument(value = "Xno-call-assertions", description = "Don't generate not-null assertion after each invocation of method returning not-null")
@@ -85,8 +102,17 @@ public class K2JVMCompilerArguments extends CommonCompilerArguments {
     @ValueDescription("<path>")
     public String declarationsOutputPath;
 
-    @Argument(value = "Xload-script-configs", description = "Load script configuration files from project directory tree")
-    public boolean loadScriptConfigs;
+    @Argument(value = "Xsingle-module", description = "Combine modules for source files and binary dependencies into a single module")
+    public boolean singleModule;
+
+    @Argument(value = "Xadd-compiler-builtins", description = "Add definitions of built-in declarations to the compilation classpath (useful with -no-stdlib)")
+    public boolean addCompilerBuiltIns;
+
+    @Argument(value = "Xload-builtins-from-dependencies", description = "Load definitions of built-in declarations from module dependencies, instead of from the compiler")
+    public boolean loadBuiltInsFromDependencies;
+
+    @Argument(value = "Xinterface-compatibility", description = "Generate DefaultImpls classes for interfaces in JVM target bytecode version 1.8 for binary compatibility with 1.6")
+    public boolean interfaceCompatibility;
 
     // Paths to output directories for friend modules.
     public String[] friendPaths;

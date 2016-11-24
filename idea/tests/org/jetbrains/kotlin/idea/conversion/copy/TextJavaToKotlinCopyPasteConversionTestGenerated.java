@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.idea.conversion.copy;
 import com.intellij.testFramework.TestDataPath;
 import org.jetbrains.kotlin.test.JUnit3RunnerWithInners;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
+import org.jetbrains.kotlin.test.TargetBackend;
 import org.jetbrains.kotlin.test.TestMetadata;
 import org.junit.runner.RunWith;
 
@@ -32,7 +33,7 @@ import java.util.regex.Pattern;
 @RunWith(JUnit3RunnerWithInners.class)
 public class TextJavaToKotlinCopyPasteConversionTestGenerated extends AbstractTextJavaToKotlinCopyPasteConversionTest {
     public void testAllFilesPresentInPlainTextConversion() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/copyPaste/plainTextConversion"), Pattern.compile("^([^\\.]+)\\.txt$"), true);
+        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/copyPaste/plainTextConversion"), Pattern.compile("^([^\\.]+)\\.txt$"), TargetBackend.ANY, true);
     }
 
     @TestMetadata("AsExpression.txt")
@@ -44,6 +45,12 @@ public class TextJavaToKotlinCopyPasteConversionTestGenerated extends AbstractTe
     @TestMetadata("AsExpressionBody.txt")
     public void testAsExpressionBody() throws Exception {
         String fileName = KotlinTestUtils.navigationMetadata("idea/testData/copyPaste/plainTextConversion/AsExpressionBody.txt");
+        doTest(fileName);
+    }
+
+    @TestMetadata("ImportResolve.txt")
+    public void testImportResolve() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("idea/testData/copyPaste/plainTextConversion/ImportResolve.txt");
         doTest(fileName);
     }
 
@@ -71,6 +78,18 @@ public class TextJavaToKotlinCopyPasteConversionTestGenerated extends AbstractTe
         doTest(fileName);
     }
 
+    @TestMetadata("KT13529.txt")
+    public void testKT13529() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("idea/testData/copyPaste/plainTextConversion/KT13529.txt");
+        doTest(fileName);
+    }
+
+    @TestMetadata("KT13529_1.txt")
+    public void testKT13529_1() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("idea/testData/copyPaste/plainTextConversion/KT13529_1.txt");
+        doTest(fileName);
+    }
+
     @TestMetadata("MembersIntoClass.txt")
     public void testMembersIntoClass() throws Exception {
         String fileName = KotlinTestUtils.navigationMetadata("idea/testData/copyPaste/plainTextConversion/MembersIntoClass.txt");
@@ -80,6 +99,18 @@ public class TextJavaToKotlinCopyPasteConversionTestGenerated extends AbstractTe
     @TestMetadata("MembersToTopLevel.txt")
     public void testMembersToTopLevel() throws Exception {
         String fileName = KotlinTestUtils.navigationMetadata("idea/testData/copyPaste/plainTextConversion/MembersToTopLevel.txt");
+        doTest(fileName);
+    }
+
+    @TestMetadata("Override.txt")
+    public void testOverride() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("idea/testData/copyPaste/plainTextConversion/Override.txt");
+        doTest(fileName);
+    }
+
+    @TestMetadata("OverrideInterface.txt")
+    public void testOverrideInterface() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("idea/testData/copyPaste/plainTextConversion/OverrideInterface.txt");
         doTest(fileName);
     }
 

@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.idea.highlighter;
 import com.intellij.testFramework.TestDataPath;
 import org.jetbrains.kotlin.test.JUnit3RunnerWithInners;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
+import org.jetbrains.kotlin.test.TargetBackend;
 import org.jetbrains.kotlin.test.TestMetadata;
 import org.junit.runner.RunWith;
 
@@ -38,7 +39,7 @@ public class DiagnosticMessageTestGenerated extends AbstractDiagnosticMessageTes
     }
 
     public void testAllFilesPresentInDiagnosticMessage() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/diagnosticMessage"), Pattern.compile("^(.+)\\.kt$"), false);
+        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/diagnosticMessage"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, false);
     }
 
     @TestMetadata("annotationsForResolve.kt")
@@ -251,6 +252,12 @@ public class DiagnosticMessageTestGenerated extends AbstractDiagnosticMessageTes
         doTest(fileName);
     }
 
+    @TestMetadata("typeMismatchWithFunctionalType.kt")
+    public void testTypeMismatchWithFunctionalType() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("idea/testData/diagnosticMessage/typeMismatchWithFunctionalType.kt");
+        doTest(fileName);
+    }
+
     @TestMetadata("typeMismatchWithNothing.kt")
     public void testTypeMismatchWithNothing() throws Exception {
         String fileName = KotlinTestUtils.navigationMetadata("idea/testData/diagnosticMessage/typeMismatchWithNothing.kt");
@@ -266,6 +273,18 @@ public class DiagnosticMessageTestGenerated extends AbstractDiagnosticMessageTes
     @TestMetadata("typeParameterAsReified.kt")
     public void testTypeParameterAsReified() throws Exception {
         String fileName = KotlinTestUtils.navigationMetadata("idea/testData/diagnosticMessage/typeParameterAsReified.kt");
+        doTest(fileName);
+    }
+
+    @TestMetadata("typeVarianceConflictInTypeAliasExpansion.kt")
+    public void testTypeVarianceConflictInTypeAliasExpansion() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("idea/testData/diagnosticMessage/typeVarianceConflictInTypeAliasExpansion.kt");
+        doTest(fileName);
+    }
+
+    @TestMetadata("unsupportedFeature.kt")
+    public void testUnsupportedFeature() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("idea/testData/diagnosticMessage/unsupportedFeature.kt");
         doTest(fileName);
     }
 
@@ -290,6 +309,12 @@ public class DiagnosticMessageTestGenerated extends AbstractDiagnosticMessageTes
     @TestMetadata("upperBoundViolated.kt")
     public void testUpperBoundViolated() throws Exception {
         String fileName = KotlinTestUtils.navigationMetadata("idea/testData/diagnosticMessage/upperBoundViolated.kt");
+        doTest(fileName);
+    }
+
+    @TestMetadata("upperBoundViolatedInTypeAliasConstructorCall.kt")
+    public void testUpperBoundViolatedInTypeAliasConstructorCall() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("idea/testData/diagnosticMessage/upperBoundViolatedInTypeAliasConstructorCall.kt");
         doTest(fileName);
     }
 }

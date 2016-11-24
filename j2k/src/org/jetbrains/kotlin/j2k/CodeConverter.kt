@@ -57,11 +57,16 @@ class CodeConverter(
         return statementConverter.convertStatement(statement, this).assignPrototype(statement)
     }
 
-    fun convertExpressions(expressions: Array<PsiExpression>): List<Expression>
-            = expressions.map { convertExpression(it) }
+    fun convertExpressionsInList(expressions: List<PsiExpression>): List<Expression>
+            = expressions.map { convertExpression(it).assignPrototype(it, CommentsAndSpacesInheritance.LINE_BREAKS) }
 
-    fun convertExpressions(expressions: List<PsiExpression>): List<Expression>
-            = expressions.map { convertExpression(it) }
+    fun convertArgumentList(list: PsiExpressionList): ArgumentList {
+        return ArgumentList(
+                convertExpressionsInList(list.expressions.asList()),
+                LPar.withPrototype(list.lPar()),
+                RPar.withPrototype(list.rPar())
+        ).assignPrototype(list)
+    }
 
     fun convertExpression(expression: PsiExpression?, shouldParenthesize: Boolean = false): Expression {
         if (expression == null) return Expression.Empty
@@ -119,15 +124,15 @@ class CodeConverter(
                     if (expectedTypeStr == "float") {
                         text += "f"
                     }
-                    else {
-                        if (!text.contains(".")) {
+                    if (expectedTypeStr == "double") {
+                        if (!text.contains(".") && !text.contains("e", true)) {
                             text += ".0"
                         }
                     }
                     convertedExpression = LiteralExpression(text)
                 }
                 else if (expectedTypeStr == "char") {
-                    convertedExpression = MethodCallExpression.build(convertedExpression, "toChar", emptyList(), emptyList(), false)
+                    convertedExpression = MethodCallExpression.buildNonNull(convertedExpression, "toChar")
                 }
             }
             else if (expression is PsiPrefixExpression && expression.isLiteralWithSign()) {
@@ -137,7 +142,7 @@ class CodeConverter(
             else {
                 val conversion = PRIMITIVE_TYPE_CONVERSIONS[expectedTypeStr]
                 if (conversion != null) {
-                    convertedExpression = MethodCallExpression.buildNotNull(convertedExpression, conversion)
+                    convertedExpression = MethodCallExpression.buildNonNull(convertedExpression, conversion)
                 }
             }
         }
@@ -146,7 +151,7 @@ class CodeConverter(
     }
 
     fun convertedExpressionType(expression: PsiExpression, expectedType: PsiType): Type {
-        var convertedExpression = convertExpression(expression)
+        val convertedExpression = convertExpression(expression)
         val actualType = expression.type ?: return ErrorType()
         var resultType = typeConverter.convertType(actualType, if (convertedExpression.isNullable) Nullability.Nullable else Nullability.NotNull)
 

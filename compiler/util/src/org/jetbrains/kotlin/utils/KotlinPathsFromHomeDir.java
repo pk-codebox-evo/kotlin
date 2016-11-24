@@ -52,6 +52,12 @@ public class KotlinPathsFromHomeDir implements KotlinPaths {
         return getLibraryFile(PathUtil.KOTLIN_JAVA_REFLECT_JAR);
     }
 
+    @Override
+    @NotNull
+    public File getScriptRuntimePath() {
+        return getLibraryFile(PathUtil.KOTLIN_JAVA_SCRIPT_RUNTIME_JAR);
+    }
+
     @NotNull
     @Override
     public File getKotlinTestPath() {
@@ -80,6 +86,12 @@ public class KotlinPathsFromHomeDir implements KotlinPaths {
     @Override
     public File getCompilerPath() {
         return getLibraryFile(PathUtil.KOTLIN_COMPILER_JAR);
+    }
+
+    @NotNull
+    @Override
+    public File getBuildNumberFile() {
+        return new File(homePath, "build.txt");
     }
 
     @NotNull

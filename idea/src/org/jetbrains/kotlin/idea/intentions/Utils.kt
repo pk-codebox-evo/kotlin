@@ -23,38 +23,21 @@ import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.ValueParameterDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.analyzeAndGetResult
+import org.jetbrains.kotlin.idea.core.setType
 import org.jetbrains.kotlin.idea.core.ShortenReferences
 import org.jetbrains.kotlin.idea.references.mainReference
+import org.jetbrains.kotlin.js.descriptorUtils.nameIfStandardType
 import org.jetbrains.kotlin.idea.util.IdeDescriptorRenderers
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
-import org.jetbrains.kotlin.psi.typeRefHelpers.setReceiverTypeReference
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
+import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameUnsafe
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.isFlexible
-
-fun KtCallableDeclaration.setType(type: KotlinType, shortenReferences: Boolean = true) {
-    if (type.isError) return
-    setType(IdeDescriptorRenderers.SOURCE_CODE.renderType(type), shortenReferences)
-}
-
-fun KtCallableDeclaration.setType(typeString: String, shortenReferences: Boolean = true) {
-    val typeReference = KtPsiFactory(project).createType(typeString)
-    setTypeReference(typeReference)
-    if (shortenReferences) {
-        ShortenReferences.DEFAULT.process(getTypeReference()!!)
-    }
-}
-
-fun KtCallableDeclaration.setReceiverType(type: KotlinType) {
-    if (type.isError) return
-    val typeReference = KtPsiFactory(project).createType(IdeDescriptorRenderers.SOURCE_CODE.renderType(type))
-    setReceiverTypeReference(typeReference)
-    ShortenReferences.DEFAULT.process(receiverTypeReference!!)
-}
+import java.lang.IllegalArgumentException
 
 fun KtContainerNode.description(): String? {
     when (node.elementType) {
@@ -69,6 +52,11 @@ fun KtContainerNode.description(): String? {
         }
     }
     return null
+}
+
+fun KtCallExpression.isMethodCall(fqMethodName: String): Boolean {
+    val resolvedCall = this.getResolvedCall(this.analyze()) ?: return false
+    return resolvedCall.resultingDescriptor.fqNameUnsafe.asString() == fqMethodName
 }
 
 fun isAutoCreatedItUsage(expression: KtNameReferenceExpression): Boolean {
@@ -92,7 +80,7 @@ fun splitPropertyDeclaration(property: KtProperty): KtBinaryExpression {
     assignment = parent.addAfter(assignment, property) as KtBinaryExpression
     parent.addAfter(psiFactory.createNewLine(), property)
 
-    property.setInitializer(null)
+    property.initializer = null
 
     if (explicitTypeToSet != null) {
         property.setType(explicitTypeToSet)
@@ -133,12 +121,21 @@ fun KtExpression.negate(): KtExpression {
 }
 
 fun KtExpression.resultingWhens(): List<KtWhenExpression> = when (this) {
-    is KtWhenExpression -> listOf(this)
+    is KtWhenExpression -> listOf(this) + entries.map { it.expression?.resultingWhens() ?: listOf() }.flatten()
     is KtIfExpression -> (then?.resultingWhens() ?: listOf()) + (`else`?.resultingWhens() ?: listOf())
     is KtBinaryExpression -> (left?.resultingWhens() ?: listOf()) + (right?.resultingWhens() ?: listOf())
     is KtUnaryExpression -> this.baseExpression?.resultingWhens() ?: listOf()
     is KtBlockExpression -> statements.lastOrNull()?.resultingWhens() ?: listOf()
     else -> listOf()
+}
+
+fun KtExpression?.hasResultingIfWithoutElse(): Boolean = when (this) {
+    is KtIfExpression -> `else` == null || then.hasResultingIfWithoutElse() || `else`.hasResultingIfWithoutElse()
+    is KtWhenExpression -> entries.any { it.expression.hasResultingIfWithoutElse() }
+    is KtBinaryExpression -> left.hasResultingIfWithoutElse() || right.hasResultingIfWithoutElse()
+    is KtUnaryExpression -> baseExpression.hasResultingIfWithoutElse()
+    is KtBlockExpression -> statements.lastOrNull().hasResultingIfWithoutElse()
+    else -> false
 }
 
 private fun KtExpression.specialNegation(): KtExpression? {
@@ -148,8 +145,8 @@ private fun KtExpression.specialNegation(): KtExpression? {
             if (operationReference.getReferencedName() == "!") {
                 val baseExpression = baseExpression
                 if (baseExpression != null) {
-                    val context = baseExpression.analyzeAndGetResult().bindingContext
-                    val type = context.getType(baseExpression)
+                    val bindingContext = baseExpression.analyze(BodyResolveMode.PARTIAL)
+                    val type = bindingContext.getType(baseExpression)
                     if (type != null && KotlinBuiltIns.isBoolean(type)) {
                         return KtPsiUtil.safeDeparenthesize(baseExpression)
                     }
@@ -210,4 +207,63 @@ internal fun KotlinType.isFlexibleRecursive(): Boolean {
     return arguments.any { !it.isStarProjection && it.type.isFlexibleRecursive() }
 }
 
+val KtIfExpression.branches: List<KtExpression?> get() = ifBranchesOrThis()
+
+private fun KtExpression.ifBranchesOrThis(): List<KtExpression?> {
+    if (this !is KtIfExpression) return listOf(this)
+    return listOf(then) + `else`?.ifBranchesOrThis().orEmpty()
+}
+
+fun ResolvedCall<out CallableDescriptor>.resolvedToArrayType(): Boolean =
+        resultingDescriptor.returnType.let { type ->
+            type != null && (KotlinBuiltIns.isArray(type) || KotlinBuiltIns.isPrimitiveArray(type))
+        }
+
+fun KtElement?.isZero() = this?.text == "0"
+
+fun KtElement?.isOne() = this?.text == "1"
+
+private fun KtExpression.isExpressionOfTypeOrSubtype(predicate: (KotlinType) -> Boolean): Boolean {
+    val returnType = getResolvedCall(analyze())?.resultingDescriptor?.returnType
+    return returnType != null && (returnType.constructor.supertypes + returnType).any(predicate)
+}
+
+fun KtElement?.isSizeOrLength(): Boolean {
+    if (this !is KtDotQualifiedExpression) return false
+
+    return when (selectorExpression?.text) {
+        "size" -> receiverExpression.isExpressionOfTypeOrSubtype { type ->
+            KotlinBuiltIns.isArray(type) ||
+            KotlinBuiltIns.isPrimitiveArray(type) ||
+            KotlinBuiltIns.isCollectionOrNullableCollection(type) ||
+            KotlinBuiltIns.isMapOrNullableMap(type)
+        }
+        "length" -> receiverExpression.isExpressionOfTypeOrSubtype(KotlinBuiltIns::isCharSequenceOrNullableCharSequence)
+        else -> false
+    }
+}
+
+
+fun KtDotQualifiedExpression.getLeftMostReceiverExpression(): KtExpression =
+        (receiverExpression as? KtDotQualifiedExpression)?.getLeftMostReceiverExpression() ?: receiverExpression
+
+fun KtDotQualifiedExpression.replaceFirstReceiver(
+        factory: KtPsiFactory,
+        newReceiver: KtExpression,
+        safeAccess: Boolean = false
+): KtExpression {
+    val receiver = receiverExpression
+    if (safeAccess) {
+        operationTokenNode.psi.replace(factory.createSafeCallNode().psi)
+    }
+    when (receiver) {
+        is KtDotQualifiedExpression -> {
+            receiver.replaceFirstReceiver(factory, newReceiver, safeAccess)
+        }
+        else -> {
+            receiver.replace(newReceiver)
+        }
+    }
+    return this
+}
 

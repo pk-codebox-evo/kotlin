@@ -20,7 +20,6 @@ import com.intellij.codeInsight.completion.*
 import com.intellij.codeInsight.lookup.LookupElement
 import com.intellij.codeInsight.lookup.LookupElementDecorator
 import com.intellij.openapi.editor.Document
-import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.util.Key
 import com.intellij.patterns.PlatformPatterns
 import com.intellij.patterns.PsiJavaPatterns.elementType
@@ -168,7 +167,7 @@ class KotlinCompletionContributor : CompletionContributor() {
         val classOrObject = tokenBefore?.parents?.firstIsInstanceOrNull<KtClassOrObject>() ?: return false
         val name = classOrObject.nameIdentifier ?: return false
         val body = classOrObject.getBody() ?: return false
-        val offset = tokenBefore!!.startOffset
+        val offset = tokenBefore.startOffset
         return name.endOffset <= offset && offset <= body.startOffset
     }
 
@@ -180,7 +179,7 @@ class KotlinCompletionContributor : CompletionContributor() {
 
         val lambda = leaf?.parents?.firstOrNull { it is KtFunctionLiteral } ?: return null
 
-        val lambdaChild = leaf!!.parents.takeWhile { it != lambda }.lastOrNull()
+        val lambdaChild = leaf.parents.takeWhile { it != lambda }.lastOrNull()
 
         return if (lambdaChild is KtParameterList)
             CompletionUtilCore.DUMMY_IDENTIFIER_TRIMMED
@@ -302,10 +301,11 @@ class KotlinCompletionContributor : CompletionContributor() {
                 // Rerun completion if nothing was found
                 val newConfiguration = CompletionSessionConfiguration(
                         useBetterPrefixMatcherForNonImportedClasses = false,
-                        completeNonAccessibleDeclarations = false,
-                        filterOutJavaGettersAndSetters = false,
-                        completeJavaClassesNotToBeUsed = false,
-                        completeStaticMembers = parameters.invocationCount > 0
+                        nonAccessibleDeclarations = false,
+                        javaGettersAndSetters = true,
+                        javaClassesNotToBeUsed = false,
+                        staticMembers = parameters.invocationCount > 0,
+                        dataClassComponentFunctions = true
                 )
 
                 val newSession = BasicCompletionSession(newConfiguration, parameters, toFromOriginalFileMapper, result)

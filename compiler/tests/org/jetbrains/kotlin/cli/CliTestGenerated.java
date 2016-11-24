@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.cli;
 import com.intellij.testFramework.TestDataPath;
 import org.jetbrains.kotlin.test.JUnit3RunnerWithInners;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
+import org.jetbrains.kotlin.test.TargetBackend;
 import org.jetbrains.kotlin.test.TestMetadata;
 import org.junit.runner.RunWith;
 
@@ -34,7 +35,37 @@ public class CliTestGenerated extends AbstractCliTest {
     @RunWith(JUnit3RunnerWithInners.class)
     public static class Jvm extends AbstractCliTest {
         public void testAllFilesPresentInJvm() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cli/jvm"), Pattern.compile("^(.+)\\.args$"), false);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cli/jvm"), Pattern.compile("^(.+)\\.args$"), TargetBackend.ANY, false);
+        }
+
+        @TestMetadata("apiVersion.args")
+        public void testApiVersion() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/apiVersion.args");
+            doJvmTest(fileName);
+        }
+
+        @TestMetadata("apiVersionAndSinceNewerKotlin.args")
+        public void testApiVersionAndSinceNewerKotlin() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/apiVersionAndSinceNewerKotlin.args");
+            doJvmTest(fileName);
+        }
+
+        @TestMetadata("apiVersionGreaterThanLanguage.args")
+        public void testApiVersionGreaterThanLanguage() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/apiVersionGreaterThanLanguage.args");
+            doJvmTest(fileName);
+        }
+
+        @TestMetadata("apiVersionInvalid.args")
+        public void testApiVersionInvalid() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/apiVersionInvalid.args");
+            doJvmTest(fileName);
+        }
+
+        @TestMetadata("apiVersionLessThanLanguage.args")
+        public void testApiVersionLessThanLanguage() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/apiVersionLessThanLanguage.args");
+            doJvmTest(fileName);
         }
 
         @TestMetadata("classAndFileClassClash.args")
@@ -169,6 +200,18 @@ public class CliTestGenerated extends AbstractCliTest {
             doJvmTest(fileName);
         }
 
+        @TestMetadata("noReflect.args")
+        public void testNoReflect() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/noReflect.args");
+            doJvmTest(fileName);
+        }
+
+        @TestMetadata("noStdlib.args")
+        public void testNoStdlib() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/noStdlib.args");
+            doJvmTest(fileName);
+        }
+
         @TestMetadata("nonExistingClassPathAndAnnotationsPath.args")
         public void testNonExistingClassPathAndAnnotationsPath() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/nonExistingClassPathAndAnnotationsPath.args");
@@ -208,6 +251,12 @@ public class CliTestGenerated extends AbstractCliTest {
         @TestMetadata("pluginSimpleUsage.args")
         public void testPluginSimpleUsage() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/pluginSimpleUsage.args");
+            doJvmTest(fileName);
+        }
+
+        @TestMetadata("returnAsWhenKey.args")
+        public void testReturnAsWhenKey() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/returnAsWhenKey.args");
             doJvmTest(fileName);
         }
 
@@ -256,6 +305,12 @@ public class CliTestGenerated extends AbstractCliTest {
         @TestMetadata("unknownExtraFlags.args")
         public void testUnknownExtraFlags() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/unknownExtraFlags.args");
+            doJvmTest(fileName);
+        }
+
+        @TestMetadata("unsupportedTypeAlias.args")
+        public void testUnsupportedTypeAlias() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/unsupportedTypeAlias.args");
             doJvmTest(fileName);
         }
 
@@ -319,7 +374,7 @@ public class CliTestGenerated extends AbstractCliTest {
     @RunWith(JUnit3RunnerWithInners.class)
     public static class Js extends AbstractCliTest {
         public void testAllFilesPresentInJs() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cli/js"), Pattern.compile("^(.+)\\.args$"), false);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cli/js"), Pattern.compile("^(.+)\\.args$"), TargetBackend.ANY, false);
         }
 
         @TestMetadata("createKjsm.args")
@@ -331,12 +386,6 @@ public class CliTestGenerated extends AbstractCliTest {
         @TestMetadata("createMetadata.args")
         public void testCreateMetadata() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/js/createMetadata.args");
-            doJsTest(fileName);
-        }
-
-        @TestMetadata("diagnosticForClassLiteral.args")
-        public void testDiagnosticForClassLiteral() throws Exception {
-            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/js/diagnosticForClassLiteral.args");
             doJsTest(fileName);
         }
 

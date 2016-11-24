@@ -16,9 +16,25 @@
 
 package kotlin.jvm.internal;
 
+import kotlin.reflect.KCallable;
 import kotlin.reflect.KProperty;
 
 public abstract class PropertyReference extends CallableReference implements KProperty {
+    @Override
+    protected KProperty getReflected() {
+        return (KProperty) super.getReflected();
+    }
+
+    @Override
+    public boolean isLateinit() {
+        return getReflected().isLateinit();
+    }
+
+    @Override
+    public boolean isConst() {
+        return getReflected().isConst();
+    }
+
     @Override
     public boolean equals(Object obj) {
         if (obj == this) return true;
@@ -29,8 +45,7 @@ public abstract class PropertyReference extends CallableReference implements KPr
                    getSignature().equals(other.getSignature());
         }
         if (obj instanceof KProperty) {
-            compute();
-            return obj.equals(reflected);
+            return obj.equals(compute());
         }
         return false;
     }
@@ -42,7 +57,7 @@ public abstract class PropertyReference extends CallableReference implements KPr
 
     @Override
     public String toString() {
-        compute();
+        KCallable reflected = compute();
         if (reflected != this) {
             return reflected.toString();
         }

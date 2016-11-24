@@ -9,12 +9,10 @@ package kotlin.collections
 //
 
 import kotlin.comparisons.*
-import java.util.*
-
-import java.util.Collections // TODO: it's temporary while we have java.util.Collections in js
 
 /**
  * Returns a set containing all elements of the original set except the given [element].
+ * 
  * The returned set preserves the element iteration order of the original set.
  */
 public operator fun <T> Set<T>.minus(element: T): Set<T> {
@@ -25,6 +23,7 @@ public operator fun <T> Set<T>.minus(element: T): Set<T> {
 
 /**
  * Returns a set containing all elements of the original set except the elements contained in the given [elements] array.
+ * 
  * The returned set preserves the element iteration order of the original set.
  */
 public operator fun <T> Set<T>.minus(elements: Array<out T>): Set<T> {
@@ -35,6 +34,7 @@ public operator fun <T> Set<T>.minus(elements: Array<out T>): Set<T> {
 
 /**
  * Returns a set containing all elements of the original set except the elements contained in the given [elements] collection.
+ * 
  * The returned set preserves the element iteration order of the original set.
  */
 public operator fun <T> Set<T>.minus(elements: Iterable<T>): Set<T> {
@@ -50,6 +50,7 @@ public operator fun <T> Set<T>.minus(elements: Iterable<T>): Set<T> {
 
 /**
  * Returns a set containing all elements of the original set except the elements contained in the given [elements] sequence.
+ * 
  * The returned set preserves the element iteration order of the original set.
  */
 public operator fun <T> Set<T>.minus(elements: Sequence<T>): Set<T> {
@@ -60,6 +61,7 @@ public operator fun <T> Set<T>.minus(elements: Sequence<T>): Set<T> {
 
 /**
  * Returns a set containing all elements of the original set except the given [element].
+ * 
  * The returned set preserves the element iteration order of the original set.
  */
 @kotlin.internal.InlineOnly
@@ -69,6 +71,7 @@ public inline fun <T> Set<T>.minusElement(element: T): Set<T> {
 
 /**
  * Returns a set containing all elements of the original set and then the given [element] if it isn't already in this set.
+ * 
  * The returned set preserves the element iteration order of the original set.
  */
 public operator fun <T> Set<T>.plus(element: T): Set<T> {
@@ -81,6 +84,7 @@ public operator fun <T> Set<T>.plus(element: T): Set<T> {
 /**
  * Returns a set containing all elements of the original set and the given [elements] array,
  * which aren't already in this set.
+ * 
  * The returned set preserves the element iteration order of the original set.
  */
 public operator fun <T> Set<T>.plus(elements: Array<out T>): Set<T> {
@@ -105,6 +109,7 @@ public operator fun <T> Set<T>.plus(elements: Iterable<T>): Set<T> {
 /**
  * Returns a set containing all elements of the original set and the given [elements] sequence,
  * which aren't already in this set.
+ * 
  * The returned set preserves the element iteration order of the original set.
  */
 public operator fun <T> Set<T>.plus(elements: Sequence<T>): Set<T> {
@@ -116,6 +121,7 @@ public operator fun <T> Set<T>.plus(elements: Sequence<T>): Set<T> {
 
 /**
  * Returns a set containing all elements of the original set and then the given [element] if it isn't already in this set.
+ * 
  * The returned set preserves the element iteration order of the original set.
  */
 @kotlin.internal.InlineOnly

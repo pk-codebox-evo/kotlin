@@ -18,7 +18,7 @@ package org.jetbrains.kotlin.j2k
 
 import com.intellij.psi.*
 import com.intellij.psi.util.PsiMethodUtil
-import org.jetbrains.kotlin.asJava.KtLightClass
+import org.jetbrains.kotlin.asJava.classes.KtLightClass
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.j2k.ast.*
 import org.jetbrains.kotlin.types.expressions.OperatorConventions
@@ -34,8 +34,8 @@ fun getDefaultInitializer(property: Property): Expression? {
         when (t.name.name) {
             "Boolean" -> LiteralExpression("false")
             "Char" -> LiteralExpression("' '")
-            "Double" -> MethodCallExpression.buildNotNull(LiteralExpression("0").assignNoPrototype(), OperatorConventions.DOUBLE.toString())
-            "Float" -> MethodCallExpression.buildNotNull(LiteralExpression("0").assignNoPrototype(), OperatorConventions.FLOAT.toString())
+            "Double" -> MethodCallExpression.buildNonNull(LiteralExpression("0").assignNoPrototype(), OperatorConventions.DOUBLE.toString())
+            "Float" -> MethodCallExpression.buildNonNull(LiteralExpression("0").assignNoPrototype(), OperatorConventions.FLOAT.toString())
             else -> LiteralExpression("0")
         }
     }
@@ -110,6 +110,10 @@ fun PsiModifierListOwner.accessModifier(): String = when {
 
 fun PsiMethod.isMainMethod(): Boolean = PsiMethodUtil.isMainMethod(this)
 
+fun PsiReferenceExpression.dot(): PsiElement? = node.findChildByType(JavaTokenType.DOT)?.psi
+fun PsiExpressionList.lPar(): PsiElement? = node.findChildByType(JavaTokenType.LPARENTH)?.psi
+fun PsiExpressionList.rPar(): PsiElement? = node.findChildByType(JavaTokenType.RPARENTH)?.psi
+
 fun PsiMember.isImported(file: PsiJavaFile): Boolean {
     if (this is PsiClass) {
         val fqName = qualifiedName
@@ -139,7 +143,7 @@ fun Converter.convertToKotlinAnalog(classQualifiedName: String?, mutability: Mut
 
 fun Converter.convertToKotlinAnalogIdentifier(classQualifiedName: String?, mutability: Mutability): Identifier? {
     val kotlinClassName = convertToKotlinAnalog(classQualifiedName, mutability) ?: return null
-    return Identifier(kotlinClassName.substringAfterLast('.')).assignNoPrototype()
+    return Identifier.withNoPrototype(kotlinClassName.substringAfterLast('.'))
 }
 
 private val toKotlinTypesMap: Map<String, String> = mapOf(

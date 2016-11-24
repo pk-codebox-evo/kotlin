@@ -185,10 +185,9 @@ public class FunctionReferenceGenerationStrategy extends FunctionGenerationStrat
         if (receiverValue != null) return receiverValue;
 
         if (receiverType != null) {
-            return StackValue.field(
-                    receiverType, Type.getObjectType(codegen.getParentCodegen().getClassName()), AsmUtil.CAPTURED_RECEIVER_FIELD,
-                    /* isStatic = */ false, StackValue.LOCAL_0
-            );
+            ClassDescriptor classDescriptor = (ClassDescriptor) codegen.getContext().getParentContext().getContextDescriptor();
+            Type asmType = codegen.getState().getTypeMapper().mapClass(classDescriptor);
+            return CallableReferenceUtilKt.capturedReceiver(asmType, receiverType);
         }
 
         // 0 is this (the callable reference class), 1 is the invoke() method's first parameter

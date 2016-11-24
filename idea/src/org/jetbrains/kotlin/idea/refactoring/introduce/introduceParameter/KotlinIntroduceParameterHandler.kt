@@ -37,10 +37,7 @@ import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptor
 import org.jetbrains.kotlin.idea.codeInsight.CodeInsightUtils
-import org.jetbrains.kotlin.idea.core.KotlinNameSuggester
-import org.jetbrains.kotlin.idea.core.NewDeclarationNameValidator
-import org.jetbrains.kotlin.idea.core.moveInsideParenthesesAndReplaceWith
-import org.jetbrains.kotlin.idea.core.replaced
+import org.jetbrains.kotlin.idea.core.*
 import org.jetbrains.kotlin.idea.refactoring.KotlinRefactoringBundle
 import org.jetbrains.kotlin.idea.refactoring.changeSignature.*
 import org.jetbrains.kotlin.idea.refactoring.introduce.*
@@ -179,8 +176,6 @@ fun IntroduceParameterDescriptor.performRefactoring() {
     }
 }
 
-private fun isObjectOrNonInnerClass(e: PsiElement): Boolean = e is KtObjectDeclaration || (e is KtClass && !e.isInner())
-
 fun selectNewParameterContext(
         editor: Editor,
         file: KtFile,
@@ -268,13 +263,8 @@ open class KotlinIntroduceParameterHandler(
 
         val parametersUsages = findInternalUsagesOfParametersAndReceiver(targetParent, functionDescriptor) ?: return
 
-        val forbiddenRanges =
-                if (targetParent is KtClass) {
-                    targetParent.declarations.filter { isObjectOrNonInnerClass(it) }.map { it.textRange }
-                }
-                else {
-                    Collections.emptyList()
-                }
+        val forbiddenRanges = (targetParent as? KtClass)?.declarations?.filter(::isObjectOrNonInnerClass)?.map { it.textRange }
+                              ?: Collections.emptyList()
 
         val occurrencesToReplace = if (expression is KtProperty) {
             ReferencesSearch.search(expression).mapNotNullTo(SmartList(expression.toRange())) { it.element?.toRange() }
@@ -319,7 +309,7 @@ open class KotlinIntroduceParameterHandler(
                                             originalRange = originalExpression.toRange(),
                                             callable = targetParent,
                                             callableDescriptor = functionDescriptor,
-                                            newParameterName = suggestedNames.first(),
+                                            newParameterName = suggestedNames.first().quoteIfNeeded(),
                                             newParameterTypeText = IdeDescriptorRenderers.SOURCE_CODE_SHORT_NAMES_IN_TYPES.renderType(replacementType),
                                             argumentValue = originalExpression,
                                             withDefaultValue = false,

@@ -16,8 +16,7 @@
 
 package org.jetbrains.kotlin.util
 
-import org.jetbrains.kotlin.builtins.KotlinBuiltIns
-import org.jetbrains.kotlin.builtins.ReflectionTypes
+import org.jetbrains.kotlin.builtins.*
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
@@ -37,6 +36,7 @@ import org.jetbrains.kotlin.util.OperatorNameConventions.COMPONENT_REGEX
 import org.jetbrains.kotlin.util.OperatorNameConventions.CONTAINS
 import org.jetbrains.kotlin.util.OperatorNameConventions.COROUTINE_HANDLE_EXCEPTION
 import org.jetbrains.kotlin.util.OperatorNameConventions.COROUTINE_HANDLE_RESULT
+import org.jetbrains.kotlin.util.OperatorNameConventions.COROUTINE_INTERCEPT_RESUME
 import org.jetbrains.kotlin.util.OperatorNameConventions.DEC
 import org.jetbrains.kotlin.util.OperatorNameConventions.EQUALS
 import org.jetbrains.kotlin.util.OperatorNameConventions.GET
@@ -46,6 +46,7 @@ import org.jetbrains.kotlin.util.OperatorNameConventions.INC
 import org.jetbrains.kotlin.util.OperatorNameConventions.INVOKE
 import org.jetbrains.kotlin.util.OperatorNameConventions.ITERATOR
 import org.jetbrains.kotlin.util.OperatorNameConventions.NEXT
+import org.jetbrains.kotlin.util.OperatorNameConventions.PROPERTY_DELEGATED
 import org.jetbrains.kotlin.util.OperatorNameConventions.RANGE_TO
 import org.jetbrains.kotlin.util.OperatorNameConventions.SET
 import org.jetbrains.kotlin.util.OperatorNameConventions.SET_VALUE
@@ -162,7 +163,7 @@ internal class Checks private constructor(
 
 abstract class AbstractModifierChecks {
     abstract internal val checks: List<Checks>
-    
+
     inline fun ensure(cond: Boolean, msg: () -> String) = if (!cond) msg() else null
 
     fun check(functionDescriptor: FunctionDescriptor): CheckResult {
@@ -192,14 +193,14 @@ object OperatorChecks : AbstractModifierChecks() {
             Checks(RANGE_TO, MemberOrExtension, SingleValueParameter, NoDefaultAndVarargsCheck),
             Checks(EQUALS, Member) {
                 fun DeclarationDescriptor.isAny() = this is ClassDescriptor && KotlinBuiltIns.isAny(this)
-                ensure(overriddenDescriptors.any { it.containingDeclaration.isAny() }) { "must override ''equals()'' in Any" }
+                ensure(containingDeclaration.isAny() || overriddenDescriptors.any { it.containingDeclaration.isAny() }) { "must override ''equals()'' in Any" }
             },
             Checks(COMPARE_TO, MemberOrExtension, ReturnsInt, SingleValueParameter, NoDefaultAndVarargsCheck),
             Checks(BINARY_OPERATION_NAMES, MemberOrExtension, SingleValueParameter, NoDefaultAndVarargsCheck),
             Checks(SIMPLE_UNARY_OPERATION_NAMES, MemberOrExtension, NoValueParameters),
             Checks(listOf(INC, DEC), MemberOrExtension) {
                 val receiver = dispatchReceiverParameter ?: extensionReceiverParameter
-                ensure(receiver != null && (returnType?.let { it.isSubtypeOf(receiver.type) } ?: false)) {
+                ensure(receiver != null && (returnType?.isSubtypeOf(receiver.type) ?: false)) {
                     "receiver must be a supertype of the return type"
                 }
             },
@@ -215,7 +216,16 @@ object OperatorChecks : AbstractModifierChecks() {
                 ?: ensure(valueParameters[0].type.isThrowable()) {
                     "First parameter should be 'Throwable'"
                 }
-            }
+            },
+            Checks(COROUTINE_INTERCEPT_RESUME, Member, ValueParameterCountCheck.Equals(1), ReturnsUnit, NoDefaultAndVarargsCheck,
+                   NoTypeParametersCheck
+            ) {
+                val parameterType = valueParameters.single().type
+                ensure(parameterType.isNonExtensionFunctionType && parameterType.getValueParameterTypesFromFunctionType().isEmpty() &&
+                            parameterType.getReturnTypeFromFunctionType().isUnit()
+                ) { "Value parameter must have a functional type '() -> Unit'" }
+            },
+            Checks(PROPERTY_DELEGATED, Member, ValueParameterCountCheck.Equals(1)) //TODO: more checks required!
     )
 
     private fun FunctionDescriptor.checkHandleSecondParameter(): String? {

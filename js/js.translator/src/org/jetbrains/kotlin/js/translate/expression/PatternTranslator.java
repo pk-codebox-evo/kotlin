@@ -23,10 +23,7 @@ import org.jetbrains.kotlin.KtNodeTypes;
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns;
 import org.jetbrains.kotlin.builtins.PrimitiveType;
 import org.jetbrains.kotlin.builtins.ReflectionTypes;
-import org.jetbrains.kotlin.descriptors.CallableDescriptor;
-import org.jetbrains.kotlin.descriptors.ClassDescriptor;
-import org.jetbrains.kotlin.descriptors.DeclarationDescriptor;
-import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor;
+import org.jetbrains.kotlin.descriptors.*;
 import org.jetbrains.kotlin.js.patterns.NamePredicate;
 import org.jetbrains.kotlin.js.patterns.typePredicates.TypePredicatesKt;
 import org.jetbrains.kotlin.js.translate.context.Namer;
@@ -35,6 +32,7 @@ import org.jetbrains.kotlin.js.translate.context.TranslationContext;
 import org.jetbrains.kotlin.js.translate.general.AbstractTranslator;
 import org.jetbrains.kotlin.js.translate.general.Translation;
 import org.jetbrains.kotlin.js.translate.intrinsic.functions.factories.TopLevelFIF;
+import org.jetbrains.kotlin.js.translate.reference.ReferenceTranslator;
 import org.jetbrains.kotlin.js.translate.utils.BindingUtils;
 import org.jetbrains.kotlin.js.translate.utils.TranslationUtils;
 import org.jetbrains.kotlin.lexer.KtTokens;
@@ -58,7 +56,7 @@ import static org.jetbrains.kotlin.js.descriptorUtils.DescriptorUtilsKt.getNameI
 import static org.jetbrains.kotlin.js.translate.utils.BindingUtils.getTypeByReference;
 import static org.jetbrains.kotlin.js.translate.utils.BindingUtils.getTypeForExpression;
 import static org.jetbrains.kotlin.js.translate.utils.JsAstUtils.equality;
-import static org.jetbrains.kotlin.js.translate.utils.JsAstUtils.negated;
+import static org.jetbrains.kotlin.js.translate.utils.JsAstUtils.not;
 import static org.jetbrains.kotlin.psi.KtPsiUtil.findChildByType;
 import static org.jetbrains.kotlin.types.TypeUtils.*;
 
@@ -97,7 +95,7 @@ public final class PatternTranslator extends AbstractTranslator {
             onFail = JsLiteral.NULL;
         }
         else {
-            JsExpression throwCCEFunRef = context().namer().throwClassCastExceptionFunRef();
+            JsExpression throwCCEFunRef = Namer.throwClassCastExceptionFunRef();
             onFail = new JsInvocation(throwCCEFunRef);
         }
 
@@ -114,7 +112,7 @@ public final class PatternTranslator extends AbstractTranslator {
         if (result == null) return JsLiteral.getBoolean(!expression.isNegated());
 
         if (expression.isNegated()) {
-            return negated(result);
+            return not(result);
         }
         return result;
     }
@@ -140,7 +138,9 @@ public final class PatternTranslator extends AbstractTranslator {
     public JsExpression getIsTypeCheckCallable(@NotNull KotlinType type) {
         JsExpression callable = doGetIsTypeCheckCallable(type);
 
-        if (isNullableType(type)) {
+        // If the type is reified, rely on the corresponding is type callable.
+        // Otherwise make sure that passing null yields true
+        if (!isReifiedTypeParameter(type) && isNullableType(type)) {
             return namer().orNull(callable);
         }
 
@@ -170,7 +170,9 @@ public final class PatternTranslator extends AbstractTranslator {
             return result;
         }
 
-        JsNameRef typeName = getClassNameReference(type);
+
+        ClassDescriptor referencedClass = DescriptorUtils.getClassDescriptorForType(type);
+        JsExpression typeName = ReferenceTranslator.translateAsTypeReference(referencedClass, context());
         return namer().isInstanceOf(typeName);
     }
 
@@ -233,12 +235,6 @@ public final class PatternTranslator extends AbstractTranslator {
         JsExpression alias = context().getAliasForDescriptor(typeParameter);
         assert alias != null: "No alias found for reified type parameter: " + typeParameter;
         return alias;
-    }
-
-    @NotNull
-    private JsNameRef getClassNameReference(@NotNull KotlinType type) {
-        ClassDescriptor referencedClass = DescriptorUtils.getClassDescriptorForType(type);
-        return context().getQualifiedReference(referencedClass);
     }
 
     @NotNull

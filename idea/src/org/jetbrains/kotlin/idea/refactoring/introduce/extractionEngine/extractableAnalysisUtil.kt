@@ -46,8 +46,8 @@ import org.jetbrains.kotlin.idea.codeInsight.DescriptorToSourceUtilsIde
 import org.jetbrains.kotlin.idea.core.KotlinNameSuggester
 import org.jetbrains.kotlin.idea.core.NewDeclarationNameValidator
 import org.jetbrains.kotlin.idea.core.compareDescriptors
-import org.jetbrains.kotlin.idea.refactoring.createTempCopy
 import org.jetbrains.kotlin.idea.refactoring.KotlinRefactoringBundle
+import org.jetbrains.kotlin.idea.refactoring.createTempCopy
 import org.jetbrains.kotlin.idea.refactoring.introduce.extractionEngine.AnalysisResult.ErrorMessage
 import org.jetbrains.kotlin.idea.refactoring.introduce.extractionEngine.AnalysisResult.Status
 import org.jetbrains.kotlin.idea.refactoring.introduce.extractionEngine.OutputValue.*
@@ -92,7 +92,7 @@ private fun List<Instruction>.getModifiedVarDescriptors(bindingContext: BindingC
     val result = HashMap<VariableDescriptor, MutableList<KtExpression>>()
     for (instruction in filterIsInstance<WriteValueInstruction>()) {
         val expression = instruction.element as? KtExpression
-        val descriptor = PseudocodeUtil.extractVariableDescriptorIfAny(instruction, false, bindingContext)
+        val descriptor = PseudocodeUtil.extractVariableDescriptorIfAny(instruction, bindingContext)
         if (expression != null && descriptor != null) {
             result.getOrPut(descriptor) { ArrayList() }.add(expression)
         }
@@ -106,10 +106,10 @@ private fun List<Instruction>.getVarDescriptorsAccessedAfterwards(bindingContext
     val visitedInstructions = HashSet<Instruction>()
 
     fun doTraversal(instruction: Instruction) {
-        traverseFollowingInstructions(instruction, visitedInstructions, TraversalOrder.FORWARD) {
+        traverseFollowingInstructions(instruction, visitedInstructions) {
             when {
                 it is AccessValueInstruction && it !in this ->
-                    PseudocodeUtil.extractVariableDescriptorIfAny(it, false, bindingContext)?.let { accessedAfterwards.add(it) }
+                    PseudocodeUtil.extractVariableDescriptorIfAny(it, bindingContext)?.let { accessedAfterwards.add(it) }
 
                 it is LocalFunctionDeclarationInstruction ->
                     doTraversal(it.body.enterInstruction)
@@ -243,6 +243,8 @@ private fun ExtractionData.analyzeControlFlow(
                 when {
                     it !is ReturnValueInstruction && it !is ReturnNoValueInstruction && it.owner != pseudocode ->
                         null
+                    it is UnconditionalJumpInstruction && it.targetLabel.isJumpToError ->
+                        it
                     e != null && e !is KtBreakExpression && e !is KtContinueExpression ->
                         it.previousInstructions.firstOrNull()
                     else ->
@@ -268,7 +270,7 @@ private fun ExtractionData.analyzeControlFlow(
                         || element is KtContinueExpression) {
                     jumpExits.add(inst)
                 }
-                else if (element !is KtThrowExpression) {
+                else if (element !is KtThrowExpression && !inst.targetLabel.isJumpToError) {
                     defaultExits.add(inst)
                 }
             }
@@ -720,7 +722,7 @@ private fun ExtractionData.suggestFunctionNames(returnType: KotlinType): List<St
     expressions.singleOrNull()?.let { expr ->
         val property = expr.getStrictParentOfType<KtProperty>()
         if (property?.initializer == expr) {
-            property?.name?.let { functionNames.add(KotlinNameSuggester.suggestNameByName("get" + it.capitalize(), validator)) }
+            property.name?.let { functionNames.add(KotlinNameSuggester.suggestNameByName("get" + it.capitalize(), validator)) }
         }
     }
 

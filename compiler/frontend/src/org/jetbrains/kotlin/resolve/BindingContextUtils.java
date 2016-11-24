@@ -30,6 +30,7 @@ import org.jetbrains.kotlin.resolve.calls.callUtil.CallUtilKt;
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall;
 import org.jetbrains.kotlin.resolve.calls.model.VariableAsFunctionResolvedCall;
 import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowInfoFactory;
+import org.jetbrains.kotlin.resolve.calls.tower.TowerLevelsKt;
 import org.jetbrains.kotlin.resolve.diagnostics.MutableDiagnosticsWithSuppression;
 import org.jetbrains.kotlin.types.KotlinType;
 import org.jetbrains.kotlin.types.TypeUtils;
@@ -57,19 +58,25 @@ public class BindingContextUtils {
     }
 
     @Nullable
-    public static VariableDescriptor extractVariableDescriptorIfAny(@NotNull BindingContext bindingContext, @Nullable KtElement element, boolean onlyReference) {
-        DeclarationDescriptor descriptor = null;
-        if (!onlyReference && (element instanceof KtVariableDeclaration || element instanceof KtParameter)) {
-            descriptor = bindingContext.get(BindingContext.DECLARATION_TO_DESCRIPTOR, element);
+    public static VariableDescriptor variableDescriptorForDeclaration(@Nullable DeclarationDescriptor descriptor) {
+        if (descriptor instanceof VariableDescriptor)
+            return (VariableDescriptor) descriptor;
+        if (descriptor instanceof ClassDescriptor) {
+            return TowerLevelsKt.getFakeDescriptorForObject((ClassDescriptor) descriptor);
         }
-        else if (element instanceof KtSimpleNameExpression) {
-            descriptor = bindingContext.get(BindingContext.REFERENCE_TARGET, (KtSimpleNameExpression) element);
+        return null;
+    }
+
+    @Nullable
+    public static VariableDescriptor extractVariableDescriptorFromReference(
+            @NotNull BindingContext bindingContext,
+            @Nullable KtElement element
+    ) {
+        if (element instanceof KtSimpleNameExpression) {
+            return variableDescriptorForDeclaration(bindingContext.get(BindingContext.REFERENCE_TARGET, (KtSimpleNameExpression) element));
         }
         else if (element instanceof KtQualifiedExpression) {
-            descriptor = extractVariableDescriptorIfAny(bindingContext, ((KtQualifiedExpression) element).getSelectorExpression(), onlyReference);
-        }
-        if (descriptor instanceof VariableDescriptor) {
-            return (VariableDescriptor) descriptor;
+            return extractVariableDescriptorFromReference(bindingContext, ((KtQualifiedExpression) element).getSelectorExpression());
         }
         return null;
     }
@@ -174,7 +181,7 @@ public class BindingContextUtils {
     @Nullable
     public static KotlinTypeInfo getRecordedTypeInfo(@NotNull KtExpression expression, @NotNull BindingContext context) {
         // noinspection ConstantConditions
-        if (!context.get(BindingContext.PROCESSED, expression)) return null;
+        if (context.get(BindingContext.PROCESSED, expression) != Boolean.TRUE) return null;
         // NB: should never return null if expression is already processed
         KotlinTypeInfo result = context.get(BindingContext.EXPRESSION_TYPE_INFO, expression);
         return result != null ? result : TypeInfoFactoryKt.noTypeInfo(DataFlowInfoFactory.EMPTY);

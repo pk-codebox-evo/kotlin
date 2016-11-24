@@ -1,45 +1,44 @@
-package org.jetbrains.kotlin.gradle.tasks
-
-import org.gradle.api.tasks.compile.AbstractCompile
-import org.gradle.api.Task
-import org.gradle.api.Project
-import org.gradle.api.tasks.SourceTask
-import org.jetbrains.kotlin.gradle.plugin.RegexTaskToFriendTaskMapper
-import org.jetbrains.kotlin.gradle.plugin.TaskToFriendTaskMapper
-import org.jetbrains.kotlin.gradle.plugin.friendTaskName
-import java.net.URLClassLoader
-
-/**
- * Tasks provider to be used wrapper
- * Created by Nikita.Skvortsov
- * date: 17.12.2014.
+/*
+ * Copyright 2010-2016 JetBrains s.r.o.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
-open class KotlinTasksProvider(val tasksLoader: ClassLoader) {
-    val kotlinJVMCompileTaskClass: Class<AbstractCompile> =
-            tasksLoader.loadClass("org.jetbrains.kotlin.gradle.tasks.KotlinCompile") as Class<AbstractCompile>
+package org.jetbrains.kotlin.gradle.tasks
 
-    val kotlinJSCompileTaskClass: Class<AbstractCompile> =
-            tasksLoader.loadClass("org.jetbrains.kotlin.gradle.tasks.Kotlin2JsCompile") as Class<AbstractCompile>
+import org.gradle.api.Project
+import org.jetbrains.kotlin.gradle.plugin.RegexTaskToFriendTaskMapper
+import org.jetbrains.kotlin.gradle.plugin.TaskToFriendTaskMapper
+import org.jetbrains.kotlin.gradle.plugin.mapKotlinTaskProperties
 
-    val kotlinJVMOptionsClass: Class<Any> =
-            tasksLoader.loadClass("org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments") as Class<Any>
-
-    fun createKotlinJVMTask(project: Project, name: String): AbstractCompile {
-        return project.tasks.create(name, kotlinJVMCompileTaskClass).apply {
+internal open class KotlinTasksProvider {
+    fun createKotlinJVMTask(project: Project, name: String, sourceSetName: String): KotlinCompile {
+        return project.tasks.create(name, KotlinCompile::class.java).apply {
+            this.sourceSetName = sourceSetName
             friendTaskName = taskToFriendTaskMapper[this]
+            mapKotlinTaskProperties(project, this)
+            outputs.upToDateWhen { isCacheFormatUpToDate }
         }
     }
 
-    fun createKotlinJSTask(project: Project, name: String): AbstractCompile {
-        return project.tasks.create(name, kotlinJSCompileTaskClass)
-    }
+    fun createKotlinJSTask(project: Project, name: String, sourceSetName: String): Kotlin2JsCompile =
+            project.tasks.create(name, Kotlin2JsCompile::class.java)
 
     protected open val taskToFriendTaskMapper: TaskToFriendTaskMapper =
             RegexTaskToFriendTaskMapper.Default()
 }
 
-class AndroidTasksProvider(tasksLoader: ClassLoader) : KotlinTasksProvider(tasksLoader) {
+internal class AndroidTasksProvider : KotlinTasksProvider() {
     override val taskToFriendTaskMapper: TaskToFriendTaskMapper =
             RegexTaskToFriendTaskMapper.Android()
 }

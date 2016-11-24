@@ -21,6 +21,9 @@ import org.jetbrains.kotlin.codegen.ClassBuilder
 import org.jetbrains.kotlin.codegen.SourceInfo
 import java.util.*
 
+val KOTLIN_STRATA_NAME = "Kotlin"
+val KOTLIN_DEBUG_STRATA_NAME = "KotlinDebug"
+
 //TODO join parameter
 class SMAPBuilder(
         val source: String,
@@ -48,15 +51,15 @@ class SMAPBuilder(
     private fun generateDefaultStrata(realMappings: List<FileMapping>): String {
         val fileIds = "*F" + realMappings.mapIndexed { id, file -> "\n${file.toSMAPFile(id + 1)}" }.joinToString("")
         val lineMappings = "*L" + realMappings.joinToString("") { it.toSMAPMapping() }
-        return "*S Kotlin\n$fileIds\n$lineMappings\n*E\n"
+        return "*S $KOTLIN_STRATA_NAME\n$fileIds\n$lineMappings\n*E\n"
     }
 
     private fun generateDebugStrata(realMappings: List<FileMapping>): String {
         val combinedMapping = FileMapping(source, path)
         realMappings.forEach { fileMapping ->
-            fileMapping.lineMappings.filter { it.callSiteMarker != null }.forEach { rangeMapping ->
+            fileMapping.lineMappings.filter { it.callSiteMarker != null }.forEach { (source, dest, range, callSiteMarker) ->
                 combinedMapping.addRangeMapping(RangeMapping(
-                        rangeMapping.callSiteMarker!!.lineNumber, rangeMapping.dest, rangeMapping.range
+                        callSiteMarker!!.lineNumber, dest, range
                 ))
             }
         }
@@ -66,7 +69,7 @@ class SMAPBuilder(
         val newMappings = listOf(combinedMapping)
         val fileIds = "*F" + newMappings.mapIndexed { id, file -> "\n${file.toSMAPFile(id + 1)}" }.joinToString("")
         val lineMappings = "*L" + newMappings.joinToString("") { it.toSMAPMapping() }
-        return "*S KotlinDebug\n$fileIds\n$lineMappings\n*E\n"
+        return "*S $KOTLIN_DEBUG_STRATA_NAME\n$fileIds\n$lineMappings\n*E\n"
     }
 
     private fun RangeMapping.toSMAP(fileId: Int): String {
@@ -347,6 +350,10 @@ data class RangeMapping(val source: Int, val dest: Int, var range: Int = 1, var 
 
     operator fun contains(destLine: Int): Boolean {
         return skip || (dest <= destLine && destLine < dest + range)
+    }
+
+    fun hasMappingForSource(sourceLine: Int): Boolean {
+        return skip || (source <= sourceLine && sourceLine < source + range)
     }
 
     fun mapDestToSource(destLine: Int): Int {

@@ -39,6 +39,7 @@ import org.jetbrains.kotlin.j2k.AfterConversionPass
 import org.jetbrains.kotlin.j2k.ConverterSettings
 import org.jetbrains.kotlin.j2k.JavaToKotlinConverter
 import org.jetbrains.kotlin.j2k.ParseContext
+import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtPsiFactory
@@ -85,7 +86,7 @@ class ConvertJavaCopyPasteProcessor : CopyPastePostProcessor<TextBlockTransferab
 
         fun doConversion(): Result {
             val dataForConversion = DataForConversion.prepare(data, project)
-            val result = convertCopiedCodeToKotlin(dataForConversion.elementsAndTexts, project)
+            val result = dataForConversion.elementsAndTexts.convertCodeToKotlin(project)
             val referenceData = buildReferenceData(result.text, result.parseContext, dataForConversion.importsAndPackage, targetFile)
             val text = if (result.textChanged) result.text else null
             return Result(text, referenceData, result.importsToAdd)
@@ -134,15 +135,19 @@ class ConvertJavaCopyPasteProcessor : CopyPastePostProcessor<TextBlockTransferab
             val (text, referenceData, explicitImports) = conversionResult!!
             text!! // otherwise we should get true from doConversionAndInsertImportsIfUnchanged and return above
 
+            val boundsAfterReplace =
+                    runWriteAction {
+                        val startOffset = bounds.startOffset
+                        document.replaceString(startOffset, bounds.endOffset, text)
+
+                        val endOffsetAfterCopy = startOffset + text.length
+                        editor.caretModel.moveToOffset(endOffsetAfterCopy)
+                        TextRange(startOffset, endOffsetAfterCopy)
+                    }
+
+            val newBounds = insertImports(boundsAfterReplace, referenceData, explicitImports)
+
             runWriteAction {
-                val startOffset = bounds.startOffset
-                document.replaceString(startOffset, bounds.endOffset, text)
-
-                val endOffsetAfterCopy = startOffset + text.length
-                editor.caretModel.moveToOffset(endOffsetAfterCopy)
-
-                val newBounds = insertImports(TextRange(startOffset, endOffsetAfterCopy), referenceData, explicitImports)
-
                 PsiDocumentManager.getInstance(project).commitAllDocuments()
                 AfterConversionPass(project, J2kPostProcessor(formatCode = true)).run(targetFile, newBounds)
 
@@ -197,14 +202,14 @@ internal class ConversionResult(
         val textChanged: Boolean
 )
 
-internal fun convertCopiedCodeToKotlin(elementsAndTexts: Collection<Any>, project: Project): ConversionResult {
+internal fun ElementAndTextList.convertCodeToKotlin(project: Project): ConversionResult {
     val converter = JavaToKotlinConverter(
             project,
             ConverterSettings.defaultSettings,
             IdeaJavaToKotlinServices
     )
 
-    val inputElements = elementsAndTexts.filterIsInstance<PsiElement>()
+    val inputElements = this.toList().filterIsInstance<PsiElement>()
     val results = converter.elementsToKotlin(inputElements).results
     val importsToAdd = LinkedHashSet<FqName>()
 
@@ -212,9 +217,9 @@ internal fun convertCopiedCodeToKotlin(elementsAndTexts: Collection<Any>, projec
     val convertedCodeBuilder = StringBuilder()
     val originalCodeBuilder = StringBuilder()
     var parseContext: ParseContext? = null
-    for (o in elementsAndTexts) {
-        if (o is PsiElement) {
-            val originalText = o.text
+    this.process(object : ElementsAndTextsProcessor {
+        override fun processElement(element: PsiElement) {
+            val originalText = element.text
             originalCodeBuilder.append(originalText)
 
             val result = results[resultIndex++]
@@ -229,11 +234,12 @@ internal fun convertCopiedCodeToKotlin(elementsAndTexts: Collection<Any>, projec
                 convertedCodeBuilder.append(originalText)
             }
         }
-        else {
-            originalCodeBuilder.append(o)
-            convertedCodeBuilder.append(o as String)
+
+        override fun processText(string: String) {
+            originalCodeBuilder.append(string)
+            convertedCodeBuilder.append(string)
         }
-    }
+    })
 
     val convertedCode = convertedCodeBuilder.toString()
     val originalCode = originalCodeBuilder.toString()
@@ -247,7 +253,9 @@ internal fun isNoConversionPosition(file: KtFile, offset: Int): Boolean {
     if (token !is PsiWhiteSpace && token.endOffset != offset) return true // pasting into the middle of token
 
     for (element in token.parentsWithSelf) {
-        if (element is PsiComment) return true
+        if (element is PsiComment) {
+            return element.node.elementType == KtTokens.EOL_COMMENT || offset != element.endOffset
+        }
         if (element is KtStringTemplateEntryWithExpression) return false
         if (element is KtStringTemplateExpression) return true
     }

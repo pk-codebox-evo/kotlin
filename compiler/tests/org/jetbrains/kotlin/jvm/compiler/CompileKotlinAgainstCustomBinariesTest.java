@@ -40,10 +40,7 @@ import org.jetbrains.kotlin.load.kotlin.JvmMetadataVersion;
 import org.jetbrains.kotlin.resolve.BindingContext;
 import org.jetbrains.kotlin.resolve.DescriptorUtils;
 import org.jetbrains.kotlin.resolve.lazy.JvmResolveUtil;
-import org.jetbrains.kotlin.test.ConfigurationKind;
-import org.jetbrains.kotlin.test.KotlinTestUtils;
-import org.jetbrains.kotlin.test.TestCaseWithTmpdir;
-import org.jetbrains.kotlin.test.TestJdkKind;
+import org.jetbrains.kotlin.test.*;
 import org.jetbrains.kotlin.test.util.DescriptorValidator;
 import org.jetbrains.kotlin.test.util.RecursiveDescriptorComparator;
 import org.jetbrains.kotlin.utils.ExceptionUtilsKt;
@@ -99,9 +96,8 @@ public class CompileKotlinAgainstCustomBinariesTest extends TestCaseWithTmpdir {
     private void doTestWithTxt(@NotNull File... extraClassPath) throws Exception {
         PackageViewDescriptor packageView = analyzeFileToPackageView(extraClassPath);
 
-        RecursiveDescriptorComparator.Configuration comparator =
-                RecursiveDescriptorComparator.DONT_INCLUDE_METHODS_OF_OBJECT.withValidationStrategy(
-                        DescriptorValidator.ValidationVisitor.errorTypesAllowed());
+        RecursiveDescriptorComparator.Configuration comparator = AbstractLoadJavaTest.COMPARATOR_CONFIGURATION
+                .withValidationStrategy(DescriptorValidator.ValidationVisitor.errorTypesAllowed());
         validateAndCompareDescriptorWithFile(packageView, comparator, getTestDataFileWithExtension("txt"));
     }
 
@@ -184,10 +180,19 @@ public class CompileKotlinAgainstCustomBinariesTest extends TestCaseWithTmpdir {
         return library;
     }
 
+    private Pair<String, ExitCode> compileKotlin(
+            @NotNull String fileName,
+            @NotNull File output,
+            @NotNull File... classpath
+    ) {
+        return compileKotlin(fileName, output, Collections.<String>emptyList(), classpath);
+    }
+
     @NotNull
     private Pair<String, ExitCode> compileKotlin(
             @NotNull String fileName,
             @NotNull File output,
+            List<String> additionalOptions,
             @NotNull File... classpath
     ) {
         List<String> args = new ArrayList<String>();
@@ -200,6 +205,7 @@ public class CompileKotlinAgainstCustomBinariesTest extends TestCaseWithTmpdir {
         }
         args.add("-d");
         args.add(output.getPath());
+        args.addAll(additionalOptions);
 
         return AbstractCliTest.executeCompilerGrabOutput(new K2JVMCompiler(), args);
     }
@@ -385,5 +391,60 @@ public class CompileKotlinAgainstCustomBinariesTest extends TestCaseWithTmpdir {
         File usage = compileLibrary("usage", library1);
         File library2 = compileLibrary("library-2");
         doTestWithTxt(usage, library2);
+    }
+
+    public void testProhibitNestedClassesByDollarName() throws Exception {
+        File library = compileLibrary("library");
+
+        KotlinTestUtils.compileJavaFiles(
+                Collections.singletonList(
+                        new File(getTestDataDirectory() + "/library/test/JavaOuter.java")
+                ),
+                Arrays.asList("-d", tmpdir.getPath())
+        );
+
+        Pair<String, ExitCode> outputMain = compileKotlin("main.kt", tmpdir, tmpdir, library);
+
+        KotlinTestUtils.assertEqualsToFile(
+                new File(getTestDataDirectory(), "output.txt"), normalizeOutput(outputMain)
+        );
+    }
+
+    public void testTarget6Inheritance() throws Exception {
+        target6Inheritance();
+    }
+
+    public void testTarget6MultiInheritance() throws Exception {
+        target6Inheritance();
+    }
+
+    private void target6Inheritance() {
+        compileKotlin("target6.kt", tmpdir);
+
+        Pair<String, ExitCode> outputMain = compileKotlin("main.kt", tmpdir, Arrays.asList("-jvm-target", "1.8"), tmpdir);
+
+        KotlinTestUtils.assertEqualsToFile(
+                new File(getTestDataDirectory(), "output.txt"), normalizeOutput(outputMain)
+        );
+    }
+
+    public void testTypeAliasesAreInvisibleInCompatibilityMode() {
+        compileKotlin("typeAliases.kt", tmpdir);
+
+        Pair<String, ExitCode> outputMain = compileKotlin("main.kt", tmpdir, Arrays.asList("-language-version", "1.0"), tmpdir);
+
+        KotlinTestUtils.assertEqualsToFile(
+                new File(getTestDataDirectory(), "output.txt"), normalizeOutput(outputMain)
+        );
+    }
+
+    public void testInnerClassPackageConflict() throws Exception {
+        compileJava("library");
+        FileUtil.copy(new File(getTestDataDirectory(), "library/test/Foo/x.txt"),
+                      new File(tmpdir, "library/test/Foo/x.txt"));
+        MockLibraryUtil.createJarFile(tmpdir, new File(tmpdir, "library"), null, "library", false);
+        File jarPath = new File(tmpdir, "library.jar");
+        Pair<String, ExitCode> output = compileKotlin("source.kt", tmpdir, jarPath);
+        KotlinTestUtils.assertEqualsToFile(new File(getTestDataDirectory(), "output.txt"), normalizeOutput(output));
     }
 }

@@ -156,6 +156,10 @@ public class KotlinParsing extends AbstractKotlinParsing {
         marker.done(BLOCK_CODE_FRAGMENT);
     }
 
+    void parseLambdaExpression() {
+        myExpressionParsing.parseFunctionLiteral(/* preferBlock = */ false, /* collapse = */false);
+    }
+
     void parseScript() {
         PsiBuilder.Marker fileMarker = mark();
 
@@ -1321,7 +1325,7 @@ public class KotlinParsing extends AbstractKotlinParsing {
     }
 
     /*
-     * (SimpleName (":" type)){","}
+     * (SimpleName (":" type){","})
      */
     public void parseMultiDeclarationName(TokenSet follow) {
         // Parsing multi-name, e.g.

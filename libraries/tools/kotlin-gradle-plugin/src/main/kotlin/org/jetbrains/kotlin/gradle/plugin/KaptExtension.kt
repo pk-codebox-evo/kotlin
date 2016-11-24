@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
+ * Copyright 2010-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,39 +18,50 @@ package org.jetbrains.kotlin.gradle.plugin
 
 import groovy.lang.Closure
 import org.gradle.api.Project
+import java.util.*
 
-public open class KaptExtension {
+open class KaptExtension {
 
-    public open var generateStubs: Boolean = false
+    open var generateStubs: Boolean = false
 
-    public open var inheritedAnnotations: Boolean = true
+    open var inheritedAnnotations: Boolean = true
 
     private var closure: Closure<*>? = null
 
-    public open fun arguments(closure: Closure<*>) {
+    open fun arguments(closure: Closure<*>) {
         this.closure = closure
     }
 
-    fun getAdditionalArguments(project: Project, variant: Any?, android: Any?): List<String> {
-        val closureToExecute = closure ?: return emptyList()
+    fun getAdditionalArguments(project: Project, variantData: Any?, androidExtension: Any?): Map<String, String> {
+        val closureToExecute = closure ?: return emptyMap()
 
-        val executor = KaptAdditionalArgumentsDelegate(project, variant, android)
+        val executor = KaptAdditionalArgumentsDelegate(project, variantData, androidExtension)
         executor.execute(closureToExecute)
-        return executor.additionalCompilerArgs
+        return executor.args
+    }
+
+    fun getAdditionalArgumentsForJavac(project: Project, variantData: Any?, androidExtension: Any?): List<String> {
+        val javacArgs = mutableListOf<String>()
+        for ((key, value) in getAdditionalArguments(project, variantData, androidExtension)) {
+            javacArgs += "-A" + key + (if (value.isNotEmpty()) "=$value" else "")
+        }
+        return javacArgs
     }
 }
 
-public open class KaptAdditionalArgumentsDelegate(
-        public open val project: Project,
-        public open val variant: Any?,
-        public open val android: Any?
+/**
+ * [project], [variant] and [android] properties are intended to be used inside the closure.
+ */
+open class KaptAdditionalArgumentsDelegate(
+        @Suppress("unused") open val project: Project,
+        @Suppress("unused") open val variant: Any?,
+        @Suppress("unused") open val android: Any?
 ) {
+    internal val args = LinkedHashMap<String, String>()
 
-    val additionalCompilerArgs = arrayListOf<String>()
-
-    public open fun arg(name: Any, vararg values: Any) {
-        val valuesString = if (values.isNotEmpty()) values.joinToString(" ", prefix = "=") else ""
-        additionalCompilerArgs.add("-A$name$valuesString")
+    @Suppress("unused")
+    open fun arg(name: Any, vararg values: Any) {
+        args.put(name.toString(), values.joinToString(" "))
     }
 
     fun execute(closure: Closure<*>) {

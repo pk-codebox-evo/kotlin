@@ -18,6 +18,8 @@ package org.jetbrains.kotlin.idea.core.script
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.ServiceManager
+import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ex.ProjectRootManagerEx
 import com.intellij.openapi.startup.StartupManager
@@ -31,10 +33,13 @@ import com.intellij.psi.search.FileTypeIndex
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.NonClasspathDirectoriesScope
 import com.intellij.util.io.URLUtil
+import org.jetbrains.annotations.TestOnly
 import org.jetbrains.kotlin.idea.util.application.runReadAction
 import org.jetbrains.kotlin.idea.util.application.runWriteAction
-import org.jetbrains.kotlin.script.*
-import org.jetbrains.kotlin.utils.PathUtil
+import org.jetbrains.kotlin.script.KotlinScriptDefinitionProvider
+import org.jetbrains.kotlin.script.KotlinScriptExternalImportsProvider
+import org.jetbrains.kotlin.script.StandardScriptDefinition
+import org.jetbrains.kotlin.script.makeScriptDefsFromTemplatesProviderExtensions
 import java.io.File
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
@@ -43,13 +48,10 @@ import kotlin.concurrent.write
 @Suppress("SimplifyAssertNotNull")
 class KotlinScriptConfigurationManager(
         private val project: Project,
+        private val dumbService: DumbService,
         private val scriptDefinitionProvider: KotlinScriptDefinitionProvider,
         private val scriptExternalImportsProvider: KotlinScriptExternalImportsProvider
 ) {
-
-    private val kotlinEnvVars: Map<String, List<String>> by lazy {
-        generateKotlinScriptClasspathEnvVarsFromPaths(project, PathUtil.getKotlinPathsForIdeaPlugin())
-    }
 
     init {
         reloadScriptDefinitions()
@@ -73,46 +75,49 @@ class KotlinScriptConfigurationManager(
     private val cacheLock = ReentrantReadWriteLock()
 
     private val allScriptsClasspathCache = ClearableLazyValue(cacheLock) {
-        scriptExternalImportsProvider.getKnownCombinedClasspath().distinct().mapNotNull { it.classpathEntryToVfs() }
+        toVfsRoots(scriptExternalImportsProvider.getKnownCombinedClasspath().distinct())
+    }
+
+    private val allScriptsClasspathScope = ClearableLazyValue(cacheLock) {
+        NonClasspathDirectoriesScope(getAllScriptsClasspath())
     }
 
     private val allLibrarySourcesCache = ClearableLazyValue(cacheLock) {
-        scriptExternalImportsProvider.getKnownSourceRoots().distinct().mapNotNull { it.classpathEntryToVfs() }
+        toVfsRoots(scriptExternalImportsProvider.getKnownSourceRoots().distinct())
+    }
+
+    private val allLibrarySourcesScope = ClearableLazyValue(cacheLock) {
+        NonClasspathDirectoriesScope(getAllLibrarySources())
     }
 
     private fun notifyRootsChanged() {
+        // TODO: it seems invokeLater leads to inconsistent behaviour (at least in tests)
         ApplicationManager.getApplication().invokeLater {
-            runWriteAction { ProjectRootManagerEx.getInstanceEx(project)?.makeRootsChange(EmptyRunnable.getInstance(), false, true) }
+            runWriteAction {
+                if (project.isDisposed) return@runWriteAction
+
+                ProjectRootManagerEx.getInstanceEx(project)?.makeRootsChange(EmptyRunnable.getInstance(), false, true)
+                dumbService.runWhenSmart {
+                    ScriptDependenciesModificationTracker.getInstance(project).incModificationCount()
+                }
+            }
         }
     }
 
-    fun getScriptClasspath(file: VirtualFile): List<VirtualFile> =
-            scriptExternalImportsProvider.getExternalImports(file)
-                    .flatMap { it.classpath }
-                    .mapNotNull { it.classpathEntryToVfs() }
+    fun getScriptClasspath(file: VirtualFile): List<VirtualFile> = toVfsRoots(
+            scriptExternalImportsProvider.getExternalImports(file)?.classpath ?: emptyList()
+    )
 
     fun getAllScriptsClasspath(): List<VirtualFile> = allScriptsClasspathCache.get()
 
     fun getAllLibrarySources(): List<VirtualFile> = allLibrarySourcesCache.get()
 
-    private fun File.classpathEntryToVfs(): VirtualFile? {
-        val res = when {
-            !exists() -> null
-            isDirectory -> StandardFileSystems.local()?.findFileByPath(this.canonicalPath) ?: null
-            isFile -> StandardFileSystems.jar()?.findFileByPath(this.canonicalPath + URLUtil.JAR_SEPARATOR) ?: null
-            else -> null
-        }
-        // TODO: report this somewhere, but do not throw: assert(res != null, { "Invalid classpath entry '$this': exists: ${exists()}, is directory: $isDirectory, is file: $isFile" })
-        return res
-    }
+    fun getAllScriptsClasspathScope() = allScriptsClasspathScope.get()
 
-    fun getAllScriptsClasspathScope() = NonClasspathDirectoriesScope(getAllScriptsClasspath())
-
-    fun getAllLibrarySourcesScope() = NonClasspathDirectoriesScope(getAllLibrarySources())
+    fun getAllLibrarySourcesScope() = allLibrarySourcesScope.get()
 
     private fun reloadScriptDefinitions() {
-        (makeScriptDefsFromTemplateProviderExtensions(project, { ep, ex -> /* TODO: add logging here */ }) +
-         loadScriptConfigsFromProjectRoot(File(project.basePath ?: "")).map { KotlinConfigurableScriptDefinition(it, kotlinEnvVars) }).let {
+        makeScriptDefsFromTemplatesProviderExtensions(project, { ep, ex -> log.warn("[kts] Error loading definition from ${ep.id}", ex) }).let {
             if (it.isNotEmpty()) {
                 scriptDefinitionProvider.setScriptDefinitions(it + StandardScriptDefinition)
             }
@@ -139,7 +144,9 @@ class KotlinScriptConfigurationManager(
 
     private fun invalidateLocalCaches() {
         allScriptsClasspathCache.clear()
+        allScriptsClasspathScope.clear()
         allLibrarySourcesCache.clear()
+        allLibrarySourcesScope.clear()
     }
 
 
@@ -147,6 +154,31 @@ class KotlinScriptConfigurationManager(
         @JvmStatic
         fun getInstance(project: Project): KotlinScriptConfigurationManager =
                 ServiceManager.getService(project, KotlinScriptConfigurationManager::class.java)
+
+        fun toVfsRoots(roots: Iterable<File>): List<VirtualFile> {
+            return roots.mapNotNull { it.classpathEntryToVfs() }
+        }
+
+        private fun File.classpathEntryToVfs(): VirtualFile? {
+            val res = when {
+                !exists() -> null
+                isDirectory -> StandardFileSystems.local()?.findFileByPath(this.canonicalPath) ?: null
+                isFile -> StandardFileSystems.jar()?.findFileByPath(this.canonicalPath + URLUtil.JAR_SEPARATOR) ?: null
+                else -> null
+            }
+            // TODO: report this somewhere, but do not throw: assert(res != null, { "Invalid classpath entry '$this': exists: ${exists()}, is directory: $isDirectory, is file: $isFile" })
+            return res
+        }
+        internal val log = Logger.getInstance(KotlinScriptConfigurationManager::class.java)
+
+        @TestOnly
+        fun reloadScriptDefinitions(project: Project) {
+            with (getInstance(project)) {
+                reloadScriptDefinitions()
+                scriptExternalImportsProvider.invalidateCaches()
+                invalidateLocalCaches()
+            }
+        }
     }
 }
 

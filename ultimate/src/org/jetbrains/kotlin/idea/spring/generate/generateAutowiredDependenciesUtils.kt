@@ -29,15 +29,16 @@ import com.intellij.spring.model.actions.generate.GenerateSpringBeanDependencies
 import com.intellij.spring.model.utils.SpringModelSearchers
 import com.intellij.spring.model.utils.SpringModelUtils
 import com.intellij.util.IncorrectOperationException
-import org.jetbrains.kotlin.asJava.KtLightClass
+import org.jetbrains.kotlin.asJava.classes.KtLightClass
 import org.jetbrains.kotlin.idea.core.KotlinNameSuggester
+import org.jetbrains.kotlin.idea.core.ShortenReferences
 import org.jetbrains.kotlin.idea.editor.BatchTemplateRunner
+import org.jetbrains.kotlin.idea.spring.effectiveBeanClasses
 import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.psi.KtPsiFactory
 import org.jetbrains.kotlin.psi.psiUtil.containingClassOrObject
 import org.jetbrains.kotlin.psi.psiUtil.createSmartPointer
 import org.jetbrains.kotlin.utils.ifEmpty
-import org.jetbrains.kotlin.idea.core.ShortenReferences
 
 // TODO: GenerateAutowiredDependenciesUtil.getQualifierName() is not accessible here
 private fun SpringBeanPointer<CommonSpringBean>.getQualifierName(): String? {
@@ -102,7 +103,7 @@ private fun createAutowiredDependency(
         candidateBean: SpringBeanPointer<CommonSpringBean>,
         model: CommonSpringModel
 ): BatchTemplateRunner? {
-    val candidateBeanClasses = candidateBean.effectiveBeanType.ifEmpty { return null }
+    val candidateBeanClasses = candidateBean.effectiveBeanClasses().ifEmpty { return null }
     if (!GenerateSpringBeanDependenciesUtil.ensureFileWritable(klass)) return null
     val property = createAutowiredProperty(klass, candidateBean, candidateBeanClasses, model) ?: return null
     return addCreatePropertyTemplate(property, candidateBean, candidateBeanClasses)

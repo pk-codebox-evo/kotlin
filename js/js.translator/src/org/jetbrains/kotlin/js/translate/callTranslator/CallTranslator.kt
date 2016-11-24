@@ -17,17 +17,26 @@
 package org.jetbrains.kotlin.js.translate.callTranslator
 
 import com.google.dart.compiler.backend.js.ast.JsExpression
+import com.google.dart.compiler.backend.js.ast.JsInvocation
+import com.google.dart.compiler.backend.js.ast.JsLiteral
+import com.google.dart.compiler.backend.js.ast.JsNameRef
+import com.google.dart.compiler.backend.js.ast.metadata.*
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.descriptors.VariableDescriptor
 import org.jetbrains.kotlin.js.translate.context.TranslationContext
 import org.jetbrains.kotlin.js.translate.general.Translation
 import org.jetbrains.kotlin.js.translate.reference.CallArgumentTranslator
+import org.jetbrains.kotlin.js.translate.reference.CallExpressionTranslator
 import org.jetbrains.kotlin.js.translate.utils.AnnotationsUtils
+import org.jetbrains.kotlin.js.translate.utils.JsAstUtils
+import org.jetbrains.kotlin.js.translate.utils.setInlineCallMetadata
 import org.jetbrains.kotlin.psi.Call.CallType
+import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.resolve.calls.callResolverUtil.isInvokeCallOnVariable
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.VariableAsFunctionResolvedCall
+import org.jetbrains.kotlin.resolve.calls.resolvedCallUtil.getImplicitReceiverValue
 import org.jetbrains.kotlin.resolve.calls.tasks.ExplicitReceiverKind
 import org.jetbrains.kotlin.resolve.calls.tasks.ExplicitReceiverKind.NO_EXPLICIT_RECEIVER
 import org.jetbrains.kotlin.resolve.scopes.receivers.ExpressionReceiver
@@ -70,9 +79,11 @@ object CallTranslator {
         val isNative = AnnotationsUtils.isNativeObject(functionDescriptor)
         val hasSpreadOperator = false
         if (dispatchReceiver != null) {
-            return DefaultFunctionCallCase.buildDefaultCallWithDispatchReceiver(argumentsInfo, dispatchReceiver, functionName, isNative, hasSpreadOperator)
+            return DefaultFunctionCallCase.buildDefaultCallWithDispatchReceiver(argumentsInfo, dispatchReceiver, functionName, isNative,
+                                                                                hasSpreadOperator)
         } else {
-            return DefaultFunctionCallCase.buildDefaultCallWithoutReceiver(context, argumentsInfo, functionDescriptor, functionName, isNative, hasSpreadOperator)
+            return DefaultFunctionCallCase.buildDefaultCallWithoutReceiver(context, argumentsInfo, functionDescriptor, isNative,
+                                                                           hasSpreadOperator)
         }
     }
 }
@@ -88,32 +99,56 @@ private fun translateCall(context: TranslationContext,
     if (resolvedCall is VariableAsFunctionResolvedCall) {
         assert(explicitReceivers.extensionReceiver == null) { "VariableAsFunctionResolvedCall must have one receiver" }
         val variableCall = resolvedCall.variableCall
-        if (variableCall.expectedReceivers()) {
+
+        return if (variableCall.expectedReceivers()) {
             val newReceiver = CallTranslator.translateGet(context, variableCall, explicitReceivers.extensionOrDispatchReceiver)
-            return translateFunctionCall(context, resolvedCall.functionCall, ExplicitReceivers(newReceiver))
+            translateFunctionCall(context, resolvedCall.functionCall, resolvedCall.variableCall, ExplicitReceivers(newReceiver))
         } else {
             val dispatchReceiver = CallTranslator.translateGet(context, variableCall, null)
-            if (explicitReceivers.extensionOrDispatchReceiver == null)
-                return translateFunctionCall(context, resolvedCall.functionCall, ExplicitReceivers(dispatchReceiver))
-            else
-                return translateFunctionCall(context, resolvedCall.functionCall, ExplicitReceivers(dispatchReceiver, explicitReceivers.extensionOrDispatchReceiver))
+            if (explicitReceivers.extensionOrDispatchReceiver == null) {
+                translateFunctionCall(context, resolvedCall.functionCall, resolvedCall.variableCall, ExplicitReceivers(dispatchReceiver))
+            }
+            else {
+                translateFunctionCall(context, resolvedCall.functionCall, resolvedCall.variableCall,
+                                      ExplicitReceivers(dispatchReceiver, explicitReceivers.extensionOrDispatchReceiver))
+            }
         }
     }
 
     val call = resolvedCall.call
     if (call.callType == CallType.INVOKE && !isInvokeCallOnVariable(call)) {
         val explicitReceiversForInvoke = computeExplicitReceiversForInvoke(context, resolvedCall, explicitReceivers)
-        return translateFunctionCall(context, resolvedCall, explicitReceiversForInvoke)
+        return translateFunctionCall(context, resolvedCall, resolvedCall, explicitReceiversForInvoke)
     }
 
-    return translateFunctionCall(context, resolvedCall, explicitReceivers)
+    return translateFunctionCall(context, resolvedCall, resolvedCall, explicitReceivers)
 }
 
 private fun translateFunctionCall(context: TranslationContext,
                                   resolvedCall: ResolvedCall<out FunctionDescriptor>,
+                                  inlineResolvedCall: ResolvedCall<out CallableDescriptor>,
                                   explicitReceivers: ExplicitReceivers
 ): JsExpression {
-    return context.getCallInfo(resolvedCall, explicitReceivers).translateFunctionCall()
+    val callExpression = context.getCallInfo(resolvedCall, explicitReceivers).translateFunctionCall()
+
+    if (CallExpressionTranslator.shouldBeInlined(inlineResolvedCall.resultingDescriptor, context)) {
+        setInlineCallMetadata(callExpression, resolvedCall.call.callElement as KtExpression,
+                              inlineResolvedCall.resultingDescriptor, context)
+    }
+
+    if (resolvedCall.resultingDescriptor.isSuspend && resolvedCall.resultingDescriptor.initialSignatureDescriptor != null) {
+        context.currentBlock.statements += JsAstUtils.asSyntheticStatement((callExpression as JsInvocation).apply {
+            isSuspend = true
+            isPreSuspend = true
+        })
+        val coroutineDescriptor = resolvedCall.getImplicitReceiverValue()!!.declarationDescriptor
+        val coroutineRef = context.getAliasForDescriptor(coroutineDescriptor) ?: JsLiteral.THIS
+        return context.defineTemporary(JsNameRef("\$\$coroutineResult\$\$", coroutineRef).apply {
+            sideEffects = SideEffectKind.DEPENDS_ON_STATE
+            coroutineResult = true
+        })
+    }
+    return callExpression
 }
 
 fun computeExplicitReceiversForInvoke(
